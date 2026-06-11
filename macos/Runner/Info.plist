@@ -28,5 +28,9 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Jarvis needs microphone access for voice commands.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Jarvis needs speech recognition to understand your voice commands.</string>
 </dict>
 </plist>
