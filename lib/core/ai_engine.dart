@@ -4,7 +4,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:dio/dio.dart';
 
 enum AIProvider {
-  opencode,
+  openrouter,
   ollama,
   openai,
   anthropic,
@@ -29,16 +29,16 @@ class AIEngine {
 
   static String _getDefaultBaseUrl(AIProvider provider) {
     switch (provider) {
-      case AIProvider.opencode:
-        return 'wss://api.opencode.ai/ws';
+      case AIProvider.openrouter:
+        return 'https://openrouter.ai/api/v1';
       case AIProvider.ollama:
-        return 'ws://localhost:11434/ws';
+        return 'http://localhost:11434/v1';
       case AIProvider.openai:
-        return 'wss://api.openai.com/v1';
+        return 'https://api.openai.com/v1';
       case AIProvider.anthropic:
-        return 'wss://api.anthropic.com/v1';
+        return 'https://api.anthropic.com/v1';
       case AIProvider.gemini:
-        return 'wss://generativelanguage.googleapis.com/v1';
+        return 'https://generativelanguage.googleapis.com/v1';
     }
   }
 
@@ -139,8 +139,8 @@ class AIEngine {
 
   String _getModelName() {
     switch (_provider) {
-      case AIProvider.opencode:
-        return 'opencode/mimo-v2.5-free';
+      case AIProvider.openrouter:
+        return 'anthropic/claude-3.5-sonnet';
       case AIProvider.ollama:
         return 'llama3.2';
       case AIProvider.openai:

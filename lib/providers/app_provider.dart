@@ -12,7 +12,7 @@ class AppState {
   AppState({
     this.aiEngine,
     this.isConnected = false,
-    this.provider = AIProvider.opencode,
+    this.provider = AIProvider.openrouter,
     this.apiKey = '',
     this.memory,
   });

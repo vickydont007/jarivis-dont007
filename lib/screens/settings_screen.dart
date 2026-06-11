@@ -12,7 +12,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // AI Settings
-  String _selectedAIProvider = 'opencode';
+  String _selectedAIProvider = 'openrouter';
   String _apiKey = '';
   bool _useLocalAI = false;
 
@@ -63,7 +63,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               _buildDropdown(
                 'AI Provider',
                 _selectedAIProvider,
-                ['opencode', 'ollama', 'openai', 'anthropic', 'gemini'],
+                ['openrouter', 'ollama', 'openai', 'anthropic', 'gemini'],
                 (value) {
                   setState(() {
                     _selectedAIProvider = value!;
@@ -382,8 +382,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     // Connect to AI engine
     AIProvider provider;
     switch (_selectedAIProvider) {
-      case 'opencode':
-        provider = AIProvider.opencode;
+      case 'openrouter':
+        provider = AIProvider.openrouter;
         break;
       case 'ollama':
         provider = AIProvider.ollama;
@@ -398,7 +398,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         provider = AIProvider.gemini;
         break;
       default:
-        provider = AIProvider.opencode;
+        provider = AIProvider.openrouter;
     }
 
     final apiKey = _useLocalAI ? 'local' : _apiKey;
@@ -437,7 +437,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   void _resetSettings() {
     setState(() {
-      _selectedAIProvider = 'opencode';
+      _selectedAIProvider = 'openrouter';
       _apiKey = '';
       _useLocalAI = false;
       _voiceEnabled = true;
