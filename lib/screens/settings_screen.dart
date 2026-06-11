@@ -33,6 +33,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // Models list for each provider
   final Map<String, List<String>> _modelsByProvider = {
     'openrouter': [
+      // Free Models
       'google/gemma-4-26b-a4b-it:free',
       'google/gemma-4-31b-it:free',
       'meta-llama/llama-3.3-70b-instruct:free',
@@ -40,6 +41,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       'qwen/qwen3-next-80b-a3b-instruct:free',
       'qwen/qwen3-coder:free',
       'nousresearch/hermes-3-llama-3.1-405b:free',
+      'openai/gpt-oss-120b:free',
+      'openai/gpt-oss-20b:free',
+      // Code Models
+      'qwen/qwen3-coder-next',
+      'qwen/qwen3-coder-plus',
+      'qwen/qwen3-coder-flash',
+      'deepseek/deepseek-v4-pro',
+      'deepseek/deepseek-v4-flash',
+      'deepseek/deepseek-v3.2',
+      'xiaomi/mimo-v2.5-pro',
+      'xiaomi/mimo-v2.5',
+      // Premium Models
       'openai/gpt-4',
       'anthropic/claude-3-opus',
     ],
