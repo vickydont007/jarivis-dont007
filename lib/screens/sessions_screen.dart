@@ -97,7 +97,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () {
-              // TODO: Create new session
+              _createNewSession();
             },
           ),
         ],
@@ -289,14 +289,14 @@ class _SessionsScreenState extends State<SessionsScreen> {
               children: [
                 TextButton.icon(
                   onPressed: () {
-                    // TODO: View session details
+                    _showSessionDetails(session);
                   },
                   icon: const Icon(Icons.visibility, size: 16),
                   label: const Text('View'),
                 ),
                 TextButton.icon(
                   onPressed: () {
-                    // TODO: Resume/restart session
+                    _resumeSession(session);
                   },
                   icon: const Icon(Icons.play_arrow, size: 16),
                   label: const Text('Resume'),
@@ -304,7 +304,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, color: Colors.grey),
                   onSelected: (value) {
-                    // TODO: Handle menu actions
+                    _handleMenuAction(value, session);
                   },
                   itemBuilder: (context) => [
                     const PopupMenuItem(value: 'edit', child: Text('Edit')),
@@ -318,5 +318,151 @@ class _SessionsScreenState extends State<SessionsScreen> {
         ),
       ),
     );
+  }
+
+  void _createNewSession() {
+    final titleController = TextEditingController();
+    String selectedType = 'on-demand';
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF161B22),
+          title: const Text('Create Session', style: TextStyle(color: Colors.white)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Session title...',
+                  hintStyle: TextStyle(color: Colors.grey[500]),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Color(0xFF30363D)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: selectedType,
+                dropdownColor: const Color(0xFF161B22),
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Type',
+                  labelStyle: TextStyle(color: Colors.grey),
+                ),
+                items: ['on-demand', 'daily', 'scheduled']
+                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                    .toList(),
+                onChanged: (v) => setDialogState(() => selectedType = v!),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (titleController.text.isNotEmpty) {
+                  setState(() {
+                    _sessions.insert(0, {
+                      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+                      'title': titleController.text,
+                      'type': selectedType,
+                      'duration': '0 min',
+                      'status': 'scheduled',
+                      'tasks': ['New task'],
+                      'timestamp': DateTime.now(),
+                    });
+                  });
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Session created!'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              },
+              child: const Text('Create', style: TextStyle(color: Colors.cyan)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSessionDetails(Map<String, dynamic> session) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF161B22),
+        title: Text(session['title'], style: const TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Type: ${session['type']}', style: TextStyle(color: Colors.grey[400])),
+            Text('Duration: ${session['duration']}', style: TextStyle(color: Colors.grey[400])),
+            Text('Status: ${session['status']}', style: TextStyle(color: Colors.grey[400])),
+            const SizedBox(height: 16),
+            const Text('Tasks:', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ...session['tasks'].map((t) => Text('• $t', style: TextStyle(color: Colors.grey[400]))),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _resumeSession(Map<String, dynamic> session) {
+    setState(() {
+      session['status'] = 'in-progress';
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Resumed: ${session['title']}'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  void _handleMenuAction(String action, Map<String, dynamic> session) {
+    switch (action) {
+      case 'edit':
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Edit coming soon!'), backgroundColor: Colors.orange),
+        );
+        break;
+      case 'duplicate':
+        setState(() {
+          final duplicate = Map<String, dynamic>.from(session);
+          duplicate['id'] = DateTime.now().millisecondsSinceEpoch.toString();
+          duplicate['title'] = '${session['title']} (Copy)';
+          _sessions.insert(0, duplicate);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Session duplicated!'), backgroundColor: Colors.green),
+        );
+        break;
+      case 'delete':
+        setState(() {
+          _sessions.removeWhere((s) => s['id'] == session['id']);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Session deleted!'), backgroundColor: Colors.red),
+        );
+        break;
+    }
   }
 }

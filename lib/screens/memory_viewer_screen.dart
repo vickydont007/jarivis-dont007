@@ -131,13 +131,13 @@ class _MemoryViewerScreenState extends State<MemoryViewerScreen> {
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () {
-              // TODO: Add new memory
+              _showAddMemoryDialog();
             },
           ),
           IconButton(
             icon: const Icon(Icons.delete_sweep),
             onPressed: () {
-              // TODO: Clear old memories
+              _clearOldMemories();
             },
           ),
         ],
@@ -346,6 +346,114 @@ class _MemoryViewerScreenState extends State<MemoryViewerScreen> {
     } else {
       return '${(diff.inDays / 7).floor()}w ago';
     }
+  }
+
+  void _showAddMemoryDialog() {
+    final contentController = TextEditingController();
+    String selectedCategory = 'general';
+    String selectedImportance = 'medium';
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF161B22),
+          title: const Text('Add Memory', style: TextStyle(color: Colors.white)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: contentController,
+                  style: const TextStyle(color: Colors.white),
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    hintText: 'Enter memory content...',
+                    hintStyle: TextStyle(color: Colors.grey[500]),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFF30363D)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: selectedCategory,
+                  dropdownColor: const Color(0xFF161B22),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'Category',
+                    labelStyle: TextStyle(color: Colors.grey),
+                  ),
+                  items: ['general', 'preference', 'event', 'context', 'credential']
+                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                      .toList(),
+                  onChanged: (v) => setDialogState(() => selectedCategory = v!),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: selectedImportance,
+                  dropdownColor: const Color(0xFF161B22),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'Importance',
+                    labelStyle: TextStyle(color: Colors.grey),
+                  ),
+                  items: ['low', 'medium', 'high', 'critical']
+                      .map((i) => DropdownMenuItem(value: i, child: Text(i)))
+                      .toList(),
+                  onChanged: (v) => setDialogState(() => selectedImportance = v!),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (contentController.text.isNotEmpty) {
+                  setState(() {
+                    _memories.insert(0, {
+                      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+                      'content': contentController.text,
+                      'category': selectedCategory,
+                      'timestamp': DateTime.now(),
+                      'importance': selectedImportance,
+                    });
+                    _filteredMemories = List.from(_memories);
+                  });
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Memory added!'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              },
+              child: const Text('Add', style: TextStyle(color: Colors.cyan)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _clearOldMemories() {
+    final cutoff = DateTime.now().subtract(const Duration(days: 30));
+    setState(() {
+      _memories.removeWhere((m) => m['timestamp'].isBefore(cutoff));
+      _filteredMemories = List.from(_memories);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Old memories cleared!'),
+        backgroundColor: Colors.green,
+      ),
+    );
   }
 
   @override
