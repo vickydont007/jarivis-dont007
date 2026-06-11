@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/app_provider.dart';
+import '../core/ai_engine.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -376,14 +378,61 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  void _saveSettings() {
-    // TODO: Save settings to shared preferences
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Settings saved successfully!'),
-        backgroundColor: Colors.green,
-      ),
+  void _saveSettings() async {
+    // Connect to AI engine
+    AIProvider provider;
+    switch (_selectedAIProvider) {
+      case 'opencode':
+        provider = AIProvider.opencode;
+        break;
+      case 'ollama':
+        provider = AIProvider.ollama;
+        break;
+      case 'openai':
+        provider = AIProvider.openai;
+        break;
+      case 'anthropic':
+        provider = AIProvider.anthropic;
+        break;
+      case 'gemini':
+        provider = AIProvider.gemini;
+        break;
+      default:
+        provider = AIProvider.opencode;
+    }
+
+    final apiKey = _useLocalAI ? 'local' : _apiKey;
+    
+    if (apiKey.isEmpty && !_useLocalAI) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter an API key'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Initialize AI engine
+    await ref.read(appStateProvider.notifier).initializeAI(
+      provider: provider,
+      apiKey: apiKey,
     );
+
+    final appState = ref.read(appStateProvider);
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            appState.isConnected
+                ? 'Connected to ${_selectedAIProvider.toUpperCase()}!'
+                : 'Failed to connect. Using offline mode.',
+          ),
+          backgroundColor: appState.isConnected ? Colors.green : Colors.orange,
+        ),
+      );
+    }
   }
 
   void _resetSettings() {

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../widgets/chat_bubble.dart';
 import '../widgets/voice_button.dart';
+import '../providers/app_provider.dart';
+import '../services/system_service.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -14,6 +16,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final List<Map<String, dynamic>> _messages = [];
+  final List<Map<String, dynamic>> _history = [];
   bool _isLoading = false;
   bool _isTyping = false;
 
@@ -50,10 +53,43 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     _scrollToBottom();
 
-    // Simulate AI response (will be replaced with actual AI engine)
-    await Future.delayed(const Duration(seconds: 2));
+    // Add to history
+    _history.add({'role': 'user', 'content': message});
 
-    final response = _generateResponse(message);
+    // Check for local commands first
+    final localResponse = await _handleLocalCommands(message);
+    if (localResponse != null) {
+      setState(() {
+        _messages.add({
+          'role': 'assistant',
+          'content': localResponse,
+          'timestamp': DateTime.now(),
+        });
+        _isLoading = false;
+        _isTyping = false;
+      });
+      _history.add({'role': 'assistant', 'content': localResponse});
+      _scrollToBottom();
+      return;
+    }
+
+    // Get AI response
+    final appState = ref.read(appStateProvider);
+    String response;
+
+    if (appState.isConnected && appState.aiEngine != null) {
+      // Use real AI engine
+      try {
+        response = await appState.aiEngine!.sendMessage(message, history: _history);
+        _history.add({'role': 'assistant', 'content': response});
+      } catch (e) {
+        response = 'Error connecting to AI: $e\n\nPlease check your API key in Settings.';
+      }
+    } else {
+      // Fallback to mock responses
+      response = _generateMockResponse(message);
+      _history.add({'role': 'assistant', 'content': response});
+    }
 
     setState(() {
       _messages.add({
@@ -68,55 +104,99 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _scrollToBottom();
   }
 
-  String _generateResponse(String message) {
+  Future<String?> _handleLocalCommands(String message) async {
     final lowerMessage = message.toLowerCase();
+    final systemService = SystemService();
 
     // System commands
+    if (lowerMessage == 'yes' || lowerMessage == 'confirm') {
+      return '✅ Confirmed. What would you like me to do?';
+    }
+
     if (lowerMessage.contains('shutdown') || lowerMessage.contains('shut down')) {
-      return '⚠️ Are you sure you want to shutdown the system? Please confirm.';
+      if (lowerMessage.contains('yes') || lowerMessage.contains('confirm')) {
+        await systemService.shutdown();
+        return '⚡ Shutting down the system...';
+      }
+      return '⚠️ Are you sure you want to shutdown the system? Type "yes" to confirm.';
     }
+
     if (lowerMessage.contains('restart')) {
-      return '⚠️ Are you sure you want to restart the system? Please confirm.';
+      if (lowerMessage.contains('yes') || lowerMessage.contains('confirm')) {
+        await systemService.restart();
+        return '🔄 Restarting the system...';
+      }
+      return '⚠️ Are you sure you want to restart the system? Type "yes" to confirm.';
     }
-    if (lowerMessage.contains('sleep')) {
+
+    if (lowerMessage == 'sleep') {
+      await systemService.sleep();
       return '😴 Putting the system to sleep...';
     }
-    if (lowerMessage.contains('lock')) {
+
+    if (lowerMessage == 'lock') {
+      await systemService.lock();
       return '🔒 Locking the system...';
     }
 
-    // Weather
+    // Help
+    if (lowerMessage == 'help') {
+      return '''Here are some things I can help you with:
+
+🖥️ **System Control**
+- Shutdown, Restart, Sleep, Lock
+
+📁 **File Management**
+- Read, Write, Organize files
+
+🌤️ **Weather**
+- Check weather forecasts
+
+📱 **Social Media**
+- Telegram, Discord, WhatsApp
+
+🎤 **Voice**
+- Speech to text, Text to speech
+
+⏰ **Scheduler**
+- Set reminders and alarms
+
+💡 **AI Features**
+- Ask me anything!
+- I can write code, explain concepts, and more''';
+    }
+
+    return null; // Not a local command, send to AI
+  }
+
+  String _generateMockResponse(String message) {
+    final lowerMessage = message.toLowerCase();
+
     if (lowerMessage.contains('weather')) {
       return '🌤️ I can help you check the weather. Please tell me which city you want to know the weather for.';
     }
 
-    // File operations
     if (lowerMessage.contains('file') || lowerMessage.contains('folder')) {
       return '📁 I can help you manage files. You can ask me to:\n- List files\n- Read file\n- Write file\n- Organize downloads\n- Search files';
     }
 
-    // Social media
     if (lowerMessage.contains('telegram')) {
       return '📱 Telegram integration is available. Would you like to connect your Telegram bot?';
     }
+
     if (lowerMessage.contains('discord')) {
       return '🎮 Discord integration is available. Would you like to connect your Discord bot?';
     }
 
-    // System info
     if (lowerMessage.contains('system info') || lowerMessage.contains('status')) {
       return '💻 Getting system information...\n\nCPU: 45%\nMemory: 62%\nDisk: 38%\nBattery: 87%';
     }
 
-    // Default responses
     if (lowerMessage.contains('hello') || lowerMessage.contains('hi')) {
       return 'Hello! How can I assist you today?';
     }
-    if (lowerMessage.contains('help')) {
-      return 'Here are some things I can help you with:\n\n🖥️ **System Control**\n- Shutdown, Restart, Sleep, Lock\n\n📁 **File Management**\n- Read, Write, Organize files\n\n🌤️ **Weather**\n- Check weather forecasts\n\n📱 **Social Media**\n- Telegram, Discord, WhatsApp\n\n🎤 **Voice**\n- Speech to text, Text to speech\n\n⏰ **Scheduler**\n- Set reminders and alarms';
-    }
 
-    return 'I received your message: "$message"\n\nI am currently in development mode. Full AI integration will be available soon!';
+    return 'I received your message: "$message"\n\n⚠️ AI Engine not connected. Please configure your API key in Settings to get real AI responses.';
   }
 
   void _scrollToBottom() {
@@ -133,6 +213,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final appState = ref.watch(appStateProvider);
+
     return Scaffold(
       backgroundColor: const Color(0xFF0D1117),
       body: Column(
@@ -155,10 +237,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   child: Icon(Icons.android, color: Colors.white),
                 ),
                 const SizedBox(width: 12),
-                const Column(
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'Jarvis',
                       style: TextStyle(
                         color: Colors.white,
@@ -166,22 +248,39 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Text(
-                      'Online',
-                      style: TextStyle(
-                        color: Colors.green,
-                        fontSize: 12,
-                      ),
+                    Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: appState.isConnected ? Colors.green : Colors.orange,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          appState.isConnected
+                              ? 'Connected (${appState.provider.name})'
+                              : 'Offline Mode',
+                          style: TextStyle(
+                            color: appState.isConnected ? Colors.green : Colors.orange,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
                 const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.settings, color: Colors.grey),
-                  onPressed: () {
-                    // Navigate to settings
-                  },
-                ),
+                if (!appState.isConnected)
+                  TextButton.icon(
+                    onPressed: () {
+                      // Navigate to settings
+                    },
+                    icon: const Icon(Icons.settings, size: 16),
+                    label: const Text('Configure'),
+                  ),
               ],
             ),
           ),
