@@ -70,6 +70,7 @@ class AIEngine {
             'HTTP-Referer': 'https://jarvis-desktop.app',
             'X-Title': 'Jarvis Desktop Agent',
           },
+          validateStatus: (status) => status! < 500,
         ),
         data: {
           'model': _getModelName(),
@@ -86,8 +87,17 @@ class AIEngine {
         if (data['choices'] != null && data['choices'].isNotEmpty) {
           return data['choices'][0]['message']['content'] ?? '';
         }
+        return 'Error: No response from AI';
+      } else if (response.statusCode == 404) {
+        return 'Error: Model not found. Check your API key and model settings.';
+      } else if (response.statusCode == 401) {
+        return 'Error: Invalid API key. Please check your OpenRouter API key in Settings.';
+      } else if (response.statusCode == 402) {
+        return 'Error: Insufficient credits. Please add credits to your OpenRouter account.';
+      } else {
+        final error = response.data['error']?['message'] ?? 'Unknown error';
+        return 'Error ($response.statusCode): $error';
       }
-      return 'Error: Unexpected response';
     } catch (e) {
       return 'Error: $e';
     }
@@ -147,7 +157,7 @@ class AIEngine {
   String _getModelName() {
     switch (_provider) {
       case AIProvider.openrouter:
-        return 'anthropic/claude-3.5-sonnet';
+        return 'meta-llama/llama-3.3-70b-instruct:free';
       case AIProvider.ollama:
         return 'llama3.2';
       case AIProvider.openai:
