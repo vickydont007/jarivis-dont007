@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import '../services/voice_service.dart';
 
 class VoiceButton extends StatefulWidget {
-  const VoiceButton({super.key});
+  final Function(String)? onTranscription;
+
+  const VoiceButton({super.key, this.onTranscription});
 
   @override
   State<VoiceButton> createState() => _VoiceButtonState();
@@ -12,6 +15,7 @@ class _VoiceButtonState extends State<VoiceButton>
   bool _isListening = false;
   late AnimationController _animationController;
   late Animation<double> _animation;
+  final VoiceService _voiceService = VoiceService();
 
   @override
   void initState() {
@@ -23,9 +27,16 @@ class _VoiceButtonState extends State<VoiceButton>
     _animation = Tween<double>(begin: 1.0, end: 1.5).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
+    
+    // Listen to transcription stream
+    _voiceService.transcriptionStream.listen((text) {
+      if (text.isNotEmpty && widget.onTranscription != null) {
+        widget.onTranscription!(text);
+      }
+    });
   }
 
-  void _toggleListening() {
+  void _toggleListening() async {
     setState(() {
       _isListening = !_isListening;
       if (_isListening) {
@@ -36,14 +47,22 @@ class _VoiceButtonState extends State<VoiceButton>
       }
     });
 
-    // TODO: Integrate with VoiceService
     if (_isListening) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Voice recognition starting...'),
-          duration: Duration(seconds: 1),
-        ),
-      );
+      try {
+        await _voiceService.startListening();
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isListening = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not start voice recognition'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } else {
+      await _voiceService.stopListening();
     }
   }
 
@@ -62,6 +81,7 @@ class _VoiceButtonState extends State<VoiceButton>
             color: Colors.white,
           ),
           onPressed: _toggleListening,
+          tooltip: _isListening ? 'Stop listening' : 'Start listening',
         ),
       ),
     );
@@ -70,6 +90,7 @@ class _VoiceButtonState extends State<VoiceButton>
   @override
   void dispose() {
     _animationController.dispose();
+    _voiceService.dispose();
     super.dispose();
   }
 }

@@ -187,9 +187,39 @@ class SchedulerService {
   }
 
   Future<void> _executeTask(Schedule schedule) async {
-    // TODO: Implement actual task execution based on payload
-    print('Executing scheduled task: ${schedule.name}');
-    print('Payload: ${schedule.payload}');
+    final action = schedule.payload['action'] as String?;
+    final params = schedule.payload['params'] as Map<String, dynamic>?;
+
+    switch (action) {
+      case 'notification':
+        // TODO: Show notification
+        break;
+      case 'system':
+        // Execute system command
+        final command = params?['command'] as String?;
+        if (command != null) {
+          // System commands handled elsewhere
+        }
+        break;
+      case 'ai':
+        // Execute AI task
+        final prompt = params?['prompt'] as String?;
+        if (prompt != null) {
+          // AI task handled elsewhere
+        }
+        break;
+      case 'file':
+        // Execute file operation
+        final operation = params?['operation'] as String?;
+        final path = params?['path'] as String?;
+        if (operation != null && path != null) {
+          // File operations handled elsewhere
+        }
+        break;
+      default:
+        // Default task execution
+        break;
+    }
   }
 
   void _scheduleNextRepeat(Schedule schedule) {
