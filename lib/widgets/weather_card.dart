@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/weather_service.dart';
 
 class WeatherCard extends StatefulWidget {
   const WeatherCard({super.key});
@@ -8,11 +9,64 @@ class WeatherCard extends StatefulWidget {
 }
 
 class _WeatherCardState extends State<WeatherCard> {
+  final WeatherService _weatherService = WeatherService();
+  final TextEditingController _cityController = TextEditingController();
+  
   String _city = 'New York';
-  double _temperature = 22.0;
-  String _description = 'Partly Cloudy';
-  int _humidity = 65;
-  double _windSpeed = 12.0;
+  double? _temperature;
+  String _description = 'Loading...';
+  int? _humidity;
+  double? _windSpeed;
+  bool _isLoading = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchWeather();
+  }
+
+  Future<void> _fetchWeather() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final weather = await _weatherService.getCurrentWeather(_city);
+      if (weather != null && mounted) {
+        setState(() {
+          _temperature = weather.temperature;
+          _description = weather.description;
+          _humidity = weather.humidity;
+          _windSpeed = weather.windSpeed;
+          _isLoading = false;
+        });
+      } else if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = 'City not found';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = 'Failed to fetch weather';
+        });
+      }
+    }
+  }
+
+  String _getWeatherEmoji() {
+    if (_description.toLowerCase().contains('clear')) return '☀️';
+    if (_description.toLowerCase().contains('cloud')) return '☁️';
+    if (_description.toLowerCase().contains('rain')) return '🌧️';
+    if (_description.toLowerCase().contains('snow')) return '❄️';
+    if (_description.toLowerCase().contains('thunder')) return '⛈️';
+    if (_description.toLowerCase().contains('mist') || _description.toLowerCase().contains('fog')) return '🌫️';
+    return '🌤️';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,11 +76,11 @@ class _WeatherCardState extends State<WeatherCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.cloud, color: Colors.cyan),
-                SizedBox(width: 8),
-                Text(
+                const Icon(Icons.cloud, color: Colors.cyan),
+                const SizedBox(width: 8),
+                const Text(
                   'Weather',
                   style: TextStyle(
                     color: Colors.white,
@@ -34,91 +88,118 @@ class _WeatherCardState extends State<WeatherCard> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+                const Spacer(),
+                if (_isLoading)
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.cyan,
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                // Weather icon and temperature
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.cyan.withOpacity(0.2),
-                          Colors.blue.withOpacity(0.2),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
+            
+            if (_error != null)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      _error!,
+                      style: const TextStyle(color: Colors.red),
                     ),
-                    child: Row(
-                      children: [
-                        const Text(
-                          '🌤️',
-                          style: TextStyle(fontSize: 48),
-                        ),
-                        const SizedBox(width: 16),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '$_temperature°C',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 32,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              _description,
-                              style: TextStyle(
-                                color: Colors.grey[400],
-                                fontSize: 14,
-                              ),
-                            ),
+                  ],
+                ),
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.cyan.withValues(alpha: 0.2),
+                            Colors.blue.withValues(alpha: 0.2),
                           ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            _getWeatherEmoji(),
+                            style: const TextStyle(fontSize: 48),
+                          ),
+                          const SizedBox(width: 16),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _temperature != null ? '${_temperature!.toStringAsFixed(1)}°C' : '--',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                _description.toUpperCase(),
+                                style: TextStyle(
+                                  color: Colors.grey[400],
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        _buildWeatherDetail(
+                          Icons.location_on,
+                          'Location',
+                          _city,
+                        ),
+                        const SizedBox(height: 8),
+                        _buildWeatherDetail(
+                          Icons.water_drop,
+                          'Humidity',
+                          _humidity != null ? '$_humidity%' : '--',
+                        ),
+                        const SizedBox(height: 8),
+                        _buildWeatherDetail(
+                          Icons.air,
+                          'Wind',
+                          _windSpeed != null ? '${_windSpeed!.toStringAsFixed(1)} km/h' : '--',
                         ),
                       ],
                     ),
                   ),
-                ),
-                const SizedBox(width: 16),
-
-                // Weather details
-                Expanded(
-                  child: Column(
-                    children: [
-                      _buildWeatherDetail(
-                        Icons.location_on,
-                        'Location',
-                        _city,
-                      ),
-                      const SizedBox(height: 8),
-                      _buildWeatherDetail(
-                        Icons.water_drop,
-                        'Humidity',
-                        '$_humidity%',
-                      ),
-                      const SizedBox(height: 8),
-                      _buildWeatherDetail(
-                        Icons.air,
-                        'Wind',
-                        '$_windSpeed km/h',
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+                ],
+              ),
             const SizedBox(height: 16),
-            // City input
             Row(
               children: [
                 Expanded(
                   child: TextField(
+                    controller: _cityController,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       hintText: 'Enter city name...',
@@ -128,23 +209,17 @@ class _WeatherCardState extends State<WeatherCard> {
                       fillColor: const Color(0xFF0D1117),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(
-                          color: Color(0xFF30363D),
-                        ),
+                        borderSide: const BorderSide(color: Color(0xFF30363D)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(
-                          color: Color(0xFF30363D),
-                        ),
+                        borderSide: const BorderSide(color: Color(0xFF30363D)),
                       ),
                     ),
                     onSubmitted: (value) {
                       if (value.isNotEmpty) {
-                        setState(() {
-                          _city = value;
-                        });
-                        // TODO: Fetch weather for new city
+                        setState(() => _city = value);
+                        _fetchWeather();
                       }
                     },
                   ),
@@ -158,7 +233,10 @@ class _WeatherCardState extends State<WeatherCard> {
                   child: IconButton(
                     icon: const Icon(Icons.search, color: Colors.white),
                     onPressed: () {
-                      // TODO: Fetch weather
+                      if (_cityController.text.isNotEmpty) {
+                        setState(() => _city = _cityController.text);
+                        _fetchWeather();
+                      }
                     },
                   ),
                 ),
@@ -176,9 +254,7 @@ class _WeatherCardState extends State<WeatherCard> {
       decoration: BoxDecoration(
         color: const Color(0xFF0D1117),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: const Color(0xFF30363D),
-        ),
+        border: Border.all(color: const Color(0xFF30363D)),
       ),
       child: Row(
         children: [
@@ -187,24 +263,18 @@ class _WeatherCardState extends State<WeatherCard> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                label,
-                style: TextStyle(
-                  color: Colors.grey[500],
-                  fontSize: 12,
-                ),
-              ),
-              Text(
-                value,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+              Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+              Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
             ],
           ),
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _cityController.dispose();
+    super.dispose();
   }
 }

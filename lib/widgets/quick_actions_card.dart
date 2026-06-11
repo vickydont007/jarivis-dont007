@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/system_service.dart';
 
 class QuickActionsCard extends StatelessWidget {
   const QuickActionsCard({super.key});
@@ -49,28 +50,28 @@ class QuickActionsCard extends StatelessWidget {
                   'Sleep',
                   Icons.bedtime,
                   Colors.purple,
-                  () => _executeAction('sleep'),
+                  () => _executeAction(context, 'sleep'),
                 ),
                 _buildActionButton(
                   context,
                   'Lock',
                   Icons.lock,
                   Colors.blue,
-                  () => _executeAction('lock'),
+                  () => _executeAction(context, 'lock'),
                 ),
                 _buildActionButton(
                   context,
                   'Organize',
                   Icons.folder,
                   Colors.green,
-                  () => _executeAction('organize'),
+                  () => _executeAction(context, 'organize'),
                 ),
                 _buildActionButton(
                   context,
                   'Weather',
                   Icons.cloud,
                   Colors.cyan,
-                  () => _executeAction('weather'),
+                  () => _executeAction(context, 'weather'),
                 ),
               ],
             ),
@@ -93,10 +94,10 @@ class QuickActionsCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: color.withOpacity(0.3),
+            color: color.withValues(alpha: 0.3),
           ),
         ),
         child: Row(
@@ -138,7 +139,7 @@ class QuickActionsCard extends StatelessWidget {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              _executeAction(command);
+              _executeAction(context, command);
             },
             child: Text(
               action,
@@ -150,8 +151,57 @@ class QuickActionsCard extends StatelessWidget {
     );
   }
 
-  void _executeAction(String action) {
-    // TODO: Integrate with SystemService
-    print('Executing action: $action');
+  void _executeAction(BuildContext context, String action) async {
+    final systemService = SystemService();
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Executing $action...'),
+        backgroundColor: Colors.cyan,
+      ),
+    );
+
+    bool success = false;
+    switch (action) {
+      case 'shutdown':
+        success = await systemService.shutdown();
+        break;
+      case 'restart':
+        success = await systemService.restart();
+        break;
+      case 'sleep':
+        success = await systemService.sleep();
+        break;
+      case 'lock':
+        success = await systemService.lock();
+        break;
+      case 'organize':
+        // TODO: Implement file organization
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('File organization coming soon!'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      case 'weather':
+        // TODO: Navigate to weather
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Weather view coming soon!'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+    }
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? '$action executed successfully' : 'Failed to execute $action'),
+          backgroundColor: success ? Colors.green : Colors.red,
+        ),
+      );
+    }
   }
 }
