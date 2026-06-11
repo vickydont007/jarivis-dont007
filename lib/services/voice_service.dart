@@ -1,63 +1,153 @@
-import '../core/logger.dart';
-import 'terminal_service.dart';
+import 'dart:async';
+import 'package:speech_to_text/speech_to_text.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+
+enum VoiceLanguage {
+  english,
+  hindi,
+  both,
+}
 
 class VoiceService {
-  static final VoiceService _instance = VoiceService._internal();
-  factory VoiceService() => _instance;
-  VoiceService._internal();
+  final SpeechToText _speechToText = SpeechToText();
+  final FlutterTts _flutterTts = FlutterTts();
+  final StreamController<String> _transcriptionController =
+      StreamController<String>.broadcast();
+  final StreamController<bool> _listeningController =
+      StreamController<bool>.broadcast();
 
-  final JarvisLogger _log = JarvisLogger();
-  final TerminalService _terminal = TerminalService();
-
+  bool _isInitialized = false;
   bool _isListening = false;
+  VoiceLanguage _currentLanguage = VoiceLanguage.both;
 
+  Stream<String> get transcriptionStream => _transcriptionController.stream;
+  Stream<bool> get listeningStream => _listeningController.stream;
   bool get isListening => _isListening;
 
-  Future<void> say(String text) async {
-    _log.info('TTS: $text');
-    final cmd = _terminal.run(
-      'powershell -Command "Add-Type -AssemblyName System.Speech; '
-      '\$synthesizer = New-Object System.Speech.Synthesis.SpeechSynthesizer; '
-      '\$synthesizer.Speak(\'$text\')"',
-      timeout: 60000,
-    );
-    // Non-blocking
-  }
-
-  Future<String> listen({int timeout = 10}) async {
-    _isListening = true;
-    _log.info('Listening for voice input...');
+  Future<void> initialize() async {
+    if (_isInitialized) return;
 
     try {
-      final result = await _terminal.run(
-        'powershell -Command "
-          Add-Type -AssemblyName System.Speech;
-          \$recognizer = New-Object System.Speech.Recognition.SpeechRecognizer;
-          \$recognizer.SetInputToDefaultAudioDevice();
-          \$result = \$recognizer.Recognize();
-          if (\$result -ne \$null) { Write-Output \$result.Text } else { Write-Output '' }
-        "',
-        timeout: timeout * 1000 + 5000,
+      await _speechToText.initialize(
+        onError: (error) {
+          print('Speech recognition error: $error');
+          _isListening = false;
+          _listeningController.add(false);
+        },
+        onStatus: (status) {
+          print('Speech recognition status: $status');
+          if (status == 'done' || status == 'notListening') {
+            _isListening = false;
+            _listeningController.add(false);
+          }
+        },
       );
 
-      _isListening = false;
-      return result.success ? result.stdout.trim() : '';
+      // Configure TTS
+      await _flutterTts.setVolume(1.0);
+      await _flutterTts.setSpeechRate(0.5);
+      await _flutterTts.setPitch(1.0);
+
+      _isInitialized = true;
     } catch (e) {
-      _isListening = false;
-      _log.error('Voice recognition failed', exception: e);
-      return '';
+      print('Failed to initialize voice service: $e');
     }
   }
 
-  Future<bool> isMicrophoneAvailable() async {
-    final result = await _terminal.run(
-      'powershell -Command "
-        Add-Type -AssemblyName System.Speech;
-        \$recognizer = New-Object System.Speech.Recognition.SpeechRecognizer;
-        Write-Output \$recognizer.State
-      "',
-      timeout: 5000,
-    );
-    return result.success;
+  Future<void> startListening() async {
+    if (!_isInitialized) {
+      await initialize();
+    }
+
+    if (!_isListening) {
+      _isListening = true;
+      _listeningController.add(true);
+
+      String localeId = _getLocaleId();
+
+      await _speechToText.listen(
+        onResult: (result) {
+          if (result.finalResult) {
+            _transcriptionController.add(result.recognizedWords);
+          }
+        },
+        localeId: localeId,
+        listenMode: ListenMode.dictation,
+        cancelOnError: true,
+        partialResults: true,
+      );
+    }
+  }
+
+  Future<void> stopListening() async {
+    if (_isListening) {
+      await _speechToText.stop();
+      _isListening = false;
+      _listeningController.add(false);
+    }
+  }
+
+  Future<void> speak(String text, {VoiceLanguage? language}) async {
+    if (!_isInitialized) {
+      await initialize();
+    }
+
+    final lang = language ?? _currentLanguage;
+
+    switch (lang) {
+      case VoiceLanguage.english:
+        await _flutterTts.setLanguage('en-US');
+        break;
+      case VoiceLanguage.hindi:
+        await _flutterTts.setLanguage('hi-IN');
+        break;
+      case VoiceLanguage.both:
+        // Auto-detect and set appropriate language
+        if (_containsHindi(text)) {
+          await _flutterTts.setLanguage('hi-IN');
+        } else {
+          await _flutterTts.setLanguage('en-US');
+        }
+        break;
+    }
+
+    await _flutterTts.speak(text);
+  }
+
+  Future<void> stopSpeaking() async {
+    await _flutterTts.stop();
+  }
+
+  void setLanguage(VoiceLanguage language) {
+    _currentLanguage = language;
+  }
+
+  String _getLocaleId() {
+    switch (_currentLanguage) {
+      case VoiceLanguage.english:
+        return 'en-US';
+      case VoiceLanguage.hindi:
+        return 'hi-IN';
+      case VoiceLanguage.both:
+        return 'en-US'; // Default to English, will auto-detect
+    }
+  }
+
+  bool _containsHindi(String text) {
+    // Simple check for Hindi characters (Devanagari script)
+    final hindiRange = RegExp(r'[\u0900-\u097F]');
+    return hindiRange.hasMatch(text);
+  }
+
+  Future<List<String>> getAvailableLanguages() async {
+    final languages = await _flutterTts.getLanguages;
+    return List<String>.from(languages);
+  }
+
+  void dispose() {
+    _transcriptionController.close();
+    _listeningController.close();
+    _speechToText.cancel();
+    _flutterTts.stop();
   }
 }

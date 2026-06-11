@@ -1,91 +1,140 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'services/hermes_service.dart';
-import 'core/logger.dart';
-import 'screens/home_screen.dart';
-import 'package:system_tray/system_tray.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'screens/chat_screen.dart';
+import 'screens/dashboard_screen.dart';
+import 'screens/settings_screen.dart';
+import 'screens/memory_viewer_screen.dart';
+import 'screens/skills_store_screen.dart';
+import 'screens/sessions_screen.dart';
 
-class JarvisApp extends StatefulWidget {
+class JarvisApp extends ConsumerWidget {
   const JarvisApp({super.key});
 
   @override
-  State<JarvisApp> createState() => _JarvisAppState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    return MaterialApp(
+      title: 'Jarvis Desktop Agent',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        primarySwatch: Colors.cyan,
+        scaffoldBackgroundColor: const Color(0xFF0D1117),
+        textTheme: GoogleFonts.interTextTheme(
+          Theme.of(context).textTheme.apply(
+            bodyColor: Colors.white,
+            displayColor: Colors.white,
+          ),
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF161B22),
+          elevation: 0,
+        ),
+        cardTheme: CardThemeData(
+          color: const Color(0xFF161B22),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: Colors.cyan.withValues(alpha: 0.3),
+            ),
+          ),
+        ),
+      ),
+      home: const MainScreen(),
+    );
+  }
 }
 
-class _JarvisAppState extends State<JarvisApp> with WindowListener {
-  final SystemTray _systemTray = SystemTray();
-  final JarvisLogger _logger = JarvisLogger();
+class MainScreen extends StatefulWidget {
+  const MainScreen({super.key});
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initSystemTray());
-    windowManager.addListener(this);
-    _initWindow();
-  }
+  State<MainScreen> createState() => _MainScreenState();
+}
 
-  Future<void> _initWindow() async {
-    await windowManager.setPreventClose(true);
-  }
+class _MainScreenState extends State<MainScreen> {
+  int _selectedIndex = 0;
 
-  Future<void> _initSystemTray() async {
-    try {
-      await _systemTray.initSystemTray(
-        toolTip: 'Jarvis Desktop Agent',
-        iconPath: 'assets/icons/app_icon.png',
-      );
-      
-      await _systemTray.setContextMenu(
-        SystemTrayContextMenu(
-          items: [
-            MenuItemLabel(label: 'Show', onPressed: (_) => _showWindow()),
-            MenuItemLabel(label: 'Hide', onPressed: (_) => _hideWindow()),
-            const MenuSeparator(),
-            MenuItemLabel(label: 'Status: Running', enabled: false),
-            const MenuSeparator(),
-            MenuItemLabel(label: 'Quit', onPressed: (_) => _quit()),
-          ],
-        ),
-      );
-
-      _systemTray.onSystemTrayClicked = (_) => _showWindow();
-      
-      _logger.info('System tray initialized');
-    } catch (e) {
-      _logger.warning('System tray init failed (non-fatal)', exception: e);
-    }
-  }
-
-  void _showWindow() {
-    windowManager.show();
-    windowManager.focus();
-  }
-
-  void _hideWindow() {
-    windowManager.hide();
-  }
-
-  Future<void> _quit() async {
-    final hermes = context.read<HermesService>();
-    hermes.disconnect();
-    await windowManager.close();
-  }
-
-  @override
-  void onWindowClose() async {
-    // Minimize to tray instead of closing
-    await windowManager.hide();
-  }
-
-  @override
-  void dispose() {
-    windowManager.removeListener(this);
-    super.dispose();
-  }
+  final List<Widget> _screens = [
+    const ChatScreen(),
+    const DashboardScreen(),
+    const MemoryViewerScreen(),
+    const SkillsStoreScreen(),
+    const SessionsScreen(),
+    const SettingsScreen(),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    return const HomeScreen();
+    return Scaffold(
+      body: Row(
+        children: [
+          // Navigation Rail
+          NavigationRail(
+            selectedIndex: _selectedIndex,
+            onDestinationSelected: (index) {
+              setState(() {
+                _selectedIndex = index;
+              });
+            },
+            backgroundColor: const Color(0xFF0D1117),
+            selectedIconTheme: const IconThemeData(color: Colors.cyan),
+            unselectedIconTheme: IconThemeData(color: Colors.grey[600]),
+            selectedLabelTextStyle: const TextStyle(color: Colors.cyan),
+            unselectedLabelTextStyle: TextStyle(color: Colors.grey[600]),
+            labelType: NavigationRailLabelType.all,
+            leading: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: CircleAvatar(
+                radius: 24,
+                backgroundColor: Colors.cyan,
+                child: Icon(
+                  Icons.android,
+                  color: Colors.white,
+                  size: 28,
+                ),
+              ),
+            ),
+            destinations: const [
+              NavigationRailDestination(
+                icon: Icon(Icons.chat_outlined),
+                selectedIcon: Icon(Icons.chat),
+                label: Text('Chat'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.dashboard_outlined),
+                selectedIcon: Icon(Icons.dashboard),
+                label: Text('Dashboard'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.memory_outlined),
+                selectedIcon: Icon(Icons.memory),
+                label: Text('Memory'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.store_outlined),
+                selectedIcon: Icon(Icons.store),
+                label: Text('Skills'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.list_outlined),
+                selectedIcon: Icon(Icons.list),
+                label: Text('Sessions'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.settings_outlined),
+                selectedIcon: Icon(Icons.settings),
+                label: Text('Settings'),
+              ),
+            ],
+          ),
+          // Main content
+          Expanded(
+            child: _screens[_selectedIndex],
+          ),
+        ],
+      ),
+    );
   }
 }

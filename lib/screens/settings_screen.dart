@@ -1,192 +1,410 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../services/hermes_service.dart';
-import '../services/monitor_service.dart';
-import '../core/constants.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class SettingsScreen extends StatefulWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
-  late TextEditingController _wsUrlController;
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  // AI Settings
+  String _selectedAIProvider = 'opencode';
+  String _apiKey = '';
+  bool _useLocalAI = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _wsUrlController = TextEditingController(text: AppConstants.hermesDefaultUrl);
-  }
+  // Voice Settings
+  bool _voiceEnabled = true;
+  String _selectedLanguage = 'both';
+  double _speechRate = 0.5;
 
-  @override
-  void dispose() {
-    _wsUrlController.dispose();
-    super.dispose();
-  }
+  // Weather Settings
+  String _weatherApiKey = '';
+  String _defaultCity = 'New York';
+
+  // Social Media Settings
+  String _telegramBotToken = '';
+  String _discordBotToken = '';
 
   @override
   Widget build(BuildContext context) {
-    final hermes = context.watch<HermesService>();
-    final monitor = context.watch<MonitorService>();
-    final theme = Theme.of(context);
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-        centerTitle: true,
-      ),
-      body: ListView(
+      backgroundColor: const Color(0xFF0D1117),
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        children: [
-          // === Connection ===
-          _sectionHeader('Hermes Connection'),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        hermes.isConnected ? Icons.link : Icons.link_off,
-                        color: hermes.isConnected ? Colors.green : Colors.red,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        hermes.isConnected ? 'Connected' : 'Disconnected',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: hermes.isConnected ? Colors.green : Colors.red,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _wsUrlController,
-                    decoration: const InputDecoration(
-                      labelText: 'WebSocket URL',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          icon: Icon(hermes.isConnected ? Icons.link_off : Icons.link),
-                          label: Text(hermes.isConnected ? 'Disconnect' : 'Connect'),
-                          onPressed: () {
-                            if (hermes.isConnected) {
-                              hermes.disconnect();
-                            } else {
-                              hermes.connect(url: _wsUrlController.text);
-                            }
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            const Text(
+              'Settings',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
               ),
             ),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            Text(
+              'Configure your Jarvis assistant',
+              style: TextStyle(
+                color: Colors.grey[400],
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 24),
 
-          // === Monitoring ===
-          _sectionHeader('System Monitoring'),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text('CPU Alert Threshold',
-                          style: theme.textTheme.bodyMedium),
-                      const Spacer(),
-                      Text('${(monitor._getCpuThreshold() * 100).toInt()}%'),
-                    ],
-                  ),
-                  Slider(
-                    value: monitor._getCpuThreshold(),
-                    min: 0.5,
-                    max: 1.0,
-                    divisions: 10,
-                    label: '${(monitor._getCpuThreshold() * 100).toInt()}%',
-                    onChanged: (v) => monitor.setThresholds(cpu: v),
-                  ),
-                  Row(
-                    children: [
-                      Text('Memory Alert Threshold',
-                          style: theme.textTheme.bodyMedium),
-                      const Spacer(),
-                      Text('${(monitor._getMemoryThreshold() * 100).toInt()}%'),
-                    ],
-                  ),
-                  Slider(
-                    value: monitor._getMemoryThreshold(),
-                    min: 0.5,
-                    max: 1.0,
-                    divisions: 10,
-                    label: '${(monitor._getMemoryThreshold() * 100).toInt()}%',
-                    onChanged: (v) => monitor.setThresholds(memory: v),
-                  ),
-                ],
+            // AI Settings
+            _buildSectionHeader('AI Configuration', Icons.psychology),
+            _buildCard([
+              _buildDropdown(
+                'AI Provider',
+                _selectedAIProvider,
+                ['opencode', 'ollama', 'openai', 'anthropic', 'gemini'],
+                (value) {
+                  setState(() {
+                    _selectedAIProvider = value!;
+                  });
+                },
               ),
-            ),
-          ),
-          const SizedBox(height: 16),
+              const SizedBox(height: 16),
+              _buildTextField(
+                'API Key',
+                _apiKey,
+                (value) {
+                  setState(() {
+                    _apiKey = value;
+                  });
+                },
+                isPassword: true,
+              ),
+              const SizedBox(height: 16),
+              _buildSwitch(
+                'Use Local AI (Ollama)',
+                _useLocalAI,
+                (value) {
+                  setState(() {
+                    _useLocalAI = value;
+                  });
+                },
+              ),
+            ]),
+            const SizedBox(height: 16),
 
-          // === About ===
-          _sectionHeader('About'),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _infoRow('App Name', AppConstants.appName),
-                  _infoRow('Version', AppConstants.appVersion),
-                  _infoRow('Author', AppConstants.appAuthor),
-                ],
+            // Voice Settings
+            _buildSectionHeader('Voice Settings', Icons.mic),
+            _buildCard([
+              _buildSwitch(
+                'Enable Voice',
+                _voiceEnabled,
+                (value) {
+                  setState(() {
+                    _voiceEnabled = value;
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+              _buildDropdown(
+                'Language',
+                _selectedLanguage,
+                ['english', 'hindi', 'both'],
+                (value) {
+                  setState(() {
+                    _selectedLanguage = value!;
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+              _buildSlider(
+                'Speech Rate',
+                _speechRate,
+                (value) {
+                  setState(() {
+                    _speechRate = value;
+                  });
+                },
+              ),
+            ]),
+            const SizedBox(height: 16),
+
+            // Weather Settings
+            _buildSectionHeader('Weather Settings', Icons.cloud),
+            _buildCard([
+              _buildTextField(
+                'OpenWeatherMap API Key',
+                _weatherApiKey,
+                (value) {
+                  setState(() {
+                    _weatherApiKey = value;
+                  });
+                },
+                isPassword: true,
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                'Default City',
+                _defaultCity,
+                (value) {
+                  setState(() {
+                    _defaultCity = value;
+                  });
+                },
+              ),
+            ]),
+            const SizedBox(height: 16),
+
+            // Social Media Settings
+            _buildSectionHeader('Social Media', Icons.share),
+            _buildCard([
+              _buildTextField(
+                'Telegram Bot Token',
+                _telegramBotToken,
+                (value) {
+                  setState(() {
+                    _telegramBotToken = value;
+                  });
+                },
+                isPassword: true,
+              ),
+              const SizedBox(height: 16),
+              _buildTextField(
+                'Discord Bot Token',
+                _discordBotToken,
+                (value) {
+                  setState(() {
+                    _discordBotToken = value;
+                  });
+                },
+                isPassword: true,
+              ),
+            ]),
+            const SizedBox(height: 24),
+
+            // Save Button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _saveSettings,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.cyan,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text(
+                  'Save Settings',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+
+            // Reset Button
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: _resetSettings,
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.grey),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text(
+                  'Reset to Defaults',
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _sectionHeader(String title) {
+  Widget _buildSectionHeader(String title, IconData icon) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8, top: 8),
-      child: Text(title,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600)),
-    );
-  }
-
-  Widget _infoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
-          Text('$label: ', style: const TextStyle(fontWeight: FontWeight.w600)),
-          Text(value),
+          Icon(icon, color: Colors.cyan, size: 20),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ],
       ),
     );
   }
-}
 
-// Extension to access private thresholds for settings UI
-extension MonitorThresholds on MonitorService {
-  double _getCpuThreshold() => 0.9; // default
-  double _getMemoryThreshold() => 0.9; // default
+  Widget _buildCard(List<Widget> children) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: children,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField(
+    String label,
+    String value,
+    Function(String) onChanged, {
+    bool isPassword = false,
+  }) {
+    return TextField(
+      obscureText: isPassword,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: Colors.grey[400]),
+        filled: true,
+        fillColor: const Color(0xFF0D1117),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFF30363D)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFF30363D)),
+        ),
+      ),
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _buildDropdown(
+    String label,
+    String value,
+    List<String> items,
+    Function(String?) onChanged,
+  ) {
+    return DropdownButtonFormField<String>(
+      value: value,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: Colors.grey[400]),
+        filled: true,
+        fillColor: const Color(0xFF0D1117),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFF30363D)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFF30363D)),
+        ),
+      ),
+      items: items.map((item) {
+        return DropdownMenuItem(
+          value: item,
+          child: Text(item.toUpperCase()),
+        );
+      }).toList(),
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _buildSwitch(
+    String label,
+    bool value,
+    Function(bool) onChanged,
+  ) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(color: Colors.grey[400]),
+        ),
+        Switch(
+          value: value,
+          onChanged: onChanged,
+          activeColor: Colors.cyan,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSlider(
+    String label,
+    double value,
+    Function(double) onChanged,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: TextStyle(color: Colors.grey[400]),
+            ),
+            Text(
+              '${(value * 100).toInt()}%',
+              style: const TextStyle(color: Colors.cyan),
+            ),
+          ],
+        ),
+        Slider(
+          value: value,
+          onChanged: onChanged,
+          activeColor: Colors.cyan,
+          inactiveColor: const Color(0xFF30363D),
+        ),
+      ],
+    );
+  }
+
+  void _saveSettings() {
+    // TODO: Save settings to shared preferences
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Settings saved successfully!'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  void _resetSettings() {
+    setState(() {
+      _selectedAIProvider = 'opencode';
+      _apiKey = '';
+      _useLocalAI = false;
+      _voiceEnabled = true;
+      _selectedLanguage = 'both';
+      _speechRate = 0.5;
+      _weatherApiKey = '';
+      _defaultCity = 'New York';
+      _telegramBotToken = '';
+      _discordBotToken = '';
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Settings reset to defaults'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+  }
 }

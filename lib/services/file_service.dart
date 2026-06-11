@@ -1,205 +1,215 @@
+import 'dart:async';
 import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-import '../core/logger.dart';
-import '../core/constants.dart';
 
-class FileService {
-  static final FileService _instance = FileService._internal();
-  factory FileService() => _instance;
-  FileService._internal();
+class FileInfo {
+  final String name;
+  final String path;
+  final bool isDirectory;
+  final int size;
+  final DateTime modifiedAt;
 
-  final JarvisLogger _log = JarvisLogger();
+  FileInfo({
+    required this.name,
+    required this.path,
+    required this.isDirectory,
+    required this.size,
+    required this.modifiedAt,
+  });
 
-  Future<FileResult> read(String path) async {
-    try {
-      final file = File(path);
-      if (!await file.exists()) {
-        return FileResult.error('File not found: $path');
-      }
-      final content = await file.readAsString();
-      return FileResult.ok(content);
-    } catch (e) {
-      return FileResult.error(e.toString());
-    }
-  }
-
-  Future<FileResult> write(String path, String content) async {
-    try {
-      final file = File(path);
-      await file.create(recursive: true);
-      await file.writeAsString(content);
-      _log.info('File written: $path (${content.length} chars)');
-      return FileResult.ok('Written ${content.length} chars');
-    } catch (e) {
-      return FileResult.error(e.toString());
-    }
-  }
-
-  Future<FileResult> append(String path, String content) async {
-    try {
-      final file = File(path);
-      await file.create(recursive: true);
-      await file.writeAsString(content, mode: FileMode.append);
-      return FileResult.ok('Appended ${content.length} chars');
-    } catch (e) {
-      return FileResult.error(e.toString());
-    }
-  }
-
-  Future<FileResult> delete(String path) async {
-    try {
-      final entity = await FileSystemEntity.type(path);
-      if (entity == FileSystemEntityType.notFound) {
-        return FileResult.error('Not found: $path');
-      }
-      if (entity == FileSystemEntityType.directory) {
-        await Directory(path).delete(recursive: true);
-      } else {
-        await File(path).delete();
-      }
-      _log.info('Deleted: $path');
-      return FileResult.ok('Deleted: $path');
-    } catch (e) {
-      return FileResult.error(e.toString());
-    }
-  }
-
-  Future<FileResult> list(String path, {bool recursive = false}) async {
-    try {
-      final dir = Directory(path);
-      if (!await dir.exists()) {
-        return FileResult.error('Directory not found: $path');
-      }
-      final entities = recursive
-          ? dir.listSync(recursive: true, followLinks: false)
-          : dir.listSync(followLinks: false);
-      final items = entities.map((e) {
-        final isDir = e is Directory;
-        return '${isDir ? '[DIR]' : '[FILE]'} ${p.relative(e.path, from: path)}';
-      }).toList();
-      return FileResult.ok(items.join('\n'));
-    } catch (e) {
-      return FileResult.error(e.toString());
-    }
-  }
-
-  Future<FileResult> copy(String source, String destination) async {
-    try {
-      await File(source).copy(destination);
-      _log.info('Copied: $source → $destination');
-      return FileResult.ok('Copied to $destination');
-    } catch (e) {
-      return FileResult.error(e.toString());
-    }
-  }
-
-  Future<FileResult> move(String source, String destination) async {
-    try {
-      await File(source).rename(destination);
-      _log.info('Moved: $source → $destination');
-      return FileResult.ok('Moved to $destination');
-    } catch (e) {
-      return FileResult.error(e.toString());
-    }
-  }
-
-  Future<FileResult> search(String query, {String? rootPath}) async {
-    try {
-      final root = rootPath ?? (Platform.isWindows ? 'C:\\' : '/');
-      final findCmd = Platform.isWindows
-          ? 'Get-ChildItem -Path "$root" -Recurse -Filter "*$query*" -ErrorAction SilentlyContinue | Select-Object FullName'
-          : 'find "$root" -iname "*$query*" -type f 2>/dev/null | head -50';
-      
-      final result = await _runFindCommand(findCmd);
-      return FileResult.ok(result);
-    } catch (e) {
-      return FileResult.error(e.toString());
-    }
-  }
-
-  Future<String> _runFindCommand(String cmd) async {
-    final shell = Platform.isWindows ? 'powershell.exe' : '/bin/bash';
-    final args = Platform.isWindows
-        ? ['-NoProfile', '-Command', cmd]
-        : ['-c', cmd];
-    final process = await Process.start(shell, args);
-    final stdout = await process.stdout.transform(SystemEncoding().decoder).join();
-    await process.exitCode;
-    return stdout;
-  }
-
-  Future<FileResult> organizeDownloads({int olderThanDays = 30}) async {
-    try {
-      final downloadsPath = Platform.isWindows
-          ? '${Platform.environment['USERPROFILE']}\\Downloads'
-          : '${Platform.environment['HOME']}/Downloads';
-      final dir = Directory(downloadsPath);
-      if (!await dir.exists()) {
-        return FileResult.error('Downloads folder not found');
-      }
-
-      final extFolders = <String, String>{
-        'jpg,jpeg,png,gif,bmp,svg,webp': 'Images',
-        'pdf': 'PDFs',
-        'doc,docx,xls,xlsx,ppt,pptx': 'Documents',
-        'zip,rar,7z,tar,gz': 'Archives',
-        'mp3,wav,flac,aac,ogg': 'Audio',
-        'mp4,mkv,avi,mov,wmv': 'Video',
-        'exe,msi': 'Installers',
-        'dmg,pkg': 'Installers',
-        'apk': 'APKs',
-        'deb,rpm': 'Packages',
-        'dart,py,js,ts,html,css,json,xml': 'Code',
-      };
-
-      int moved = 0;
-      final now = DateTime.now();
-
-      await for (final entity in dir.list(followLinks: false)) {
-        if (entity is! File) continue;
-
-        // Age check
-        final stat = await entity.stat();
-        if (now.difference(stat.modified).inDays < olderThanDays) continue;
-
-        final ext = p.extension(entity.path).toLowerCase().replaceAll('.', '');
-        String? targetFolder;
-
-        for (final entry in extFolders.entries) {
-          if (entry.key.split(',').contains(ext)) {
-            targetFolder = entry.value;
-            break;
-          }
-        }
-
-        if (targetFolder == null) {
-          targetFolder = ext.isEmpty ? 'NoExt' : ext.toUpperCase();
-        }
-
-        final targetDir = Directory(p.join(dir.path, targetFolder));
-        if (!await targetDir.exists()) {
-          await targetDir.create();
-        }
-
-        await entity.rename(p.join(targetDir.path, entity.name));
-        moved++;
-      }
-
-      _log.info('Organized $moved files in Downloads');
-      return FileResult.ok('Organized $moved files');
-    } catch (e) {
-      return FileResult.error(e.toString());
-    }
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'path': path,
+      'is_directory': isDirectory,
+      'size': size,
+      'modified_at': modifiedAt.toIso8601String(),
+    };
   }
 }
 
-class FileResult {
-  final bool success;
-  final String message;
-  final String? error;
+class FileService {
+  // Get app documents directory
+  Future<String> getAppDirectory() async {
+    final directory = await getApplicationDocumentsDirectory();
+    return directory.path;
+  }
 
-  FileResult._({required this.success, required this.message, this.error});
+  // Get downloads directory
+  Future<String> getDownloadsDirectory() async {
+    if (Platform.isMacOS) {
+      final home = Platform.environment['HOME'] ?? '';
+      return p.join(home, 'Downloads');
+    } else if (Platform.isWindows) {
+      final userProfile = Platform.environment['USERPROFILE'] ?? '';
+      return p.join(userProfile, 'Downloads');
+    }
+    return await getAppDirectory();
+  }
 
-  factory FileResult.ok(String msg) => FileResult._(success: true, message: msg);
-  factory FileResult.error(String err) => FileResult._(success: false, message: err, error: err);
+  // List files in directory
+  Future<List<FileInfo>> listFiles(String path) async {
+    final directory = Directory(path);
+    final List<FileInfo> files = [];
+
+    if (await directory.exists()) {
+      await for (final entity in directory.list()) {
+        final stat = await entity.stat();
+        files.add(FileInfo(
+          name: p.basename(entity.path),
+          path: entity.path,
+          isDirectory: entity is Directory,
+          size: stat.size,
+          modifiedAt: stat.modified,
+        ));
+      }
+    }
+
+    // Sort: directories first, then by name
+    files.sort((a, b) {
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+
+    return files;
+  }
+
+  // Read file content
+  Future<String> readFile(String path) async {
+    final file = File(path);
+    if (await file.exists()) {
+      return await file.readAsString();
+    }
+    throw Exception('File not found: $path');
+  }
+
+  // Write file content
+  Future<void> writeFile(String path, String content) async {
+    final file = File(path);
+    await file.writeAsString(content);
+  }
+
+  // Create directory
+  Future<void> createDirectory(String path) async {
+    final directory = Directory(path);
+    if (!await directory.exists()) {
+      await directory.create(recursive: true);
+    }
+  }
+
+  // Delete file or directory
+  Future<bool> delete(String path, {bool recursive = false}) async {
+    final entity = FileSystemEntity.typeSync(path);
+
+    try {
+      switch (entity) {
+        case FileSystemEntityType.directory:
+          await Directory(path).delete(recursive: recursive);
+          break;
+        case FileSystemEntityType.file:
+          await File(path).delete();
+          break;
+        default:
+          return false;
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Copy file
+  Future<bool> copyFile(String source, String destination) async {
+    try {
+      await File(source).copy(destination);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Move file
+  Future<bool> moveFile(String source, String destination) async {
+    try {
+      await File(source).rename(destination);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Search files
+  Future<List<FileInfo>> searchFiles(String path, String query) async {
+    final files = await listFiles(path);
+    final results = <FileInfo>[];
+
+    for (final file in files) {
+      if (file.name.toLowerCase().contains(query.toLowerCase())) {
+        results.add(file);
+      }
+    }
+
+    return results;
+  }
+
+  // Organize downloads folder
+  Future<Map<String, int>> organizeDownloads() async {
+    final downloadsDir = await getDownloadsDirectory();
+    final files = await listFiles(downloadsDir);
+    final organized = <String, int>{
+      'documents': 0,
+      'images': 0,
+      'videos': 0,
+      'music': 0,
+      'archives': 0,
+      'other': 0,
+    };
+
+    for (final file in files) {
+      if (file.isDirectory) continue;
+
+      final ext = p.extension(file.name).toLowerCase();
+      final category = _getCategory(ext);
+
+      // Create category directory if not exists
+      final categoryDir = p.join(downloadsDir, category);
+      await createDirectory(categoryDir);
+
+      // Move file to category directory
+      final newPath = p.join(categoryDir, file.name);
+      if (file.path != newPath) {
+        await moveFile(file.path, newPath);
+        organized[category] = (organized[category] ?? 0) + 1;
+      }
+    }
+
+    return organized;
+  }
+
+  String _getCategory(String extension) {
+    const documentExtensions = ['.pdf', '.doc', '.docx', '.txt', '.rtf', '.odt', '.xls', '.xlsx', '.ppt', '.pptx'];
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg'];
+    const videoExtensions = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv'];
+    const musicExtensions = ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a'];
+    const archiveExtensions = ['.zip', '.rar', '.7z', '.tar', '.gz', '.bz2'];
+
+    if (documentExtensions.contains(extension)) return 'documents';
+    if (imageExtensions.contains(extension)) return 'images';
+    if (videoExtensions.contains(extension)) return 'videos';
+    if (musicExtensions.contains(extension)) return 'music';
+    if (archiveExtensions.contains(extension)) return 'archives';
+    return 'other';
+  }
+
+  // Get file size in human readable format
+  String formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
 }
