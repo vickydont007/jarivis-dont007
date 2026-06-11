@@ -61,6 +61,13 @@ class AIEngine {
 
   Future<String> sendMessage(String message, {List<Map<String, dynamic>>? history}) async {
     try {
+      print('=== AI Engine Debug ===');
+      print('Provider: $_provider');
+      print('Base URL: $_baseUrl');
+      print('Model: ${_getModelName()}');
+      print('API Key: ${_apiKey.substring(0, 10)}...');
+      print('Message: $message');
+      
       final response = await _dio.post(
         '$_baseUrl/chat/completions',
         options: Options(
@@ -82,6 +89,9 @@ class AIEngine {
         },
       );
 
+      print('Response Status: ${response.statusCode}');
+      print('Response Data: ${response.data}');
+
       if (response.statusCode == 200) {
         final data = response.data;
         if (data['choices'] != null && data['choices'].isNotEmpty) {
@@ -89,16 +99,17 @@ class AIEngine {
         }
         return 'Error: No response from AI';
       } else if (response.statusCode == 404) {
-        return 'Error: Model not found. Check your API key and model settings.';
+        return 'Error: Model not found (${_getModelName()}). Try another model.';
       } else if (response.statusCode == 401) {
-        return 'Error: Invalid API key. Please check your OpenRouter API key in Settings.';
+        return 'Error: Invalid API key. Please check your OpenRouter API key.';
       } else if (response.statusCode == 402) {
-        return 'Error: Insufficient credits. Please add credits to your OpenRouter account.';
+        return 'Error: Insufficient credits.';
       } else {
         final error = response.data['error']?['message'] ?? 'Unknown error';
         return 'Error ($response.statusCode): $error';
       }
     } catch (e) {
+      print('AI Error: $e');
       return 'Error: $e';
     }
   }
@@ -157,7 +168,7 @@ class AIEngine {
   String _getModelName() {
     switch (_provider) {
       case AIProvider.openrouter:
-        return 'meta-llama/llama-3.3-70b-instruct:free';
+        return 'google/gemma-4-26b-a4b-it:free';
       case AIProvider.ollama:
         return 'llama3.2';
       case AIProvider.openai:
