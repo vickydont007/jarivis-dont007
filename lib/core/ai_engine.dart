@@ -20,6 +20,7 @@ class AIEngine {
   final AIProvider _provider;
   final String _apiKey;
   final String _baseUrl;
+  final String _modelName;
   AIEngineState state = AIEngineState.disconnected;
   final Dio _dio = Dio();
   final StreamController<String> _responseController = StreamController<String>.broadcast();
@@ -28,9 +29,11 @@ class AIEngine {
     required AIProvider provider,
     required String apiKey,
     String? baseUrl,
+    String? modelName,
   }) : _provider = provider,
        _apiKey = apiKey,
-       _baseUrl = baseUrl ?? _getDefaultBaseUrl(provider);
+       _baseUrl = baseUrl ?? _getDefaultBaseUrl(provider),
+       _modelName = modelName ?? _getDefaultModel(provider);
 
   static String _getDefaultBaseUrl(AIProvider provider) {
     switch (provider) {
@@ -166,7 +169,11 @@ class AIEngine {
   }
 
   String _getModelName() {
-    switch (_provider) {
+    return _modelName;
+  }
+
+  static String _getDefaultModel(AIProvider provider) {
+    switch (provider) {
       case AIProvider.openrouter:
         return 'google/gemma-4-26b-a4b-it:free';
       case AIProvider.ollama:

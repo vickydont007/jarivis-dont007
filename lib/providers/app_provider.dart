@@ -47,11 +47,13 @@ class AppStateNotifier extends StateNotifier<AppState> {
     required AIProvider provider,
     required String apiKey,
     String? baseUrl,
+    String? modelName,
   }) async {
     _engine = AIEngine(
       provider: provider,
       apiKey: apiKey,
       baseUrl: baseUrl,
+      modelName: modelName,
     );
 
     try {

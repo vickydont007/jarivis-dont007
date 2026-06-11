@@ -13,6 +13,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // AI Settings
   String _selectedAIProvider = 'openrouter';
+  String _selectedModel = 'google/gemma-4-26b-a4b-it:free';
   String _apiKey = '';
   bool _useLocalAI = false;
 
@@ -28,6 +29,47 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // Social Media Settings
   String _telegramBotToken = '';
   String _discordBotToken = '';
+
+  // Models list for each provider
+  final Map<String, List<String>> _modelsByProvider = {
+    'openrouter': [
+      'google/gemma-4-26b-a4b-it:free',
+      'google/gemma-4-31b-it:free',
+      'meta-llama/llama-3.3-70b-instruct:free',
+      'meta-llama/llama-3.2-3b-instruct:free',
+      'qwen/qwen3-next-80b-a3b-instruct:free',
+      'qwen/qwen3-coder:free',
+      'nousresearch/hermes-3-llama-3.1-405b:free',
+      'openai/gpt-4',
+      'anthropic/claude-3-opus',
+    ],
+    'ollama': [
+      'llama3.2',
+      'llama3.1',
+      'mistral',
+      'codellama',
+      'phi3',
+      'gemma',
+    ],
+    'openai': [
+      'gpt-4',
+      'gpt-4-turbo',
+      'gpt-4o',
+      'gpt-4o-mini',
+      'gpt-3.5-turbo',
+    ],
+    'anthropic': [
+      'claude-3-opus',
+      'claude-3-sonnet',
+      'claude-3-haiku',
+      'claude-3.5-sonnet',
+    ],
+    'gemini': [
+      'gemini-2.0-flash',
+      'gemini-1.5-pro',
+      'gemini-1.5-flash',
+    ],
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +109,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 (value) {
                   setState(() {
                     _selectedAIProvider = value!;
+                    _selectedModel = _modelsByProvider[value]!.first;
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+              _buildDropdown(
+                'Model',
+                _selectedModel,
+                _modelsByProvider[_selectedAIProvider]!,
+                (value) {
+                  setState(() {
+                    _selectedModel = value!;
                   });
                 },
               ),
@@ -417,6 +471,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await ref.read(appStateProvider.notifier).initializeAI(
       provider: provider,
       apiKey: apiKey,
+      modelName: _selectedModel,
     );
 
     final appState = ref.read(appStateProvider);
@@ -438,6 +493,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void _resetSettings() {
     setState(() {
       _selectedAIProvider = 'openrouter';
+      _selectedModel = 'google/gemma-4-26b-a4b-it:free';
       _apiKey = '';
       _useLocalAI = false;
       _voiceEnabled = true;
