@@ -32,6 +32,7 @@ dependencies:
   system_info2: ^3.0.0
   system_tray: ^2.0.3
   window_manager: ^0.3.7
+  permission_handler: ^11.3.0
 
   # Notifications
   flutter_local_notifications: ^17.2.1
