@@ -24,24 +24,29 @@ class VoiceService {
   Stream<bool> get listeningStream => _listeningController.stream;
   bool get isListening => _isListening;
 
-  Future<void> initialize() async {
-    if (_isInitialized) return;
+  Future<bool> initialize() async {
+    if (_isInitialized) return true;
 
     try {
-      await _speechToText.initialize(
+      final available = await _speechToText.initialize(
         onError: (error) {
-          print('Speech recognition error: $error');
+          print('Speech recognition error: ${error.errorMsg}');
           _isListening = false;
           _listeningController.add(false);
         },
         onStatus: (status) {
           print('Speech recognition status: $status');
-          if (status == 'done' || status == 'notListening') {
+          if (status == 'done' || status == 'notListening' || status == 'cancelled') {
             _isListening = false;
             _listeningController.add(false);
           }
         },
       );
+
+      if (!available) {
+        print('Speech recognition not available on this device');
+        return false;
+      }
 
       // Configure TTS
       await _flutterTts.setVolume(1.0);
@@ -49,34 +54,48 @@ class VoiceService {
       await _flutterTts.setPitch(1.0);
 
       _isInitialized = true;
+      return true;
     } catch (e) {
       print('Failed to initialize voice service: $e');
+      return false;
     }
   }
 
-  Future<void> startListening() async {
+  Future<bool> startListening() async {
     if (!_isInitialized) {
-      await initialize();
+      final initialized = await initialize();
+      if (!initialized) {
+        return false;
+      }
     }
 
     if (!_isListening) {
-      _isListening = true;
-      _listeningController.add(true);
+      try {
+        _isListening = true;
+        _listeningController.add(true);
 
-      String localeId = _getLocaleId();
+        String localeId = _getLocaleId();
 
-      await _speechToText.listen(
-        onResult: (result) {
-          if (result.finalResult) {
-            _transcriptionController.add(result.recognizedWords);
-          }
-        },
-        localeId: localeId,
-        listenMode: ListenMode.dictation,
-        cancelOnError: true,
-        partialResults: true,
-      );
+        await _speechToText.listen(
+          onResult: (result) {
+            if (result.finalResult) {
+              _transcriptionController.add(result.recognizedWords);
+            }
+          },
+          localeId: localeId,
+          listenMode: ListenMode.dictation,
+          cancelOnError: true,
+          partialResults: true,
+        );
+        return true;
+      } catch (e) {
+        print('Failed to start listening: $e');
+        _isListening = false;
+        _listeningController.add(false);
+        return false;
+      }
     }
+    return true;
   }
 
   Future<void> stopListening() async {
@@ -102,7 +121,6 @@ class VoiceService {
         await _flutterTts.setLanguage('hi-IN');
         break;
       case VoiceLanguage.both:
-        // Auto-detect and set appropriate language
         if (_containsHindi(text)) {
           await _flutterTts.setLanguage('hi-IN');
         } else {
@@ -129,12 +147,11 @@ class VoiceService {
       case VoiceLanguage.hindi:
         return 'hi-IN';
       case VoiceLanguage.both:
-        return 'en-US'; // Default to English, will auto-detect
+        return 'en-US';
     }
   }
 
   bool _containsHindi(String text) {
-    // Simple check for Hindi characters (Devanagari script)
     final hindiRange = RegExp(r'[\u0900-\u097F]');
     return hindiRange.hasMatch(text);
   }

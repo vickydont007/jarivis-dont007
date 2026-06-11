@@ -28,7 +28,6 @@ class _VoiceButtonState extends State<VoiceButton>
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
     
-    // Listen to transcription stream
     _voiceService.transcriptionStream.listen((text) {
       if (text.isNotEmpty && widget.onTranscription != null) {
         widget.onTranscription!(text);
@@ -37,32 +36,31 @@ class _VoiceButtonState extends State<VoiceButton>
   }
 
   void _toggleListening() async {
-    setState(() {
-      _isListening = !_isListening;
-      if (_isListening) {
-        _animationController.repeat(reverse: true);
-      } else {
+    if (_isListening) {
+      setState(() {
+        _isListening = false;
         _animationController.stop();
         _animationController.reset();
-      }
-    });
-
-    if (_isListening) {
-      try {
-        await _voiceService.startListening();
-      } catch (e) {
+      });
+      await _voiceService.stopListening();
+    } else {
+      final started = await _voiceService.startListening();
+      if (started) {
+        setState(() {
+          _isListening = true;
+          _animationController.repeat(reverse: true);
+        });
+      } else {
         if (mounted) {
-          setState(() => _isListening = false);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Could not start voice recognition'),
+              content: Text('Could not start voice recognition. Please check microphone permissions.'),
               backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
             ),
           );
         }
       }
-    } else {
-      await _voiceService.stopListening();
     }
   }
 
