@@ -190,8 +190,8 @@ class AgentLearning {
     return _records
         .where((r) => r.outcome == TaskOutcome.failure)
         .toList()
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-    // take(limit) applied after sort
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp))
+      ..take(limit).toList();
   }
 
   List<String> getSuggestedImprovements(String agentId) {

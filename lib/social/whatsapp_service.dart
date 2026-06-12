@@ -34,6 +34,7 @@ class WhatsAppService {
   final Dio _dio = Dio();
   String? _accessToken;
   String? _phoneNumberId;
+  String? _verifyToken;
   String? _businessAccountId;
   final StreamController<WhatsAppMessage> _messageController =
       StreamController<WhatsAppMessage>.broadcast();
@@ -43,10 +44,12 @@ class WhatsAppService {
   void setCredentials({
     required String accessToken,
     required String phoneNumberId,
+    String? verifyToken,
     required String businessAccountId,
   }) {
     _accessToken = accessToken;
     _phoneNumberId = phoneNumberId;
+    _verifyToken = verifyToken;
     _businessAccountId = businessAccountId;
   }
 
@@ -182,7 +185,7 @@ class WhatsAppService {
 
   // Webhook verification
   String verifyWebhook(String hubMode, String hubChallenge, String hubVerifyToken) {
-    if (hubMode == 'subscribe' && hubVerifyToken == _accessToken) {
+    if (hubMode == 'subscribe' && hubVerifyToken == _verifyToken) {
       return hubChallenge;
     }
     throw Exception('Webhook verification failed');

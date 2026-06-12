@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import '../tools/tool.dart';
+import 'cost_tracker.dart';
 
 enum AIProvider {
   openrouter,
@@ -48,6 +49,7 @@ class AIEngine {
   List<Map<String, dynamic>> _toolDefinitions = [];
   AIEngineState state = AIEngineState.disconnected;
   final Dio _dio = Dio();
+  CostTracker? _costTracker;
   final StreamController<String> _responseController = StreamController<String>.broadcast();
 
   AIEngine({
@@ -95,6 +97,10 @@ class AIEngine {
 
   void clearToolDefinitions() {
     _toolDefinitions.clear();
+  }
+
+  void setCostTracker(CostTracker costTracker) {
+    _costTracker = costTracker;
   }
 
   List<Map<String, dynamic>> get toolDefinitions => _toolDefinitions;
@@ -215,6 +221,18 @@ class AIEngine {
       }
 
       final data = response.data;
+      
+      // Record usage if cost tracker is set
+      if (_costTracker != null && data['usage'] != null) {
+        _costTracker!.recordUsage(
+          provider: _provider.name,
+          model: _modelName,
+          promptTokens: data['usage']['prompt_tokens'] ?? 0,
+          completionTokens: data['usage']['completion_tokens'] ?? 0,
+          requestId: data['id'],
+        );
+      }
+      
       final choice = data['choices']?[0];
       final message = choice?['message'];
 
@@ -272,6 +290,18 @@ class AIEngine {
   String _handleResponse(Response response) {
     if (response.statusCode == 200) {
       final data = response.data;
+      
+      // Record usage if cost tracker is set
+      if (_costTracker != null && data['usage'] != null) {
+        _costTracker!.recordUsage(
+          provider: _provider.name,
+          model: _modelName,
+          promptTokens: data['usage']['prompt_tokens'] ?? 0,
+          completionTokens: data['usage']['completion_tokens'] ?? 0,
+          requestId: data['id'],
+        );
+      }
+      
       if (data['choices'] != null && data['choices'].isNotEmpty) {
         final message = data['choices'][0]['message'];
         final toolCalls = message['tool_calls'] as List?;

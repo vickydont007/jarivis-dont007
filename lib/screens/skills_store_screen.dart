@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/skills_manager.dart';
 
 class SkillsStoreScreen extends StatefulWidget {
   const SkillsStoreScreen({super.key});
@@ -10,358 +11,145 @@ class SkillsStoreScreen extends StatefulWidget {
 class _SkillsStoreScreenState extends State<SkillsStoreScreen> {
   String _selectedCategory = 'all';
   String _searchQuery = '';
+  final SkillsManager _skillsManager = SkillsManager();
+  final TextEditingController _searchController = TextEditingController();
 
-  final List<Map<String, dynamic>> _skills = [
-    {
-      'id': '1',
-      'name': 'Email Automation',
-      'description': 'Automatically send and manage emails',
-      'category': 'productivity',
-      'author': 'Community',
-      'downloads': 1520,
-      'rating': 4.5,
-      'installed': true,
-      'icon': Icons.email,
-      'color': Colors.blue,
-    },
-    {
-      'id': '2',
-      'name': 'Calendar Sync',
-      'description': 'Sync with Google Calendar and Outlook',
-      'category': 'productivity',
-      'author': 'Hermes Team',
-      'downloads': 890,
-      'rating': 4.2,
-      'installed': true,
-      'icon': Icons.calendar_today,
-      'color': Colors.green,
-    },
-    {
-      'id': '3',
-      'name': 'Code Review',
-      'description': 'Automated code review and suggestions',
-      'category': 'development',
-      'author': 'OpenClaw',
-      'downloads': 2100,
-      'rating': 4.8,
-      'installed': false,
-      'icon': Icons.code,
-      'color': Colors.purple,
-    },
-    {
-      'id': '4',
-      'name': 'Web Scraper',
-      'description': 'Extract data from websites',
-      'category': 'data',
-      'author': 'Community',
-      'downloads': 750,
-      'rating': 4.0,
-      'installed': false,
-      'icon': Icons.web,
-      'color': Colors.orange,
-    },
-    {
-      'id': '5',
-      'name': 'Image Generator',
-      'description': 'Generate images using AI',
-      'category': 'creative',
-      'author': 'Hermes Team',
-      'downloads': 3200,
-      'rating': 4.9,
-      'installed': false,
-      'icon': Icons.image,
-      'color': Colors.pink,
-    },
-    {
-      'id': '6',
-      'name': 'Music Player',
-      'description': 'Control Spotify and Apple Music',
-      'category': 'entertainment',
-      'author': 'Community',
-      'downloads': 1100,
-      'rating': 4.3,
-      'installed': true,
-      'icon': Icons.music_note,
-      'color': Colors.teal,
-    },
-    {
-      'id': '7',
-      'name': 'File Organizer',
-      'description': 'Automatically organize files',
-      'category': 'productivity',
-      'author': 'OpenClaw',
-      'downloads': 620,
-      'rating': 4.1,
-      'installed': false,
-      'icon': Icons.folder,
-      'color': Colors.indigo,
-    },
-    {
-      'id': '8',
-      'name': 'Translation',
-      'description': 'Real-time translation support',
-      'category': 'utility',
-      'author': 'Community',
-      'downloads': 1800,
-      'rating': 4.6,
-      'installed': true,
-      'icon': Icons.translate,
-      'color': Colors.cyan,
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadSkills();
+  }
 
-  List<Map<String, dynamic>> get _filteredSkills {
-    return _skills.where((skill) {
-      final matchesCategory = _selectedCategory == 'all' || skill['category'] == _selectedCategory;
-      final matchesSearch = skill['name'].toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          skill['description'].toLowerCase().contains(_searchQuery.toLowerCase());
-      return matchesCategory && matchesSearch;
-    }).toList();
+  void _loadSkills() async {
+    // Import skills from both sources
+    await _skillsManager.importFromSource('hermes');
+    await _skillsManager.importFromSource('openclaw');
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
+    final filteredSkills = _getFilteredSkills();
+
     return Scaffold(
       backgroundColor: const Color(0xFF0D1117),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF161B22),
-        title: const Text(
-          'Skills Store',
-          style: TextStyle(color: Colors.white),
-        ),
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              // TODO: Refresh skills list
-            },
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Search Bar
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: const Color(0xFF161B22),
-            child: TextField(
-              onChanged: (value) => setState(() => _searchQuery = value),
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'Search skills...',
-                hintStyle: const TextStyle(color: Colors.grey),
-                prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.grey),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.grey),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF58A6FF)),
-                ),
-              ),
-            ),
-          ),
-
-          // Category Chips
-          Container(
-            height: 60,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: ListView(
-              scrollDirection: Axis.horizontal,
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
               children: [
-                _buildCategoryChip('all', 'All'),
-                _buildCategoryChip('productivity', 'Productivity'),
-                _buildCategoryChip('development', 'Development'),
-                _buildCategoryChip('data', 'Data'),
-                _buildCategoryChip('creative', 'Creative'),
-                _buildCategoryChip('entertainment', 'Entertainment'),
-                _buildCategoryChip('utility', 'Utility'),
+                const Icon(Icons.store, color: Colors.cyan, size: 28),
+                const SizedBox(width: 12),
+                const Text(
+                  'Skills Store',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                // Stats
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF161B22),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '${_skillsManager.skills.length} skills available',
+                    style: const TextStyle(color: Colors.grey, fontSize: 14),
+                  ),
+                ),
               ],
             ),
-          ),
+            const SizedBox(height: 24),
 
-          // Stats
-          Container(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+            // Search and Filter
+            Row(
               children: [
-                _buildStat('Total', _skills.length.toString()),
-                _buildStat('Installed', _skills.where((s) => s['installed']).length.toString()),
-                _buildStat('Available', _skills.where((s) => !s['installed']).length.toString()),
-              ],
-            ),
-          ),
-
-          // Skills List
-          Expanded(
-            child: _filteredSkills.isEmpty
-                ? const Center(
-                    child: Text(
-                      'No skills found',
-                      style: TextStyle(color: Colors.grey),
+                // Search
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Search skills...',
+                      hintStyle: TextStyle(color: Colors.grey[600]),
+                      prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, color: Colors.grey),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() => _searchQuery = '');
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: const Color(0xFF161B22),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _filteredSkills.length,
-                    itemBuilder: (context, index) {
-                      final skill = _filteredSkills[index];
-                      return _buildSkillCard(skill);
+                    onChanged: (value) {
+                      setState(() => _searchQuery = value);
                     },
                   ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCategoryChip(String category, String label) {
-    final isSelected = _selectedCategory == category;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: FilterChip(
-        label: Text(label),
-        selected: isSelected,
-        onSelected: (selected) => setState(() => _selectedCategory = category),
-        selectedColor: const Color(0xFF58A6FF).withValues(alpha: 0.3),
-        checkmarkColor: const Color(0xFF58A6FF),
-        labelStyle: TextStyle(
-          color: isSelected ? const Color(0xFF58A6FF) : Colors.grey,
-        ),
-        side: BorderSide(
-          color: isSelected ? const Color(0xFF58A6FF) : Colors.grey,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStat(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        Text(
-          label,
-          style: const TextStyle(color: Colors.grey, fontSize: 12),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSkillCard(Map<String, dynamic> skill) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      color: const Color(0xFF161B22),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            // Skill Icon
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: skill['color'].withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                skill['icon'],
-                color: skill['color'],
-              ),
-            ),
-            const SizedBox(width: 16),
-
-            // Skill Info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    skill['name'],
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    skill['description'],
-                    style: const TextStyle(
-                      color: Colors.grey,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(Icons.person, size: 12, color: Colors.grey[600]),
-                      const SizedBox(width: 4),
-                      Text(
-                        skill['author'],
-                        style: TextStyle(color: Colors.grey[600], fontSize: 10),
-                      ),
-                      const SizedBox(width: 12),
-                      Icon(Icons.download, size: 12, color: Colors.grey[600]),
-                      const SizedBox(width: 4),
-                      Text(
-                        _formatNumber(skill['downloads']),
-                        style: TextStyle(color: Colors.grey[600], fontSize: 10),
-                      ),
-                      const SizedBox(width: 12),
-                      Icon(Icons.star, size: 12, color: Colors.grey[600]),
-                      const SizedBox(width: 4),
-                      Text(
-                        skill['rating'].toString(),
-                        style: TextStyle(color: Colors.grey[600], fontSize: 10),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            // Install/Uninstall Button
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  skill['installed'] = !skill['installed'];
-                });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      skill['installed'] ? 'Installing ${skill['name']}...' : 'Uninstalling ${skill['name']}...',
-                    ),
-                    backgroundColor: skill['installed'] ? Colors.green : Colors.orange,
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                 backgroundColor: skill['installed']
-                     ? Colors.orange.withValues(alpha: 0.2)
-                     : const Color(0xFF238636),
-                foregroundColor: skill['installed'] ? Colors.orange : Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
                 ),
-              ),
-              child: Text(skill['installed'] ? 'Uninstall' : 'Install'),
+                const SizedBox(width: 16),
+
+                // Category Filter
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF161B22),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: DropdownButton<String>(
+                    value: _selectedCategory,
+                    dropdownColor: const Color(0xFF161B22),
+                    style: const TextStyle(color: Colors.white),
+                    underline: const SizedBox(),
+                    items: [
+                      const DropdownMenuItem(value: 'all', child: Text('All Categories')),
+                      ..._skillsManager.getCategories().map((cat) =>
+                        DropdownMenuItem(value: cat, child: Text(cat))),
+                    ],
+                    onChanged: (value) {
+                      setState(() => _selectedCategory = value ?? 'all');
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // Skills List
+            Expanded(
+              child: filteredSkills.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No skills found',
+                        style: TextStyle(color: Colors.grey, fontSize: 16),
+                      ),
+                    )
+                  : GridView.builder(
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        childAspectRatio: 2.5,
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
+                      ),
+                      itemCount: filteredSkills.length,
+                      itemBuilder: (context, index) {
+                        return _buildSkillCard(filteredSkills[index]);
+                      },
+                    ),
             ),
           ],
         ),
@@ -369,10 +157,203 @@ class _SkillsStoreScreenState extends State<SkillsStoreScreen> {
     );
   }
 
-  String _formatNumber(int number) {
-    if (number >= 1000) {
-      return '${(number / 1000).toStringAsFixed(1)}k';
+  List<Skill> _getFilteredSkills() {
+    var skills = _skillsManager.skills;
+
+    if (_selectedCategory != 'all') {
+      skills = skills.where((s) => s.category == _selectedCategory).toList();
     }
-    return number.toString();
+
+    if (_searchQuery.isNotEmpty) {
+      final query = _searchQuery.toLowerCase();
+      skills = skills.where((s) =>
+        s.name.toLowerCase().contains(query) ||
+        s.description.toLowerCase().contains(query)
+      ).toList();
+    }
+
+    return skills;
+  }
+
+  Widget _buildSkillCard(Skill skill) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF161B22),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF30363D)),
+      ),
+      child: Row(
+        children: [
+          // Icon
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: _getCategoryColor(skill.category).withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              _getCategoryIcon(skill.category),
+              color: _getCategoryColor(skill.category),
+            ),
+          ),
+          const SizedBox(width: 16),
+
+          // Info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  skill.name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  skill.description,
+                  style: TextStyle(
+                    color: Colors.grey[400],
+                    fontSize: 12,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(Icons.person, size: 12, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      skill.source,
+                      style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                    ),
+                    const SizedBox(width: 12),
+                    Icon(Icons.category, size: 12, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      skill.category,
+                      style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Install Button
+          _buildInstallButton(skill),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInstallButton(Skill skill) {
+    final isInstalled = _skillsManager.skills.contains(skill);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: isInstalled ? Colors.green.withOpacity(0.2) : Colors.cyan.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isInstalled ? Colors.green : Colors.cyan,
+        ),
+      ),
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            if (isInstalled) {
+              _skillsManager.removeSkill(skill.id);
+            } else {
+              // Skill is already imported, just show feedback
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('${skill.name} is ready to use'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            }
+          });
+        },
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isInstalled ? Icons.check : Icons.add,
+              color: isInstalled ? Colors.green : Colors.cyan,
+              size: 16,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              isInstalled ? 'Installed' : 'Install',
+              style: TextStyle(
+                color: isInstalled ? Colors.green : Colors.cyan,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _getCategoryColor(String category) {
+    switch (category) {
+      case 'productivity':
+        return Colors.blue;
+      case 'development':
+        return Colors.purple;
+      case 'data':
+        return Colors.orange;
+      case 'creative':
+        return Colors.pink;
+      case 'entertainment':
+        return Colors.teal;
+      case 'research':
+        return Colors.green;
+      case 'utility':
+        return Colors.cyan;
+      case 'information':
+        return Colors.amber;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getCategoryIcon(String category) {
+    switch (category) {
+      case 'productivity':
+        return Icons.work;
+      case 'development':
+        return Icons.code;
+      case 'data':
+        return Icons.data_usage;
+      case 'creative':
+        return Icons.palette;
+      case 'entertainment':
+        return Icons.sports_esports;
+      case 'research':
+        return Icons.science;
+      case 'utility':
+        return Icons.build;
+      case 'information':
+        return Icons.info;
+      default:
+        return Icons.extension;
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _skillsManager.dispose();
+    super.dispose();
   }
 }

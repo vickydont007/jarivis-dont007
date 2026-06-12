@@ -49,13 +49,17 @@ class SearchResult {
 }
 
 class VectorStore {
-  final VectorEmbeddingService _embeddingService;
+  VectorEmbeddingService _embeddingService;
   final Map<String, StoredDocument> _documents = {};
   final Map<String, List<VectorEmbedding>> _embeddings = {};
   final StreamController<StoredDocument> _documentController =
       StreamController<StoredDocument>.broadcast();
 
   VectorStore(this._embeddingService);
+
+  void setEmbeddingService(VectorEmbeddingService service) {
+    _embeddingService = service;
+  }
 
   Stream<StoredDocument> get documentStream => _documentController.stream;
 

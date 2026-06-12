@@ -27,7 +27,7 @@ class _VoiceButtonState extends State<VoiceButton>
     _animation = Tween<double>(begin: 1.0, end: 1.5).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
-    
+
     _voiceService.transcriptionStream.listen((text) {
       if (text.isNotEmpty && widget.onTranscription != null) {
         widget.onTranscription!(text);
@@ -44,6 +44,12 @@ class _VoiceButtonState extends State<VoiceButton>
       });
       await _voiceService.stopListening();
     } else {
+      // Check if STT is available, if not show text input
+      if (!_voiceService.isSTTAvailable) {
+        _showTextInputDialog();
+        return;
+      }
+
       final started = await _voiceService.startListening();
       if (started) {
         setState(() {
@@ -54,14 +60,58 @@ class _VoiceButtonState extends State<VoiceButton>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Could not start voice recognition. Please check microphone permissions.'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 3),
+              content: Text('Voice recognition unavailable. Use text input.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
             ),
           );
+          _showTextInputDialog();
         }
       }
     }
+  }
+
+  void _showTextInputDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF161B22),
+        title: const Text('Text Input', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'Type your message...',
+            hintStyle: TextStyle(color: Colors.grey),
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 3,
+          autofocus: true,
+          onSubmitted: (value) {
+            if (value.isNotEmpty && widget.onTranscription != null) {
+              widget.onTranscription!(value);
+            }
+            Navigator.pop(context);
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              if (controller.text.isNotEmpty && widget.onTranscription != null) {
+                widget.onTranscription!(controller.text);
+              }
+              Navigator.pop(context);
+            },
+            child: const Text('Send'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

@@ -13,7 +13,10 @@ class RAGManager {
     required MemorySystem memorySystem,
   })  : _memorySystem = memorySystem,
         _embeddingService = VectorEmbeddingService(apiKey: apiKey),
-        _vectorStore = VectorStore(VectorEmbeddingService(apiKey: apiKey));
+        _vectorStore = VectorStore(VectorEmbeddingService(apiKey: apiKey)) {
+    // Use the same embedding service instance for both manager and store
+    _vectorStore.setEmbeddingService(_embeddingService);
+  }
 
   void setApiKey(String apiKey) {
     _embeddingService.setApiKey(apiKey);

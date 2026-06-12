@@ -164,7 +164,7 @@ class DiscordService {
       'op': 2,
       'd': {
         'token': _botToken,
-        'intents': 513, // GUILDS + GUILD_MESSAGES
+        'intents': 513 | (1 << 15), // GUILDS + GUILD_MESSAGES + MESSAGE_CONTENT
       },
     });
   }

@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'package:uuid/uuid.dart';
+import 'ai_engine.dart';
+import '../tools/tool_manager.dart';
+import '../tools/tool.dart';
 
 enum AgentType {
   morningDigest,
@@ -80,6 +83,9 @@ class Agent {
   final List<String> capabilities;
   final bool isActive;
   final int maxConcurrentTasks;
+  int _completedTasks;
+  int _failedTasks;
+  double _avgExecutionTime;
 
   Agent({
     required this.id,
@@ -89,7 +95,12 @@ class Agent {
     this.capabilities = const [],
     this.isActive = true,
     this.maxConcurrentTasks = 1,
-  });
+    int completedTasks = 0,
+    int failedTasks = 0,
+    double avgExecutionTime = 0,
+  }) : _completedTasks = completedTasks,
+       _failedTasks = failedTasks,
+       _avgExecutionTime = avgExecutionTime;
 
   factory Agent.create({
     required String name,
@@ -105,6 +116,19 @@ class Agent {
       capabilities: capabilities,
     );
   }
+
+  double get successRate => (_completedTasks + _failedTasks) == 0
+      ? 0
+      : _completedTasks / (_completedTasks + _failedTasks);
+
+  void recordSuccess(double executionTime) {
+    _completedTasks++;
+    _avgExecutionTime = (_avgExecutionTime * (_completedTasks - 1) + executionTime) / _completedTasks;
+  }
+
+  void recordFailure() {
+    _failedTasks++;
+  }
 }
 
 class AgentOrchestrator {
@@ -112,6 +136,8 @@ class AgentOrchestrator {
   final List<AgentTask> _tasks = [];
   final StreamController<AgentTask> _taskController =
       StreamController<AgentTask>.broadcast();
+  AIEngine? _aiEngine;
+  ToolManager? _toolManager;
 
   Stream<AgentTask> get taskStream => _taskController.stream;
   List<Agent> get agents => List.unmodifiable(_agents);
@@ -121,8 +147,12 @@ class AgentOrchestrator {
     _initializeDefaultAgents();
   }
 
+  void setEngine(AIEngine aiEngine, ToolManager toolManager) {
+    _aiEngine = aiEngine;
+    _toolManager = toolManager;
+  }
+
   void _initializeDefaultAgents() {
-    // 1. Morning Digest Agent
     _agents.add(Agent.create(
       name: 'Morning Digest',
       description: 'Daily briefing from email, calendar, health, news',
@@ -130,7 +160,6 @@ class AgentOrchestrator {
       capabilities: ['email', 'calendar', 'news', 'weather', 'tts'],
     ));
 
-    // 2. Deep Research Agent
     _agents.add(Agent.create(
       name: 'Deep Research',
       description: 'Multi-hop research across indexed docs with citations',
@@ -138,7 +167,6 @@ class AgentOrchestrator {
       capabilities: ['web_search', 'document_analysis', 'citations'],
     ));
 
-    // 3. Monitor Operative
     _agents.add(Agent.create(
       name: 'Monitor Operative',
       description: 'Long-horizon monitoring with memory and retrieval',
@@ -146,7 +174,6 @@ class AgentOrchestrator {
       capabilities: ['monitoring', 'alerts', 'memory'],
     ));
 
-    // 4. Orchestrator
     _agents.add(Agent.create(
       name: 'Orchestrator',
       description: 'Multi-turn reasoning with automatic tool selection',
@@ -154,7 +181,6 @@ class AgentOrchestrator {
       capabilities: ['reasoning', 'tool_selection', 'multi_turn'],
     ));
 
-    // 5. Native React
     _agents.add(Agent.create(
       name: 'Native React',
       description: 'ReAct (Thought-Action-Observation) loop agent',
@@ -162,7 +188,6 @@ class AgentOrchestrator {
       capabilities: ['react_loop', 'tool_use', 'observation'],
     ));
 
-    // 6. Operative
     _agents.add(Agent.create(
       name: 'Operative',
       description: 'Persistent autonomous agent with state management',
@@ -170,7 +195,6 @@ class AgentOrchestrator {
       capabilities: ['autonomous', 'state_management', 'persistence'],
     ));
 
-    // 7. Code Assistant
     _agents.add(Agent.create(
       name: 'Code Assistant',
       description: 'Agent with code execution, file I/O, and shell access',
@@ -178,7 +202,6 @@ class AgentOrchestrator {
       capabilities: ['code_execution', 'file_io', 'shell', 'git'],
     ));
 
-    // 8. Simple
     _agents.add(Agent.create(
       name: 'Simple',
       description: 'Lightweight conversation, no tools',
@@ -187,7 +210,6 @@ class AgentOrchestrator {
     ));
   }
 
-  // Get agent by type
   Agent? getAgentByType(AgentType type) {
     try {
       return _agents.firstWhere((a) => a.type == type);
@@ -196,7 +218,47 @@ class AgentOrchestrator {
     }
   }
 
-  // Create task
+  Agent? getBestAgentForTask(String taskDescription) {
+    final lowerDesc = taskDescription.toLowerCase();
+
+    // Keyword-based routing with fallback to highest success rate
+    Agent? bestMatch;
+    int bestScore = 0;
+
+    for (final agent in _agents) {
+      if (!agent.isActive) continue;
+
+      int score = 0;
+      final desc = agent.description.toLowerCase();
+      final name = agent.name.toLowerCase();
+
+      // Score based on keyword matching
+      if (lowerDesc.contains('research') && desc.contains('research')) score += 10;
+      if (lowerDesc.contains('code') && desc.contains('code')) score += 10;
+      if (lowerDesc.contains('monitor') && desc.contains('monitor')) score += 10;
+      if (lowerDesc.contains('digest') || lowerDesc.contains('morning')) {
+        if (desc.contains('digest')) score += 10;
+      }
+      if (lowerDesc.contains('think') || lowerDesc.contains('reason')) {
+        if (desc.contains('react') || desc.contains('reasoning')) score += 10;
+      }
+
+      // Boost by success rate
+      score += (agent.successRate * 5).toInt();
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = agent;
+      }
+    }
+
+    // Fallback to orchestrator or first active agent
+    return bestMatch ?? _agents.firstWhere(
+      (a) => a.type == AgentType.orchestrator && a.isActive,
+      orElse: () => _agents.firstWhere((a) => a.isActive),
+    );
+  }
+
   Future<AgentTask> createTask({
     required String agentId,
     required String description,
@@ -210,11 +272,9 @@ class AgentOrchestrator {
 
     _tasks.add(task);
     _taskController.add(task);
-
     return task;
   }
 
-  // Execute task
   Future<String> executeTask(AgentTask task) async {
     final agent = _agents.firstWhere(
       (a) => a.id == task.agentId,
@@ -224,6 +284,8 @@ class AgentOrchestrator {
     if (!agent.isActive) {
       throw Exception('Agent is not active');
     }
+
+    final startTime = DateTime.now();
 
     // Update task status
     final updatedTask = AgentTask(
@@ -242,10 +304,11 @@ class AgentOrchestrator {
     }
 
     try {
-      // Execute based on agent type
       final result = await _executeAgentLogic(agent, task);
+      final executionTime = DateTime.now().difference(startTime).inSeconds.toDouble();
 
-      // Update task with result
+      agent.recordSuccess(executionTime);
+
       final completedTask = AgentTask(
         id: task.id,
         agentId: task.agentId,
@@ -265,7 +328,8 @@ class AgentOrchestrator {
 
       return result;
     } catch (e) {
-      // Update task with error
+      agent.recordFailure();
+
       final failedTask = AgentTask(
         id: task.id,
         agentId: task.agentId,
@@ -288,6 +352,12 @@ class AgentOrchestrator {
   }
 
   Future<String> _executeAgentLogic(Agent agent, AgentTask task) async {
+    // If AI engine is available, use it for all agents
+    if (_aiEngine != null && agent.type != AgentType.simple) {
+      return await _executeWithAIEngine(agent, task);
+    }
+
+    // Fallback to simple responses
     switch (agent.type) {
       case AgentType.morningDigest:
         return await _executeMorningDigest(task);
@@ -308,176 +378,125 @@ class AgentOrchestrator {
     }
   }
 
+  Future<String> _executeWithAIEngine(Agent agent, AgentTask task) async {
+    final systemPrompt = _getSystemPromptForAgent(agent);
+    final toolDefinitions = _toolManager?.getToolDefinitions() ?? [];
+
+    final result = await _aiEngine!.sendMessageWithTools(
+      task.description,
+      history: [],
+      onToolCall: (name, args) async {
+        if (_toolManager != null) {
+          return await _toolManager!.executeTool(name, args);
+        }
+        return ToolResult(
+          success: false,
+          error: 'Tool manager not available',
+        );
+      },
+      maxIterations: 5,
+    );
+
+    if (result['success'] == true) {
+      return result['content'] ?? 'Task completed';
+    } else {
+      return result['error'] ?? 'Task failed';
+    }
+  }
+
+  String _getSystemPromptForAgent(Agent agent) {
+    switch (agent.type) {
+      case AgentType.morningDigest:
+        return 'You are a morning digest agent. Provide a concise daily briefing with weather, news highlights, and schedule overview.';
+      case AgentType.deepResearch:
+        return 'You are a deep research agent. Perform thorough research on the given topic using web search and provide well-cited findings.';
+      case AgentType.monitorOperative:
+        return 'You are a monitoring agent. Set up and manage monitoring for the specified target.';
+      case AgentType.orchestrator:
+        return 'You are an orchestrator agent. Break down complex tasks, select appropriate tools, and execute them step by step.';
+      case AgentType.nativeReact:
+        return 'You are a ReAct agent. Think step by step: Thought → Action → Observation → Repeat until done.';
+      case AgentType.operative:
+        return 'You are an autonomous operative. Execute the given mission using available tools and report results.';
+      case AgentType.codeAssistant:
+        return 'You are a code assistant. Help with coding tasks including writing, reviewing, and debugging code.';
+      case AgentType.simple:
+        return 'You are a helpful assistant. Answer the user\'s question directly and concisely.';
+    }
+  }
+
   Future<String> _executeMorningDigest(AgentTask task) async {
-    final buffer = StringBuffer();
-    buffer.writeln('🌅 **Morning Digest**');
-    buffer.writeln('━━━━━━━━━━━━━━━━━━━━');
-    buffer.writeln('');
-    buffer.writeln('📅 **Calendar:** No meetings today');
-    buffer.writeln('📧 **Emails:** 3 unread messages');
-    buffer.writeln('🌤️ **Weather:** 22°C, Partly Cloudy');
-    buffer.writeln('📰 **News:** Tech stock up 2.5%');
-    buffer.writeln('💪 **Health:** 8h sleep, 7500 steps yesterday');
-    buffer.writeln('');
-    buffer.writeln('Have a productive day!');
-    return buffer.toString();
+    return '🌅 **Morning Digest**\n\n📅 **Calendar:** No meetings today\n📧 **Emails:** 3 unread messages\n🌤️ **Weather:** 22°C, Partly Cloudy\n\nHave a productive day!';
   }
 
   Future<String> _executeDeepResearch(AgentTask task) async {
-    final query = task.description;
-    final buffer = StringBuffer();
-    buffer.writeln('🔍 **Deep Research Report**');
-    buffer.writeln('━━━━━━━━━━━━━━━━━━━━');
-    buffer.writeln('');
-    buffer.writeln('**Query:** $query');
-    buffer.writeln('');
-    buffer.writeln('**Sources Analyzed:** 15');
-    buffer.writeln('**Key Findings:**');
-    buffer.writeln('1. Primary information gathered from authoritative sources');
-    buffer.writeln('2. Cross-referenced with multiple databases');
-    buffer.writeln('3. Verified facts and statistics');
-    buffer.writeln('');
-    buffer.writeln('**Summary:** Based on comprehensive analysis, here are the key insights...');
-    buffer.writeln('');
-    buffer.writeln('*Report generated at ${DateTime.now().toString().substring(0, 19)}*');
-    return buffer.toString();
+    return '🔍 **Deep Research Report**\n\n**Query:** ${task.description}\n\n**Summary:** Based on analysis, here are the key insights...';
   }
 
   Future<String> _executeMonitorOperative(AgentTask task) async {
-    final target = task.description;
-    final buffer = StringBuffer();
-    buffer.writeln('📊 **Monitor Operative**');
-    buffer.writeln('━━━━━━━━━━━━━━━━━━━━');
-    buffer.writeln('');
-    buffer.writeln('**Target:** $target');
-    buffer.writeln('**Status:** ✅ Monitoring Active');
-    buffer.writeln('**Check Interval:** Every 5 minutes');
-    buffer.writeln('');
-    buffer.writeln('**Current Status:**');
-    buffer.writeln('- System Health: Normal');
-    buffer.writeln('- Performance: Optimal');
-    buffer.writeln('- Alerts: None');
-    buffer.writeln('');
-    buffer.writeln('Monitoring started. You will be alerted if any changes detected.');
-    return buffer.toString();
+    return '📊 **Monitor Active**\n\n**Target:** ${task.description}\n**Status:** ✅ Monitoring started';
   }
 
   Future<String> _executeOrchestrator(AgentTask task) async {
-    final buffer = StringBuffer();
-    buffer.writeln('🎯 **Orchestrator**');
-    buffer.writeln('━━━━━━━━━━━━━━━━━━━━');
-    buffer.writeln('');
-    buffer.writeln('**Task:** ${task.description}');
-    buffer.writeln('');
-    buffer.writeln('**Plan:**');
-    buffer.writeln('1. ✅ Analyze task requirements');
-    buffer.writeln('2. ✅ Select appropriate tools');
-    buffer.writeln('3. ✅ Execute steps sequentially');
-    buffer.writeln('4. ✅ Validate results');
-    buffer.writeln('');
-    buffer.writeln('**Execution:**');
-    buffer.writeln('- Step 1: Task分解 complete');
-    buffer.writeln('- Step 2: Using File Service + Weather Service');
-    buffer.writeln('- Step 3: All steps executed successfully');
-    buffer.writeln('');
-    buffer.writeln('**Result:** Task completed successfully!');
-    return buffer.toString();
+    return '🎯 **Orchestrator**\n\n**Task:** ${task.description}\n**Status:** ✅ Completed';
   }
 
   Future<String> _executeNativeReact(AgentTask task) async {
-    final buffer = StringBuffer();
-    buffer.writeln('🔄 **ReAct Agent**');
-    buffer.writeln('━━━━━━━━━━━━━━━━━━━━');
-    buffer.writeln('');
-    buffer.writeln('**Task:** ${task.description}');
-    buffer.writeln('');
-    buffer.writeln('**Thought:** I need to analyze the request and determine the best approach.');
-    buffer.writeln('');
-    buffer.writeln('**Action:** Using system information and file analysis tools.');
-    buffer.writeln('');
-    buffer.writeln('**Observation:** Gathered necessary data from multiple sources.');
-    buffer.writeln('');
-    buffer.writeln('**Thought:** Based on observations, I can now provide a comprehensive answer.');
-    buffer.writeln('');
-    buffer.writeln('**Final Answer:** Task completed through ReAct reasoning loop.');
-    return buffer.toString();
+    return '🔄 **ReAct Agent**\n\n**Task:** ${task.description}\n**Result:** Task completed through reasoning loop.';
   }
 
   Future<String> _executeOperative(AgentTask task) async {
-    final buffer = StringBuffer();
-    buffer.writeln('🤖 **Operative Agent**');
-    buffer.writeln('━━━━━━━━━━━━━━━━━━━━');
-    buffer.writeln('');
-    buffer.writeln('**Mission:** ${task.description}');
-    buffer.writeln('**Mode:** Autonomous');
-    buffer.writeln('');
-    buffer.writeln('**Status:**');
-    buffer.writeln('- State: Active');
-    buffer.writeln('- Memory: Initialized');
-    buffer.writeln('- Actions: 0 completed');
-    buffer.writeln('');
-    buffer.writeln('**Execution Log:**');
-    buffer.writeln('1. Task received and analyzed');
-    buffer.writeln('2. Resources allocated');
-    buffer.writeln('3. Autonomous execution in progress');
-    buffer.writeln('');
-    buffer.writeln('Agent is now operating autonomously.');
-    return buffer.toString();
+    return '🤖 **Operative**\n\n**Mission:** ${task.description}\n**Status:** ✅ Executed';
   }
 
   Future<String> _executeCodeAssistant(AgentTask task) async {
-    final buffer = StringBuffer();
-    buffer.writeln('💻 **Code Assistant**');
-    buffer.writeln('━━━━━━━━━━━━━━━━━━━━');
-    buffer.writeln('');
-    buffer.writeln('**Task:** ${task.description}');
-    buffer.writeln('');
-    buffer.writeln('**Analysis:**');
-    buffer.writeln('- Language: Dart/Flutter');
-    buffer.writeln('- Files scanned: 12');
-    buffer.writeln('- Issues found: 0');
-    buffer.writeln('');
-    buffer.writeln('**Capabilities:**');
-    buffer.writeln('✅ Code review');
-    buffer.writeln('✅ Bug detection');
-    buffer.writeln('✅ Performance optimization');
-    buffer.writeln('✅ Documentation generation');
-    buffer.writeln('');
-    buffer.writeln('Ready to assist with coding tasks!');
-    return buffer.toString();
+    return '💻 **Code Assistant**\n\n**Task:** ${task.description}\n**Status:** ✅ Ready to assist';
   }
 
   Future<String> _executeSimple(AgentTask task) async {
     return '💬 I received your message: "${task.description}"\n\nHow can I help you further?';
   }
 
-  // Delegate to sub-agent
   Future<String> delegateToSubAgent({
     required String parentAgentId,
     required String subAgentType,
     required String taskDescription,
   }) async {
-    final buffer = StringBuffer();
-    buffer.writeln('🔗 **Sub-Agent Delegation**');
-    buffer.writeln('━━━━━━━━━━━━━━━━━━━━');
-    buffer.writeln('');
-    buffer.writeln('**Parent Agent:** $parentAgentId');
-    buffer.writeln('**Sub-Agent Type:** $subAgentType');
-    buffer.writeln('**Task:** $taskDescription');
-    buffer.writeln('');
-    buffer.writeln('**Status:** ✅ Delegation complete');
-    buffer.writeln('**Result:** Sub-agent has been notified and is processing the task.');
-    return buffer.toString();
+    final subAgentTypeParsed = AgentType.values.firstWhere(
+      (t) => t.name == subAgentType,
+      orElse: () => AgentType.simple,
+    );
+
+    final subAgent = getAgentByType(subAgentTypeParsed);
+    if (subAgent == null) {
+      return 'Sub-agent type $subAgentType not found';
+    }
+
+    final task = await createTask(
+      agentId: subAgent.id,
+      description: taskDescription,
+    );
+
+    return await executeTask(task);
   }
 
-  // Get tasks by status
   List<AgentTask> getTasksByStatus(AgentStatus status) {
     return _tasks.where((t) => t.status == status).toList();
   }
 
-  // Get tasks by agent
   List<AgentTask> getTasksByAgent(String agentId) {
     return _tasks.where((t) => t.agentId == agentId).toList();
+  }
+
+  Map<String, dynamic> getStats() {
+    return {
+      'total_agents': _agents.length,
+      'active_agents': _agents.where((a) => a.isActive).length,
+      'total_tasks': _tasks.length,
+      'completed_tasks': _tasks.where((t) => t.status == AgentStatus.completed).length,
+      'failed_tasks': _tasks.where((t) => t.status == AgentStatus.failed).length,
+      'running_tasks': _tasks.where((t) => t.status == AgentStatus.running).length,
+    };
   }
 
   void dispose() {

@@ -92,7 +92,7 @@ class TelegramService {
         'https://api.telegram.org/bot$_botToken/getUpdates',
         queryParameters: {
           if (_lastUpdateId != null) 'offset': _lastUpdateId! + 1,
-          'timeout': 1,
+          'timeout': 30,
         },
       );
 

@@ -9,7 +9,7 @@ enum MessageType {
   heartbeat,
 }
 
-class AgentMessage {
+class AgentChatMessage {
   final String id;
   final String fromId;
   final String toId;
@@ -20,7 +20,7 @@ class AgentMessage {
   final String? taskId;
   final String? replyToId;
 
-  AgentMessage({
+  AgentChatMessage({
     required this.id,
     required this.fromId,
     required this.toId,
@@ -44,8 +44,8 @@ class AgentMessage {
     'reply_to_id': replyToId,
   };
 
-  factory AgentMessage.fromJson(Map<String, dynamic> json) {
-    return AgentMessage(
+  factory AgentChatMessage.fromJson(Map<String, dynamic> json) {
+    return AgentChatMessage(
       id: json['id'],
       fromId: json['from_id'],
       toId: json['to_id'],
@@ -66,9 +66,9 @@ class MessageChannel {
   final String id;
   final String name;
   final List<String> participants;
-  final StreamController<AgentMessage> _controller =
-      StreamController<AgentMessage>.broadcast();
-  final List<AgentMessage> _messages = [];
+  final StreamController<AgentChatMessage> _controller =
+      StreamController<AgentChatMessage>.broadcast();
+  final List<AgentChatMessage> _messages = [];
 
   MessageChannel({
     required this.id,
@@ -76,10 +76,10 @@ class MessageChannel {
     required this.participants,
   });
 
-  Stream<AgentMessage> get stream => _controller.stream;
-  List<AgentMessage> get messages => List.unmodifiable(_messages);
+  Stream<AgentChatMessage> get stream => _controller.stream;
+  List<AgentChatMessage> get messages => List.unmodifiable(_messages);
 
-  void addMessage(AgentMessage message) {
+  void addMessage(AgentChatMessage message) {
     _messages.add(message);
     _controller.add(message);
   }
@@ -92,13 +92,13 @@ class MessageChannel {
 class AgentCommunication {
   final Map<String, MessageChannel> _channels = {};
   final Map<String, List<String>> _agentInboxes = {};
-  final StreamController<AgentMessage> _globalController =
-      StreamController<AgentMessage>.broadcast();
-  final StreamController<AgentMessage> _messageController =
-      StreamController<AgentMessage>.broadcast();
+  final StreamController<AgentChatMessage> _globalController =
+      StreamController<AgentChatMessage>.broadcast();
+  final StreamController<AgentChatMessage> _messageController =
+      StreamController<AgentChatMessage>.broadcast();
 
-  Stream<AgentMessage> get globalStream => _globalController.stream;
-  Stream<AgentMessage> get messageStream => _messageController.stream;
+  Stream<AgentChatMessage> get globalStream => _globalController.stream;
+  Stream<AgentChatMessage> get messageStream => _messageController.stream;
 
   void registerAgent(String agentId) {
     _agentInboxes.putIfAbsent(agentId, () => []);
@@ -129,7 +129,7 @@ class AgentCommunication {
     _channels[channelId]?.participants.remove(agentId);
   }
 
-  void sendMessage(AgentMessage message) {
+  void sendMessage(AgentChatMessage message) {
     _messageController.add(message);
     _globalController.add(message);
 
@@ -148,7 +148,7 @@ class AgentCommunication {
   void broadcastMessage(String fromId, String content, {Map<String, dynamic> payload = const {}}) {
     for (final agentId in _agentInboxes.keys) {
       if (agentId != fromId) {
-        final message = AgentMessage(
+        final message = AgentChatMessage(
           id: 'msg_${DateTime.now().millisecondsSinceEpoch}_$agentId',
           fromId: fromId,
           toId: agentId,
@@ -170,7 +170,7 @@ class AgentCommunication {
     _agentInboxes[agentId]?.clear();
   }
 
-  List<AgentMessage> getChannelMessages(String channelId) {
+  List<AgentChatMessage> getChannelMessages(String channelId) {
     return _channels[channelId]?.messages ?? [];
   }
 
