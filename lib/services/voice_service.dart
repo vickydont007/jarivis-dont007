@@ -28,6 +28,8 @@ class VoiceService {
     if (_isInitialized) return true;
 
     try {
+      print('Initializing speech recognition...');
+      
       final available = await _speechToText.initialize(
         onError: (error) {
           print('Speech recognition error: ${error.errorMsg}');
@@ -43,6 +45,8 @@ class VoiceService {
         },
       );
 
+      print('Speech recognition available: $available');
+
       if (!available) {
         print('Speech recognition not available on this device');
         return false;
@@ -54,6 +58,7 @@ class VoiceService {
       await _flutterTts.setPitch(1.0);
 
       _isInitialized = true;
+      print('Speech recognition initialized successfully');
       return true;
     } catch (e) {
       print('Failed to initialize voice service: $e');
@@ -75,9 +80,11 @@ class VoiceService {
         _listeningController.add(true);
 
         String localeId = _getLocaleId();
+        print('Starting to listen with locale: $localeId');
 
         await _speechToText.listen(
           onResult: (result) {
+            print('Speech result: ${result.recognizedWords} (final: ${result.finalResult})');
             if (result.finalResult) {
               _transcriptionController.add(result.recognizedWords);
             }
@@ -87,6 +94,7 @@ class VoiceService {
           cancelOnError: true,
           partialResults: true,
         );
+        print('Listening started successfully');
         return true;
       } catch (e) {
         print('Failed to start listening: $e');

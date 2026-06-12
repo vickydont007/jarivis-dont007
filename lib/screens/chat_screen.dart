@@ -4,6 +4,7 @@ import '../widgets/chat_bubble.dart';
 import '../widgets/voice_button.dart';
 import '../providers/app_provider.dart';
 import '../services/system_service.dart';
+import '../core/ai_engine.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -76,17 +77,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // Get AI response
     final appState = ref.read(appStateProvider);
     String response;
+    List<String> imageUrls = [];
 
     if (appState.isConnected && appState.aiEngine != null) {
-      // Use real AI engine
       try {
-        response = await appState.aiEngine!.sendMessage(message, history: _history);
+        if (AIEngine.isImageRequest(message)) {
+          final result = await appState.aiEngine!.generateImage(message);
+          if (result['success'] == true) {
+            response = result['content'] ?? 'Image generated!';
+            if (result['imageUrls'] != null) {
+              imageUrls = List<String>.from(result['imageUrls']);
+            }
+          } else {
+            response = 'Failed to generate image: ${result['error']}';
+          }
+        } else {
+          response = await appState.aiEngine!.sendMessage(message, history: _history);
+        }
         _history.add({'role': 'assistant', 'content': response});
       } catch (e) {
         response = 'Error connecting to AI: $e\n\nPlease check your API key in Settings.';
       }
     } else {
-      // Fallback to mock responses
       response = _generateMockResponse(message);
       _history.add({'role': 'assistant', 'content': response});
     }
@@ -95,6 +107,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _messages.add({
         'role': 'assistant',
         'content': response,
+        'imageUrls': imageUrls,
         'timestamp': DateTime.now(),
       });
       _isLoading = false;
@@ -306,6 +319,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         message: _messages[index]['content'],
                         isUser: _messages[index]['role'] == 'user',
                         timestamp: _messages[index]['timestamp'],
+                        imageUrls: _messages[index]['imageUrls'] != null
+                            ? List<String>.from(_messages[index]['imageUrls'])
+                            : null,
                       );
                     },
                   ),

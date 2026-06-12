@@ -164,7 +164,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
         label: Text(label),
         selected: isSelected,
         onSelected: (selected) => setState(() => _selectedFilter = filter),
-        selectedColor: const Color(0xFF58A6FF).withOpacity(0.3),
+        selectedColor: const Color(0xFF58A6FF).withValues(alpha: 0.3),
         checkmarkColor: const Color(0xFF58A6FF),
         labelStyle: TextStyle(
           color: isSelected ? const Color(0xFF58A6FF) : Colors.grey,
@@ -213,7 +213,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: _getStatusColor(session['status']).withOpacity(0.2),
+                    color: _getStatusColor(session['status']).withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
@@ -245,7 +245,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _getStatusColor(session['status']).withOpacity(0.2),
+                    color: _getStatusColor(session['status']).withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -347,7 +347,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                value: selectedType,
+                 initialValue: selectedType,
                 dropdownColor: const Color(0xFF161B22),
                 style: const TextStyle(color: Colors.white),
                 decoration: const InputDecoration(

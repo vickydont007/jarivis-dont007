@@ -119,7 +119,7 @@ class DashboardScreen extends ConsumerWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.cyan.withOpacity(0.1),
+              color: Colors.cyan.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, color: Colors.cyan, size: 20),

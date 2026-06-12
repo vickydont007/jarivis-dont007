@@ -7,6 +7,7 @@ import 'screens/settings_screen.dart';
 import 'screens/memory_viewer_screen.dart';
 import 'screens/skills_store_screen.dart';
 import 'screens/sessions_screen.dart';
+import 'screens/agent_network_screen.dart';
 
 class JarvisApp extends ConsumerWidget {
   const JarvisApp({super.key});
@@ -59,6 +60,7 @@ class _MainScreenState extends State<MainScreen> {
   final List<Widget> _screens = [
     const ChatScreen(),
     const DashboardScreen(),
+    const AgentNetworkScreen(),
     const MemoryViewerScreen(),
     const SkillsStoreScreen(),
     const SessionsScreen(),
@@ -106,6 +108,11 @@ class _MainScreenState extends State<MainScreen> {
                 icon: Icon(Icons.dashboard_outlined),
                 selectedIcon: Icon(Icons.dashboard),
                 label: Text('Dashboard'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.hub_outlined),
+                selectedIcon: Icon(Icons.hub),
+                label: Text('Network'),
               ),
               NavigationRailDestination(
                 icon: Icon(Icons.memory_outlined),

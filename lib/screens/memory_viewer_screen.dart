@@ -233,7 +233,7 @@ class _MemoryViewerScreenState extends State<MemoryViewerScreen> {
         label: Text(label),
         selected: isSelected,
         onSelected: (selected) => _filterByCategory(category),
-        selectedColor: const Color(0xFF58A6FF).withOpacity(0.3),
+        selectedColor: const Color(0xFF58A6FF).withValues(alpha: 0.3),
         checkmarkColor: const Color(0xFF58A6FF),
         labelStyle: TextStyle(
           color: isSelected ? const Color(0xFF58A6FF) : Colors.grey,
@@ -298,7 +298,7 @@ class _MemoryViewerScreenState extends State<MemoryViewerScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: _getImportanceColor(memory['importance']).withOpacity(0.2),
+            color: _getImportanceColor(memory['importance']).withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
@@ -378,7 +378,7 @@ class _MemoryViewerScreenState extends State<MemoryViewerScreen> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: selectedCategory,
+                   initialValue: selectedCategory,
                   dropdownColor: const Color(0xFF161B22),
                   style: const TextStyle(color: Colors.white),
                   decoration: const InputDecoration(
@@ -392,7 +392,7 @@ class _MemoryViewerScreenState extends State<MemoryViewerScreen> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: selectedImportance,
+                       initialValue: selectedImportance,
                   dropdownColor: const Color(0xFF161B22),
                   style: const TextStyle(color: Colors.white),
                   decoration: const InputDecoration(

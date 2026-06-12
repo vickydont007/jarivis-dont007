@@ -1,6 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/ai_engine.dart';
 import '../core/memory_system.dart';
+import '../core/agent_network.dart';
+import '../services/scheduler_service.dart';
+import '../tools/tool_manager.dart';
 
 class AppState {
   final AIEngine? aiEngine;
@@ -8,6 +11,9 @@ class AppState {
   final AIProvider provider;
   final String apiKey;
   final MemorySystem? memory;
+  final ToolManager? toolManager;
+  final AgentNetwork? agentNetwork;
+  final SchedulerService? scheduler;
 
   AppState({
     this.aiEngine,
@@ -15,6 +21,9 @@ class AppState {
     this.provider = AIProvider.openrouter,
     this.apiKey = '',
     this.memory,
+    this.toolManager,
+    this.agentNetwork,
+    this.scheduler,
   });
 
   AppState copyWith({
@@ -23,6 +32,9 @@ class AppState {
     AIProvider? provider,
     String? apiKey,
     MemorySystem? memory,
+    ToolManager? toolManager,
+    AgentNetwork? agentNetwork,
+    SchedulerService? scheduler,
   }) {
     return AppState(
       aiEngine: aiEngine ?? this.aiEngine,
@@ -30,6 +42,9 @@ class AppState {
       provider: provider ?? this.provider,
       apiKey: apiKey ?? this.apiKey,
       memory: memory ?? this.memory,
+      toolManager: toolManager ?? this.toolManager,
+      agentNetwork: agentNetwork ?? this.agentNetwork,
+      scheduler: scheduler ?? this.scheduler,
     );
   }
 }
@@ -37,10 +52,30 @@ class AppState {
 class AppStateNotifier extends StateNotifier<AppState> {
   AIEngine? _engine;
   MemorySystem? _memory;
+  ToolManager? _toolManager;
+  AgentNetwork? _agentNetwork;
+  SchedulerService? _scheduler;
 
   AppStateNotifier() : super(AppState()) {
     _memory = MemorySystem();
-    state = state.copyWith(memory: _memory);
+    _agentNetwork = AgentNetwork();
+    _scheduler = SchedulerService();
+
+    _toolManager = ToolManager(
+      memory: _memory!,
+      network: _agentNetwork!,
+      scheduler: _scheduler!,
+    );
+    _toolManager!.initialize();
+
+    _agentNetwork!.initializeDefaultNetwork();
+
+    state = state.copyWith(
+      memory: _memory,
+      toolManager: _toolManager,
+      agentNetwork: _agentNetwork,
+      scheduler: _scheduler,
+    );
   }
 
   Future<void> initializeAI({
@@ -49,7 +84,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
     String? baseUrl,
     String? modelName,
   }) async {
-    _engine = AIEngine(
+    _engine = _toolManager!.createAIEngine(
       provider: provider,
       apiKey: apiKey,
       baseUrl: baseUrl,
@@ -81,7 +116,6 @@ class AppStateNotifier extends StateNotifier<AppState> {
     }
 
     try {
-      // Save to memory
       final memoryEntry = MemoryEntry.create(
         content: message,
         category: 'chat',
@@ -89,15 +123,46 @@ class AppStateNotifier extends StateNotifier<AppState> {
       );
       _memory?.addMemory(memoryEntry);
 
-      final response = await _engine!.sendMessage(message, history: history);
+      if (AIEngine.isImageRequest(message)) {
+        final result = await _engine!.generateImage(message);
+        if (result['success'] == true) {
+          return result['content'] ?? 'Image generated';
+        }
+        return 'Error: ${result['error']}';
+      }
 
-      // Save response to memory
+      final result = await _engine!.sendMessageWithTools(
+        message,
+        history: history,
+        onToolCall: (name, args) async {
+          return await _toolManager!.executeTool(name, args);
+        },
+      );
+
+      final response = result['content'] as String? ?? 'No response';
+      final toolCalls = result['toolCalls'] as List? ?? [];
+      final toolResults = result['toolResults'] as List? ?? [];
+
       final responseEntry = MemoryEntry.create(
         content: response,
         category: 'chat',
-        metadata: {'role': 'assistant'},
+        metadata: {
+          'role': 'assistant',
+          'tool_calls': toolCalls.length,
+          'tool_results': toolResults.length,
+        },
       );
       _memory?.addMemory(responseEntry);
+
+      if (toolCalls.isNotEmpty) {
+        final toolSummary = toolResults.map((r) {
+          final name = r['name'];
+          final success = r['success'] == true ? 'OK' : 'FAIL';
+          return '[$success] $name';
+        }).join('\n');
+
+        return '$response\n\n---\nTools executed:\n$toolSummary';
+      }
 
       return response;
     } catch (e) {
@@ -110,8 +175,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
       yield 'AI Engine not initialized. Please configure in Settings.';
       return;
     }
-    
-    // Save to memory
+
     final memoryEntry = MemoryEntry.create(
       content: message,
       category: 'chat',
@@ -131,6 +195,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
   void dispose() {
     _engine?.dispose();
     _memory?.dispose();
+    _toolManager?.dispose();
     super.dispose();
   }
 }
