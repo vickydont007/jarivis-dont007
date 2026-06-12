@@ -13,31 +13,27 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  // AI Settings
   String _selectedAIProvider = 'openrouter';
   String _selectedModel = 'google/gemma-4-26b-a4b-it:free';
   String _apiKey = '';
   bool _useLocalAI = false;
 
-  // Voice Settings
   bool _voiceEnabled = true;
   String _selectedLanguage = 'both';
   double _speechRate = 0.5;
 
-  // Weather Settings
   String _weatherApiKey = '';
   String _defaultCity = 'New York';
 
-  // Social Media Settings
   String _telegramBotToken = '';
   String _discordBotToken = '';
 
-  // Dynamic models from OpenRouter
   List<String> _openRouterModels = [];
   bool _isLoadingModels = false;
   String _modelError = '';
 
-  // Static models for other providers
+  bool _isSaving = false;
+
   final Map<String, List<String>> _modelsByProvider = {
     'ollama': ['llama3.2', 'llama3.1', 'mistral', 'codellama', 'phi3', 'gemma'],
     'openai': ['gpt-4', 'gpt-4-turbo', 'gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'],
@@ -141,11 +137,68 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0D1117),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            _buildHeader(),
+            const SizedBox(height: 28),
+            _buildSection('AI Configuration', Icons.psychology, [
+              _buildProviderDropdown(),
+              const SizedBox(height: 16),
+              if (_selectedAIProvider == 'openrouter') _buildModelLoader(),
+              _buildModelDropdown(),
+              const SizedBox(height: 16),
+              _buildApiKeyField(),
+              const SizedBox(height: 16),
+              _buildLocalAIToggle(),
+            ]),
+            const SizedBox(height: 20),
+            _buildSection('Voice Settings', Icons.mic, [
+              _buildVoiceToggle(),
+              const SizedBox(height: 16),
+              _buildLanguageDropdown(),
+              const SizedBox(height: 16),
+              _buildSpeechRateSlider(),
+            ]),
+            const SizedBox(height: 20),
+            _buildSection('Weather Settings', Icons.cloud, [
+              _buildWeatherApiKeyField(),
+              const SizedBox(height: 16),
+              _buildDefaultCityField(),
+            ]),
+            const SizedBox(height: 20),
+            _buildSection('Social Media', Icons.share, [
+              _buildTelegramTokenField(),
+              const SizedBox(height: 16),
+              _buildDiscordTokenField(),
+            ]),
+            const SizedBox(height: 28),
+            _buildSaveButton(),
+            const SizedBox(height: 12),
+            _buildResetButton(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF00BCD4).withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(Icons.settings, color: Color(0xFF00BCD4), size: 28),
+        ),
+        const SizedBox(width: 16),
+        const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
               'Settings',
               style: TextStyle(
                 color: Colors.white,
@@ -153,268 +206,171 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 8),
             Text(
               'Configure your Jarvis assistant',
-              style: TextStyle(color: Colors.grey[400], fontSize: 14),
-            ),
-            const SizedBox(height: 24),
-
-            // AI Settings
-            _buildSectionHeader('AI Configuration', Icons.psychology),
-            _buildCard([
-              _buildDropdown(
-                'AI Provider',
-                _selectedAIProvider,
-                ['openrouter', 'ollama', 'openai', 'anthropic', 'gemini'],
-                (value) {
-                  setState(() {
-                    _selectedAIProvider = value!;
-                    if (value == 'openrouter') {
-                      _fetchOpenRouterModels();
-                    } else {
-                      _selectedModel = _currentModels.isNotEmpty ? _currentModels.first : '';
-                    }
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-              if (_selectedAIProvider == 'openrouter' && _isLoadingModels)
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.cyan,
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        'Fetching models from OpenRouter...',
-                        style: TextStyle(color: Colors.grey, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-              if (_modelError.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.warning, color: Colors.orange, size: 14),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Could not fetch models. Save an API key first.',
-                        style: TextStyle(color: Colors.orange[300], fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-              _buildDropdown(
-                'Model (${_currentModels.length} available)',
-                _selectedModel,
-                _currentModels,
-                (value) {
-                  setState(() {
-                    _selectedModel = value!;
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-              _buildTextField(
-                'OpenRouter API Key',
-                _apiKey,
-                (value) {
-                  setState(() {
-                    _apiKey = value;
-                  });
-                },
-                isPassword: true,
-                hint: 'sk-or-v1-...',
-              ),
-              const SizedBox(height: 16),
-              _buildSwitch(
-                'Use Local AI (Ollama)',
-                _useLocalAI,
-                (value) {
-                  setState(() {
-                    _useLocalAI = value;
-                  });
-                },
-              ),
-            ]),
-            const SizedBox(height: 16),
-
-            // Voice Settings
-            _buildSectionHeader('Voice Settings', Icons.mic),
-            _buildCard([
-              _buildSwitch(
-                'Enable Voice',
-                _voiceEnabled,
-                (value) {
-                  setState(() {
-                    _voiceEnabled = value;
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-              _buildDropdown(
-                'Language',
-                _selectedLanguage,
-                ['english', 'hindi', 'both'],
-                (value) {
-                  setState(() {
-                    _selectedLanguage = value!;
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-              _buildSlider(
-                'Speech Rate',
-                _speechRate,
-                (value) {
-                  setState(() {
-                    _speechRate = value;
-                  });
-                },
-              ),
-            ]),
-            const SizedBox(height: 16),
-
-            // Weather Settings
-            _buildSectionHeader('Weather Settings', Icons.cloud),
-            _buildCard([
-              _buildTextField(
-                'OpenWeatherMap API Key',
-                _weatherApiKey,
-                (value) {
-                  setState(() {
-                    _weatherApiKey = value;
-                  });
-                },
-                isPassword: true,
-              ),
-              const SizedBox(height: 16),
-              _buildTextField(
-                'Default City',
-                _defaultCity,
-                (value) {
-                  setState(() {
-                    _defaultCity = value;
-                  });
-                },
-              ),
-            ]),
-            const SizedBox(height: 16),
-
-            // Social Media Settings
-            _buildSectionHeader('Social Media', Icons.share),
-            _buildCard([
-              _buildTextField(
-                'Telegram Bot Token',
-                _telegramBotToken,
-                (value) {
-                  setState(() {
-                    _telegramBotToken = value;
-                  });
-                },
-                isPassword: true,
-              ),
-              const SizedBox(height: 16),
-              _buildTextField(
-                'Discord Bot Token',
-                _discordBotToken,
-                (value) {
-                  setState(() {
-                    _discordBotToken = value;
-                  });
-                },
-                isPassword: true,
-              ),
-            ]),
-            const SizedBox(height: 24),
-
-            // Save Button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _saveSettings,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.cyan,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const Text(
-                  'Save Settings',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Reset Button
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: _resetSettings,
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.grey),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const Text(
-                  'Reset to Defaults',
-                  style: TextStyle(color: Colors.grey, fontSize: 16),
-                ),
-              ),
+              style: TextStyle(color: Colors.grey, fontSize: 14),
             ),
           ],
         ),
+      ],
+    );
+  }
+
+  Widget _buildSection(String title, IconData icon, List<Widget> children) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF161B22),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF30363D)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: const Color(0xFF00BCD4), size: 20),
+              const SizedBox(width: 10),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          ...children,
+        ],
       ),
     );
   }
 
-  Widget _buildSectionHeader(String title, IconData icon) {
+  Widget _buildProviderDropdown() {
+    return _buildDropdown(
+      'AI Provider',
+      _selectedAIProvider,
+      ['openrouter', 'ollama', 'openai', 'anthropic', 'gemini'],
+      (value) {
+        setState(() {
+          _selectedAIProvider = value!;
+          if (value == 'openrouter') {
+            _fetchOpenRouterModels();
+          } else {
+            _selectedModel = _currentModels.isNotEmpty ? _currentModels.first : '';
+          }
+        });
+      },
+    );
+  }
+
+  Widget _buildModelLoader() {
+    if (!_isLoadingModels) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
-          Icon(icon, color: Colors.cyan, size: 20),
-          const SizedBox(width: 8),
+          const SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00BCD4)),
+          ),
+          const SizedBox(width: 10),
           Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            'Fetching models from OpenRouter...',
+            style: TextStyle(color: Colors.grey[500], fontSize: 12),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildCard(List<Widget> children) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: children,
-        ),
-      ),
+  Widget _buildModelDropdown() {
+    return _buildDropdown(
+      'Model (${_currentModels.length} available)',
+      _selectedModel,
+      _currentModels,
+      (value) => setState(() => _selectedModel = value!),
+    );
+  }
+
+  Widget _buildApiKeyField() {
+    return _buildTextField(
+      'OpenRouter API Key',
+      _apiKey,
+      (value) => setState(() => _apiKey = value),
+      isPassword: true,
+      hint: 'sk-or-v1-...',
+    );
+  }
+
+  Widget _buildLocalAIToggle() {
+    return _buildSwitch(
+      'Use Local AI (Ollama)',
+      _useLocalAI,
+      (value) => setState(() => _useLocalAI = value),
+    );
+  }
+
+  Widget _buildVoiceToggle() {
+    return _buildSwitch(
+      'Enable Voice',
+      _voiceEnabled,
+      (value) => setState(() => _voiceEnabled = value),
+    );
+  }
+
+  Widget _buildLanguageDropdown() {
+    return _buildDropdown(
+      'Language',
+      _selectedLanguage,
+      ['english', 'hindi', 'both'],
+      (value) => setState(() => _selectedLanguage = value!),
+    );
+  }
+
+  Widget _buildSpeechRateSlider() {
+    return _buildSlider(
+      'Speech Rate',
+      _speechRate,
+      (value) => setState(() => _speechRate = value),
+    );
+  }
+
+  Widget _buildWeatherApiKeyField() {
+    return _buildTextField(
+      'OpenWeatherMap API Key',
+      _weatherApiKey,
+      (value) => setState(() => _weatherApiKey = value),
+      isPassword: true,
+    );
+  }
+
+  Widget _buildDefaultCityField() {
+    return _buildTextField(
+      'Default City',
+      _defaultCity,
+      (value) => setState(() => _defaultCity = value),
+    );
+  }
+
+  Widget _buildTelegramTokenField() {
+    return _buildTextField(
+      'Telegram Bot Token',
+      _telegramBotToken,
+      (value) => setState(() => _telegramBotToken = value),
+      isPassword: true,
+    );
+  }
+
+  Widget _buildDiscordTokenField() {
+    return _buildTextField(
+      'Discord Bot Token',
+      _discordBotToken,
+      (value) => setState(() => _discordBotToken = value),
+      isPassword: true,
     );
   }
 
@@ -436,12 +392,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         filled: true,
         fillColor: const Color(0xFF0D1117),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: Color(0xFF30363D)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: Color(0xFF30363D)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF00BCD4)),
         ),
       ),
       onChanged: onChanged,
@@ -455,7 +415,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     Function(String?) onChanged,
   ) {
     return DropdownButtonFormField<String>(
-      value: items.contains(value) ? value : (items.isNotEmpty ? items.first : null),
+      initialValue: items.contains(value) ? value : (items.isNotEmpty ? items.first : null),
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         labelText: label,
@@ -463,12 +423,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         filled: true,
         fillColor: const Color(0xFF0D1117),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: Color(0xFF30363D)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: Color(0xFF30363D)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF00BCD4)),
         ),
       ),
       items: items.map((item) {
@@ -481,11 +445,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildSwitch(
-    String label,
-    bool value,
-    Function(bool) onChanged,
-  ) {
+  Widget _buildSwitch(String label, bool value, Function(bool) onChanged) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -493,17 +453,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         Switch(
           value: value,
           onChanged: onChanged,
-          activeThumbColor: Colors.cyan,
+          activeThumbColor: const Color(0xFF00BCD4),
         ),
       ],
     );
   }
 
-  Widget _buildSlider(
-    String label,
-    double value,
-    Function(double) onChanged,
-  ) {
+  Widget _buildSlider(String label, double value, Function(double) onChanged) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -513,21 +469,81 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             Text(label, style: TextStyle(color: Colors.grey[400])),
             Text(
               '${(value * 100).toInt()}%',
-              style: const TextStyle(color: Colors.cyan),
+              style: const TextStyle(color: Color(0xFF00BCD4)),
             ),
           ],
         ),
         Slider(
           value: value,
           onChanged: onChanged,
-          activeColor: Colors.cyan,
+          activeColor: const Color(0xFF00BCD4),
           inactiveColor: const Color(0xFF30363D),
         ),
       ],
     );
   }
 
+  Widget _buildSaveButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        child: ElevatedButton(
+          onPressed: _isSaving ? null : _saveSettings,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF00BCD4),
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            elevation: 4,
+            shadowColor: const Color(0xFF00BCD4).withValues(alpha: 0.3),
+          ),
+          child: _isSaving
+              ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text(
+                  'Save Settings',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResetButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton(
+        onPressed: _resetSettings,
+        style: OutlinedButton.styleFrom(
+          side: const BorderSide(color: Color(0xFF30363D)),
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: Text(
+          'Reset to Defaults',
+          style: TextStyle(color: Colors.grey[500], fontSize: 16),
+        ),
+      ),
+    );
+  }
+
   void _saveSettings() async {
+    setState(() => _isSaving = true);
+
     final prefs = await SharedPreferences.getInstance();
 
     await prefs.setString('ai_provider', _selectedAIProvider);
@@ -566,14 +582,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final apiKey = _useLocalAI ? 'local' : _apiKey;
 
     if (apiKey.isEmpty && !_useLocalAI) {
-      Future.delayed(Duration.zero, () {
+      setState(() => _isSaving = false);
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Please enter an API key'),
             backgroundColor: Colors.red,
           ),
         );
-      });
+      }
       return;
     }
 
@@ -582,6 +599,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       apiKey: apiKey,
       modelName: _selectedModel,
     );
+
+    setState(() => _isSaving = false);
 
     final appState = ref.read(appStateProvider);
 
@@ -593,7 +612,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ? 'Settings saved! Connected to ${_selectedAIProvider.toUpperCase()}!'
                 : 'Settings saved. Failed to connect. Using offline mode.',
           ),
-          backgroundColor: appState.isConnected ? Colors.green : Colors.orange,
+          backgroundColor: appState.isConnected ? const Color(0xFF4CAF50) : const Color(0xFFFF9800),
         ),
       );
     }
@@ -635,7 +654,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Settings reset to defaults'),
-          backgroundColor: Colors.orange,
+          backgroundColor: Color(0xFFFF9800),
         ),
       );
     }
