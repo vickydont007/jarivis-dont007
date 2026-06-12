@@ -130,7 +130,7 @@ class MemoryAddTool extends Tool {
       await _memory.addMemory(entry);
 
       if (_ragManager != null) {
-        await _ragManager!.indexMemory(entry);
+        await _ragManager.indexMemory(entry);
       }
 
       return ToolResult.success('Memory added: ${entry.id}');

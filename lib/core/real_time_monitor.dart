@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 enum ActivityType {
   toolCall,
@@ -208,29 +207,6 @@ class RealTimeMonitor {
 
   SystemMetrics getMetrics({int? activeAgents, int? pendingTasks, int? memoryEntries}) {
     final totalTasks = _completedTasks + _failedTasks;
-    
-    // Get real system metrics
-    double cpuUsage = 0;
-    int usedMemoryMB = 0;
-    int totalMemoryMB = 0;
-    
-    try {
-      // Get process info
-      final processInfo = ProcessInfo;
-      usedMemoryMB = ProcessInfo.currentRss ~/ (1024 * 1024);
-      
-      // Get system memory (approximate)
-      if (Platform.isMacOS) {
-        // On macOS, we can get some basic info
-        totalMemoryMB = 16384; // Will be updated with real data later
-      } else if (Platform.isLinux) {
-        totalMemoryMB = 16384;
-      } else if (Platform.isWindows) {
-        totalMemoryMB = 16384;
-      }
-    } catch (e) {
-      // Ignore errors
-    }
 
     return SystemMetrics(
       totalToolCalls: _totalToolCalls,

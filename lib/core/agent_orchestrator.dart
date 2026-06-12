@@ -230,7 +230,6 @@ class AgentOrchestrator {
 
       int score = 0;
       final desc = agent.description.toLowerCase();
-      final name = agent.name.toLowerCase();
 
       // Score based on keyword matching
       if (lowerDesc.contains('research') && desc.contains('research')) score += 10;
@@ -379,9 +378,6 @@ class AgentOrchestrator {
   }
 
   Future<String> _executeWithAIEngine(Agent agent, AgentTask task) async {
-    final systemPrompt = _getSystemPromptForAgent(agent);
-    final toolDefinitions = _toolManager?.getToolDefinitions() ?? [];
-
     final result = await _aiEngine!.sendMessageWithTools(
       task.description,
       history: [],
@@ -401,27 +397,6 @@ class AgentOrchestrator {
       return result['content'] ?? 'Task completed';
     } else {
       return result['error'] ?? 'Task failed';
-    }
-  }
-
-  String _getSystemPromptForAgent(Agent agent) {
-    switch (agent.type) {
-      case AgentType.morningDigest:
-        return 'You are a morning digest agent. Provide a concise daily briefing with weather, news highlights, and schedule overview.';
-      case AgentType.deepResearch:
-        return 'You are a deep research agent. Perform thorough research on the given topic using web search and provide well-cited findings.';
-      case AgentType.monitorOperative:
-        return 'You are a monitoring agent. Set up and manage monitoring for the specified target.';
-      case AgentType.orchestrator:
-        return 'You are an orchestrator agent. Break down complex tasks, select appropriate tools, and execute them step by step.';
-      case AgentType.nativeReact:
-        return 'You are a ReAct agent. Think step by step: Thought → Action → Observation → Repeat until done.';
-      case AgentType.operative:
-        return 'You are an autonomous operative. Execute the given mission using available tools and report results.';
-      case AgentType.codeAssistant:
-        return 'You are a code assistant. Help with coding tasks including writing, reviewing, and debugging code.';
-      case AgentType.simple:
-        return 'You are a helpful assistant. Answer the user\'s question directly and concisely.';
     }
   }
 

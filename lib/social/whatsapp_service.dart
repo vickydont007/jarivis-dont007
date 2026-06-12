@@ -35,7 +35,6 @@ class WhatsAppService {
   String? _accessToken;
   String? _phoneNumberId;
   String? _verifyToken;
-  String? _businessAccountId;
   final StreamController<WhatsAppMessage> _messageController =
       StreamController<WhatsAppMessage>.broadcast();
 
@@ -50,7 +49,6 @@ class WhatsAppService {
     _accessToken = accessToken;
     _phoneNumberId = phoneNumberId;
     _verifyToken = verifyToken;
-    _businessAccountId = businessAccountId;
   }
 
   // Send message

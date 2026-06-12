@@ -38,7 +38,6 @@ class DiscordService {
   String? _botUserId;
   WebSocketChannel? _channel;
   int? _lastSequence;
-  String? _sessionId;
   Timer? _heartbeatTimer;
   final StreamController<DiscordMessage> _messageController =
       StreamController<DiscordMessage>.broadcast();
@@ -127,9 +126,6 @@ class DiscordService {
   void _handleOpcode(int opcode, dynamic data) {
     switch (opcode) {
       case 0: // Dispatch
-        if (data != null && data['session_id'] != null) {
-          _sessionId = data['session_id'];
-        }
         break;
       case 10: // Hello
         final heartbeatInterval = data['heartbeat_interval'];
