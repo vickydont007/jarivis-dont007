@@ -6,6 +6,10 @@ import '../core/rag/rag_manager.dart';
 import '../core/code_sandbox.dart';
 import '../core/agent_learning.dart';
 import '../core/real_time_monitor.dart';
+import '../core/cost_tracker.dart';
+import '../core/multi_modal.dart';
+import '../core/web_automation.dart';
+import '../core/agent_communication.dart';
 import '../services/scheduler_service.dart';
 import 'tool.dart';
 import 'tool_registry.dart';
@@ -19,6 +23,7 @@ import 'web_tool.dart';
 import 'scheduler_tool.dart';
 import 'agent_tool.dart';
 import 'code_tool.dart';
+import 'multi_modal_tool.dart';
 
 const String systemPrompt = '''You are Jarvis, a powerful AI desktop assistant. You have access to various tools to help users with their tasks.
 
@@ -28,10 +33,11 @@ AVAILABLE TOOLS:
 - system_info, system_shutdown, system_restart, system_sleep, system_lock, system_open_app, system_open_url: System control
 - weather_current, weather_forecast: Weather information
 - memory_search, memory_semantic_search, memory_add, memory_list, memory_delete: Memory/knowledge management
-- web_fetch, web_search: Web access
+- web_fetch, web_search, web_fetch_page, web_get_links, web_open_url: Web access and browsing
 - scheduler_create, scheduler_list, scheduler_cancel: Task scheduling
 - agent_spawn, agent_kill, agent_status: Agent management
 - code_execute: Execute Python or JavaScript code safely
+- image_analyze, image_analyze_url: Understand images and their content
 
 RULES:
 1. Always use tools when the user asks you to perform actions
@@ -43,6 +49,8 @@ RULES:
 7. Respond in the same language the user uses (English or Hindi)
 8. Use memory_semantic_search when you need to find memories by meaning, not just keywords
 9. Use code_execute to run Python or JavaScript code for calculations or data processing
+10. Use image_analyze to understand what's in images
+11. Use web_fetch_page to get full page content, web_get_links to extract links
 ''';
 
 class ToolManager {
@@ -54,6 +62,10 @@ class ToolManager {
   final CodeExecutionSandbox _codeSandbox;
   final AgentLearning _agentLearning;
   final RealTimeMonitor _monitor;
+  final CostTracker _costTracker;
+  final MultiModalSupport _multiModal;
+  final WebAutomation _webAutomation;
+  final AgentCommunication _agentCommunication;
   RAGManager? _ragManager;
 
   ToolManager({
@@ -66,6 +78,10 @@ class ToolManager {
         _codeSandbox = CodeExecutionSandbox(),
         _agentLearning = AgentLearning(),
         _monitor = RealTimeMonitor(),
+        _costTracker = CostTracker(),
+        _multiModal = MultiModalSupport(),
+        _webAutomation = WebAutomation(),
+        _agentCommunication = AgentCommunication(),
         _registry = ToolRegistry();
 
   void initialize({String? apiKey}) {
@@ -74,13 +90,14 @@ class ToolManager {
         apiKey: apiKey,
         memorySystem: _memory,
       );
+      _multiModal.setApiKey(apiKey);
     }
     _registerTools();
     _executor = ToolExecutor(
       registry: _registry,
       defaultTimeout: const Duration(seconds: 30),
     );
-    _monitor.logSystemEvent('ToolManager initialized');
+    _monitor.logSystemEvent('ToolManager initialized with ${_registry.count} tools');
   }
 
   void _registerTools() {
@@ -93,6 +110,8 @@ class ToolManager {
     _registry.registerAll(getAllSchedulerTools(_scheduler));
     _registry.registerAll(getAllAgentTools(_network));
     _registry.registerAll(getAllCodeTools(_codeSandbox));
+    _registry.registerAll(getAllMultiModalTools(_multiModal));
+    _registry.registerAll(getAllWebAutomationTools(_webAutomation));
   }
 
   ToolRegistry get registry => _registry;
@@ -101,6 +120,10 @@ class ToolManager {
   CodeExecutionSandbox get codeSandbox => _codeSandbox;
   AgentLearning get agentLearning => _agentLearning;
   RealTimeMonitor get monitor => _monitor;
+  CostTracker get costTracker => _costTracker;
+  MultiModalSupport get multiModal => _multiModal;
+  WebAutomation get webAutomation => _webAutomation;
+  AgentCommunication get agentCommunication => _agentCommunication;
   String get systemPromptText => systemPrompt;
 
   void setApiKey(String apiKey) {
@@ -110,6 +133,7 @@ class ToolManager {
         memorySystem: _memory,
       );
       _ragManager!.setApiKey(apiKey);
+      _multiModal.setApiKey(apiKey);
     }
   }
 
@@ -152,8 +176,9 @@ class ToolManager {
   void dispose() {
     _executor.dispose();
     _ragManager?.dispose();
-    _codeSandbox;
     _agentLearning.dispose();
     _monitor.dispose();
+    _costTracker.dispose();
+    _agentCommunication.dispose();
   }
 }
