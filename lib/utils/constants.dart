@@ -1,6 +1,6 @@
 class AppConstants {
   // App Info
-  static const String appName = 'Jarvis Desktop Agent';
+  static const String appName = 'Nextron AI';
   static const String appVersion = '1.0.0';
   static const String appDescription = 'AI-powered personal assistant with social media integration';
 

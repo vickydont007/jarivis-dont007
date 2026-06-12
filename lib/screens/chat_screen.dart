@@ -31,7 +31,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     setState(() {
       _messages.add({
         'role': 'assistant',
-        'content': 'Hello! I am **Jarvis**, your AI desktop assistant.\n\nI can help you with:\n- System control (shutdown, restart, sleep)\n- File management (read, write, search)\n- Web browsing and search\n- Code execution (Python/JS)\n- Image analysis\n- And much more!\n\nHow can I help you today?',
+        'content': 'Hello! I am **Nextron**, your AI desktop assistant.\n\nI can help you with:\n- System control (shutdown, restart, sleep)\n- File management (read, write, search)\n- Web browsing and search\n- Code execution (Python/JS)\n- Image analysis\n- And much more!\n\nHow can I help you today?',
         'timestamp': DateTime.now(),
       });
     });
@@ -261,7 +261,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Jarvis',
+                'Nextron',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 18,
@@ -355,7 +355,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Start a conversation with Jarvis',
+                  'Start a conversation with Nextron',
                   style: TextStyle(
                     color: Colors.grey[500],
                     fontSize: 16,

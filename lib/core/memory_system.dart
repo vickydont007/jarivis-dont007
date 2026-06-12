@@ -76,7 +76,7 @@ class MemorySystem {
 
   Future<Database> _initDatabase() async {
     final directory = await getApplicationDocumentsDirectory();
-    final path = join(directory.path, 'jarvis_memory.db');
+    final path = join(directory.path, 'nextron_memory.db');
 
     return await openDatabase(
       path,

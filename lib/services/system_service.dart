@@ -35,7 +35,7 @@ class SystemInfo {
 }
 
 class SystemService {
-  static const MethodChannel _channel = MethodChannel('com.jarvis/system');
+  static const MethodChannel _channel = MethodChannel('com.nextron/system');
   final StreamController<SystemInfo> _systemInfoController =
       StreamController<SystemInfo>.broadcast();
 

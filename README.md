@@ -1,4 +1,4 @@
-# Jarvis Desktop Agent 🚀
+# Nextron AI 🚀
 
 AI-powered personal assistant with social media integration, built with Flutter.
 
@@ -45,8 +45,8 @@ flutter run -d windows  # For Windows
 #### macOS
 
 1. Enable permissions:
-   - System Settings → Privacy → Accessibility → Allow Jarvis
-   - System Settings → Privacy → Automation → Allow Jarvis
+   - System Settings → Privacy → Accessibility → Allow Nextron
+   - System Settings → Privacy → Automation → Allow Nextron
 
 2. Run the app:
    ```bash
@@ -124,6 +124,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-- [OpenJarvis](https://github.com/open-jarvis/OpenJarvis) - Local-first AI framework
+- [OpenNextron](https://github.com/open-nextron/OpenNextron) - Local-first AI framework
 - [Hermes Desktop](https://github.com/NousResearch/hermes-agent) - AI agent platform
 - [Flutter](https://flutter.dev/) - Cross-platform UI framework

@@ -207,7 +207,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
             Text(
-              'Configure your Jarvis assistant',
+              'Configure your Nextron assistant',
               style: TextStyle(color: Colors.grey, fontSize: 14),
             ),
           ],

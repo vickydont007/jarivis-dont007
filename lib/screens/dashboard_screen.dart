@@ -84,7 +84,7 @@ class DashboardScreen extends ConsumerWidget {
             const SizedBox(height: 16),
             _buildActivityItem(
               Icons.chat,
-              'Chat with Jarvis',
+              'Chat with Nextron',
               'System check completed',
               '2 min ago',
             ),

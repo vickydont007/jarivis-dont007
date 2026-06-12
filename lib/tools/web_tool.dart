@@ -35,7 +35,7 @@ class WebFetchTool extends Tool {
           sendTimeout: const Duration(seconds: 15),
           receiveTimeout: const Duration(seconds: 15),
           headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; Jarvis/1.0)',
+            'User-Agent': 'Mozilla/5.0 (compatible; Nextron/1.0)',
           },
         ),
         url,

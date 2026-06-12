@@ -11,15 +11,15 @@ import 'screens/agent_network_screen.dart';
 
 final themeProvider = StateProvider<bool>((ref) => true);
 
-class JarvisApp extends ConsumerWidget {
-  const JarvisApp({super.key});
+class NextronApp extends ConsumerWidget {
+  const NextronApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDarkMode = ref.watch(themeProvider);
 
     return MaterialApp(
-      title: 'Jarvis Desktop Agent',
+      title: 'Nextron AI',
       debugShowCheckedModeBanner: false,
       theme: isDarkMode ? _darkTheme : _lightTheme,
       home: const MainScreen(),

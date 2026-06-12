@@ -73,8 +73,8 @@ class VectorEmbeddingService {
           headers: {
             'Authorization': 'Bearer $_apiKey',
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://jarvis-desktop.app',
-            'X-Title': 'Jarvis Desktop Agent',
+            'HTTP-Referer': 'https://nextron-ai.app',
+            'X-Title': 'Nextron AI',
           },
           validateStatus: (status) => status! < 500,
         ),
@@ -108,8 +108,8 @@ class VectorEmbeddingService {
           headers: {
             'Authorization': 'Bearer $_apiKey',
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://jarvis-desktop.app',
-            'X-Title': 'Jarvis Desktop Agent',
+            'HTTP-Referer': 'https://nextron-ai.app',
+            'X-Title': 'Nextron AI',
           },
           validateStatus: (status) => status! < 500,
         ),

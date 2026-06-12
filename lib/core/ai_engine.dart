@@ -161,8 +161,8 @@ class AIEngine {
       headers: {
         'Authorization': 'Bearer $_apiKey',
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://jarvis-desktop.app',
-        'X-Title': 'Jarvis Desktop Agent',
+            'HTTP-Referer': 'https://nextron-ai.app',
+            'X-Title': 'Nextron AI',
       },
       responseType: responseType,
       validateStatus: (status) => status! < 500,

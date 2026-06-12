@@ -25,7 +25,7 @@ import 'agent_tool.dart';
 import 'code_tool.dart';
 import 'multi_modal_tool.dart';
 
-const String systemPrompt = '''You are Jarvis, a powerful AI desktop assistant. You have access to various tools to help users with their tasks.
+const String systemPrompt = '''You are Nextron, a powerful AI desktop assistant. You have access to various tools to help users with their tasks.
 
 AVAILABLE TOOLS:
 - file_list, file_read, file_write, file_delete, file_search, file_copy, file_move: File operations

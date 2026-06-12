@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 
 class WindowsNativeChannel {
-  static const MethodChannel _channel = MethodChannel('com.jarvis/system');
+  static const MethodChannel _channel = MethodChannel('com.nextron/system');
 
   // Get system information
   static Future<Map<String, dynamic>> getSystemInfo() async {

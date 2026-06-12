@@ -1,5 +1,5 @@
-name: jarvis_desktop_agent
-description: "Jarvis Desktop Agent - AI-powered personal assistant with social media integration"
+name: nextron_ai
+description: "Nextron AI - Powerful AI desktop assistant with tools, RAG, and multi-modal support"
 publish_to: 'none'
 version: 1.0.0+1
 
