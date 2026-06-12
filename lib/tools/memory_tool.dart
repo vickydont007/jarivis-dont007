@@ -1,5 +1,6 @@
 import 'tool.dart';
 import '../core/memory_system.dart';
+import '../core/rag/rag_manager.dart';
 
 class MemorySearchTool extends Tool {
   final MemorySystem _memory;
@@ -36,11 +37,69 @@ class MemorySearchTool extends Tool {
   }
 }
 
+class MemorySemanticSearchTool extends Tool {
+  final RAGManager _ragManager;
+
+  MemorySemanticSearchTool(this._ragManager)
+      : super(
+          name: 'memory_semantic_search',
+          description: 'Search memories using AI-powered semantic understanding (meaning-based, not keyword)',
+          parameters: [
+            const ToolParameter(
+              name: 'query',
+              description: 'Search query in natural language',
+              type: ToolParameterType.string,
+              required: true,
+            ),
+            const ToolParameter(
+              name: 'top_k',
+              description: 'Number of results to return (default: 5)',
+              type: ToolParameterType.integer,
+              defaultValue: 5,
+            ),
+            const ToolParameter(
+              name: 'category',
+              description: 'Filter by category (optional)',
+              type: ToolParameterType.string,
+            ),
+          ],
+        );
+
+  @override
+  Future<ToolResult> execute(Map<String, dynamic> params) async {
+    final query = params['query'] as String;
+    final topK = params['top_k'] as int? ?? 5;
+    final category = params['category'] as String?;
+
+    try {
+      final results = await _ragManager.semanticSearch(
+        query,
+        topK: topK,
+        category: category,
+      );
+
+      final data = results.map((r) => {
+            'id': r.document.id,
+            'content': r.document.content,
+            'category': r.document.category,
+            'score': (r.score * 100).toStringAsFixed(1) + '%',
+            'snippet': r.snippet,
+          }).toList();
+
+      return ToolResult.success(data, metadata: {'count': data.length});
+    } catch (e) {
+      return ToolResult.error('Semantic search failed: $e');
+    }
+  }
+}
+
 class MemoryAddTool extends Tool {
   final MemorySystem _memory;
+  final RAGManager? _ragManager;
 
-  MemoryAddTool(this._memory)
-      : super(
+  MemoryAddTool(this._memory, {RAGManager? ragManager})
+      : _ragManager = ragManager,
+        super(
           name: 'memory_add',
           description: 'Add a new memory entry',
           parameters: [
@@ -69,6 +128,11 @@ class MemoryAddTool extends Tool {
         category: category,
       );
       await _memory.addMemory(entry);
+
+      if (_ragManager != null) {
+        await _ragManager!.indexMemory(entry);
+      }
+
       return ToolResult.success('Memory added: ${entry.id}');
     } catch (e) {
       return ToolResult.error('Failed to add memory: $e');
@@ -151,10 +215,11 @@ class MemoryDeleteTool extends Tool {
   }
 }
 
-List<Tool> getAllMemoryTools(MemorySystem memory) {
+List<Tool> getAllMemoryTools(MemorySystem memory, {RAGManager? ragManager}) {
   return [
     MemorySearchTool(memory),
-    MemoryAddTool(memory),
+    if (ragManager != null) MemorySemanticSearchTool(ragManager),
+    MemoryAddTool(memory, ragManager: ragManager),
     MemoryListTool(memory),
     MemoryDeleteTool(memory),
   ];
