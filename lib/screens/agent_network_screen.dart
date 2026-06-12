@@ -1,23 +1,25 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/dynamic_agent.dart';
 import '../core/agent_network.dart';
 import '../core/task_router.dart';
+import '../providers/app_provider.dart';
 import '../widgets/agent_network_painter.dart';
 import '../widgets/agent_stats_bar.dart';
 import '../widgets/agent_detail_panel.dart';
 
-class AgentNetworkScreen extends StatefulWidget {
+class AgentNetworkScreen extends ConsumerStatefulWidget {
   const AgentNetworkScreen({super.key});
 
   @override
-  State<AgentNetworkScreen> createState() => _AgentNetworkScreenState();
+  ConsumerState<AgentNetworkScreen> createState() => _AgentNetworkScreenState();
 }
 
-class _AgentNetworkScreenState extends State<AgentNetworkScreen>
+class _AgentNetworkScreenState extends ConsumerState<AgentNetworkScreen>
     with TickerProviderStateMixin {
-  late final AgentNetwork _network;
-  late final TaskRouter _router;
+  late AgentNetwork _network;
+  late TaskRouter _router;
   late final AnimationController _animationController;
   late final AnimationController _spawnAnimationController;
   DynamicAgent? _selectedAgent;
@@ -29,7 +31,9 @@ class _AgentNetworkScreenState extends State<AgentNetworkScreen>
   @override
   void initState() {
     super.initState();
-    _network = AgentNetwork();
+    // Use shared AgentNetwork from AppState
+    final appState = ref.read(appStateProvider);
+    _network = appState.agentNetwork!;
     _router = TaskRouter(_network);
 
     _animationController = AnimationController(
@@ -41,8 +45,6 @@ class _AgentNetworkScreenState extends State<AgentNetworkScreen>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
-
-    _network.initializeDefaultNetwork();
 
     _eventSubscription = _network.eventStream.listen((event) {
       if (mounted) setState(() {});
@@ -135,7 +137,7 @@ class _AgentNetworkScreenState extends State<AgentNetworkScreen>
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<AgentRole>(
-                initialValue: selectedRole,
+                value: selectedRole,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
                   labelText: 'Role',

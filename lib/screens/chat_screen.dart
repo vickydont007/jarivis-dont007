@@ -89,7 +89,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             response = 'Failed to generate image: ${result['error']}';
           }
         } else {
-          response = await appState.aiEngine!.sendMessage(message, history: _history);
+          response = await ref.read(appStateProvider.notifier).sendMessage(message, history: _history);
         }
         _history.add({'role': 'assistant', 'content': response});
       } catch (e) {
@@ -395,7 +395,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
       child: Row(
         children: [
-          const VoiceButton(),
+          VoiceButton(
+            onTranscription: (text) {
+              _messageController.text = text;
+              _sendMessage();
+            },
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Container(

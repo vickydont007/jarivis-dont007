@@ -347,7 +347,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                 initialValue: selectedType,
+                 value: selectedType,
                 dropdownColor: const Color(0xFF161B22),
                 style: const TextStyle(color: Colors.white),
                 decoration: const InputDecoration(

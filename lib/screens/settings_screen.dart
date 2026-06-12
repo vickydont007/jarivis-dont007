@@ -415,7 +415,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     Function(String?) onChanged,
   ) {
     return DropdownButtonFormField<String>(
-      initialValue: items.contains(value) ? value : (items.isNotEmpty ? items.first : null),
+      value: items.contains(value) ? value : (items.isNotEmpty ? items.first : null),
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         labelText: label,

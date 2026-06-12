@@ -3,6 +3,8 @@ import '../core/ai_engine.dart';
 import '../core/memory_system.dart';
 import '../core/agent_network.dart';
 import '../services/scheduler_service.dart';
+import '../services/voice_service.dart';
+import '../social/social_manager.dart';
 import '../tools/tool_manager.dart';
 
 class AppState {
@@ -14,6 +16,8 @@ class AppState {
   final ToolManager? toolManager;
   final AgentNetwork? agentNetwork;
   final SchedulerService? scheduler;
+  final VoiceService? voiceService;
+  final SocialManager? socialManager;
 
   AppState({
     this.aiEngine,
@@ -24,6 +28,8 @@ class AppState {
     this.toolManager,
     this.agentNetwork,
     this.scheduler,
+    this.voiceService,
+    this.socialManager,
   });
 
   AppState copyWith({
@@ -35,6 +41,8 @@ class AppState {
     ToolManager? toolManager,
     AgentNetwork? agentNetwork,
     SchedulerService? scheduler,
+    VoiceService? voiceService,
+    SocialManager? socialManager,
   }) {
     return AppState(
       aiEngine: aiEngine ?? this.aiEngine,
@@ -45,6 +53,8 @@ class AppState {
       toolManager: toolManager ?? this.toolManager,
       agentNetwork: agentNetwork ?? this.agentNetwork,
       scheduler: scheduler ?? this.scheduler,
+      voiceService: voiceService ?? this.voiceService,
+      socialManager: socialManager ?? this.socialManager,
     );
   }
 }
@@ -55,11 +65,15 @@ class AppStateNotifier extends StateNotifier<AppState> {
   ToolManager? _toolManager;
   AgentNetwork? _agentNetwork;
   SchedulerService? _scheduler;
+  VoiceService? _voiceService;
+  SocialManager? _socialManager;
 
   AppStateNotifier() : super(AppState()) {
     _memory = MemorySystem();
     _agentNetwork = AgentNetwork();
     _scheduler = SchedulerService();
+    _voiceService = VoiceService();
+    _socialManager = SocialManager();
 
     _toolManager = ToolManager(
       memory: _memory!,
@@ -75,6 +89,8 @@ class AppStateNotifier extends StateNotifier<AppState> {
       toolManager: _toolManager,
       agentNetwork: _agentNetwork,
       scheduler: _scheduler,
+      voiceService: _voiceService,
+      socialManager: _socialManager,
     );
   }
 
@@ -196,6 +212,8 @@ class AppStateNotifier extends StateNotifier<AppState> {
     _engine?.dispose();
     _memory?.dispose();
     _toolManager?.dispose();
+    _voiceService?.dispose();
+    _socialManager?.dispose();
     super.dispose();
   }
 }
