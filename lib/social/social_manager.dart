@@ -71,6 +71,17 @@ class SocialManager {
   Stream<SocialMessage> get messageStream => _messageController.stream;
   Map<SocialPlatform, bool> get connectedPlatforms => Map.unmodifiable(_connectedPlatforms);
 
+  bool isPlatformConnected(String platform) {
+    switch (platform.toLowerCase()) {
+      case 'telegram': return _connectedPlatforms[SocialPlatform.telegram] ?? false;
+      case 'discord': return _connectedPlatforms[SocialPlatform.discord] ?? false;
+      case 'whatsapp': return _connectedPlatforms[SocialPlatform.whatsapp] ?? false;
+      case 'instagram': return _connectedPlatforms[SocialPlatform.instagram] ?? false;
+      case 'facebook': return _connectedPlatforms[SocialPlatform.facebook] ?? false;
+      default: return false;
+    }
+  }
+
   SocialManager() {
     // Initialize rate limiters for each platform
     _rateLimiters[SocialPlatform.telegram] = RateLimiter(maxRequests: 30);

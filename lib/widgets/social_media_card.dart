@@ -8,6 +8,9 @@ class SocialMediaCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final appState = ref.watch(appStateProvider);
+    final socialManager = appState.socialManager;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -34,19 +37,19 @@ class SocialMediaCard extends ConsumerWidget {
           crossAxisSpacing: 10,
           childAspectRatio: 2.2,
           children: [
-            _buildPlatformCard(context, ref, 'Telegram', Icons.telegram, const Color(0xFF0088CC)),
-            _buildPlatformCard(context, ref, 'WhatsApp', Icons.chat_rounded, const Color(0xFF25D366)),
-            _buildPlatformCard(context, ref, 'Instagram', Icons.camera_alt_rounded, const Color(0xFFE4405F)),
-            _buildPlatformCard(context, ref, 'Facebook', Icons.facebook_rounded, const Color(0xFF1877F2)),
-            _buildPlatformCard(context, ref, 'Discord', Icons.gamepad_rounded, const Color(0xFF5865F2)),
-            _buildPlatformCard(context, ref, 'Twitter', Icons.tag, const Color(0xFF1DA1F2)),
+            _buildPlatformCard(context, ref, 'Telegram', Icons.telegram, const Color(0xFF0088CC), socialManager?.isPlatformConnected('telegram') ?? false),
+            _buildPlatformCard(context, ref, 'WhatsApp', Icons.chat_rounded, const Color(0xFF25D366), socialManager?.isPlatformConnected('whatsapp') ?? false),
+            _buildPlatformCard(context, ref, 'Instagram', Icons.camera_alt_rounded, const Color(0xFFE4405F), socialManager?.isPlatformConnected('instagram') ?? false),
+            _buildPlatformCard(context, ref, 'Facebook', Icons.facebook_rounded, const Color(0xFF1877F2), socialManager?.isPlatformConnected('facebook') ?? false),
+            _buildPlatformCard(context, ref, 'Discord', Icons.gamepad_rounded, const Color(0xFF5865F2), socialManager?.isPlatformConnected('discord') ?? false),
+            _buildPlatformCard(context, ref, 'Twitter', Icons.tag, const Color(0xFF1DA1F2), false),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildPlatformCard(BuildContext context, WidgetRef ref, String platform, IconData icon, Color color) {
+  Widget _buildPlatformCard(BuildContext context, WidgetRef ref, String platform, IconData icon, Color color, bool isConnected) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -56,7 +59,7 @@ class SocialMediaCard extends ConsumerWidget {
           decoration: BoxDecoration(
             color: const Color(0xFF161B22),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFF30363D)),
+            border: Border.all(color: isConnected ? color.withValues(alpha: 0.4) : const Color(0xFF30363D)),
           ),
           child: Row(
             children: [
@@ -97,15 +100,25 @@ class SocialMediaCard extends ConsumerWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Tap to connect',
+                      isConnected ? 'Connected' : 'Tap to connect',
                       style: TextStyle(
-                        color: Colors.grey[600],
+                        color: isConnected ? const Color(0xFF3FB950) : Colors.grey[600],
                         fontSize: 11,
                       ),
                     ),
                   ],
                 ),
               ),
+              if (isConnected)
+                Container(
+                  width: 8,
+                  height: 8,
+                  margin: const EdgeInsets.only(right: 12),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF3FB950),
+                    shape: BoxShape.circle,
+                  ),
+                ),
             ],
           ),
         ),
