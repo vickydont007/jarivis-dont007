@@ -5,7 +5,7 @@ Future<void> _launchApp(String appName) async {
   try {
     await Process.run('open', ['-a', appName]);
   } catch (_) {}
-  await Future.delayed(const Duration(seconds: 3));
+  await Future.delayed(const Duration(seconds: 5));
 }
 
 class EmailSendTool extends Tool {
@@ -48,7 +48,7 @@ class EmailSendTool extends Tool {
     try {
       await _launchApp('Mail');
 
-      final script = '''
+      var script = '''
 tell application "Mail"
   set newMessage to make new outgoing message with properties {subject:"$subject", content:"$body", visible:false}
   tell newMessage
@@ -58,7 +58,15 @@ tell application "Mail"
 end tell
 ''';
 
-      final result = await Process.run('osascript', ['-e', script]);
+      var result = await Process.run('osascript', ['-e', script]);
+
+      if (result.exitCode != 0 && result.stderr.toString().contains("isn't running")) {
+        await Future.delayed(const Duration(seconds: 2));
+        try { await Process.run('open', ['-a', 'Mail']); } catch (_) {}
+        await Future.delayed(const Duration(seconds: 5));
+        result = await Process.run('osascript', ['-e', script]);
+      }
+
       if (result.exitCode == 0) {
         return ToolResult.success('Email sent to $to with subject "$subject"');
       }
@@ -107,7 +115,15 @@ tell application "Mail"
 end tell
 ''';
 
-      final result = await Process.run('osascript', ['-e', script]);
+      var result = await Process.run('osascript', ['-e', script]);
+
+      if (result.exitCode != 0 && result.stderr.toString().contains("isn't running")) {
+        await Future.delayed(const Duration(seconds: 2));
+        try { await Process.run('open', ['-a', 'Mail']); } catch (_) {}
+        await Future.delayed(const Duration(seconds: 5));
+        result = await Process.run('osascript', ['-e', script]);
+      }
+
       if (result.exitCode == 0) {
         final output = result.stdout.toString().trim();
         if (output.isEmpty || output == 'NO_EMAILS') {
@@ -175,7 +191,15 @@ tell application "Mail"
 end tell
 ''';
 
-      final result = await Process.run('osascript', ['-e', script]);
+      var result = await Process.run('osascript', ['-e', script]);
+
+      if (result.exitCode != 0 && result.stderr.toString().contains("isn't running")) {
+        await Future.delayed(const Duration(seconds: 2));
+        try { await Process.run('open', ['-a', 'Mail']); } catch (_) {}
+        await Future.delayed(const Duration(seconds: 5));
+        result = await Process.run('osascript', ['-e', script]);
+      }
+
       if (result.exitCode == 0) {
         final output = result.stdout.toString().trim();
         if (output == 'EMAIL_NOT_FOUND') {

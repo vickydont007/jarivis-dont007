@@ -2,12 +2,10 @@ import 'dart:io';
 import 'tool.dart';
 
 Future<void> _launchApp(String appName) async {
-  // Always try to launch - don't check first (Process.run check unreliable)
   try {
     await Process.run('open', ['-a', appName]);
   } catch (_) {}
-  // Wait for app to fully start
-  await Future.delayed(const Duration(seconds: 3));
+  await Future.delayed(const Duration(seconds: 5));
 }
 
 class CalendarEventsTool extends Tool {
@@ -70,7 +68,18 @@ end tell
 
         return ToolResult.success(events);
       }
-      return ToolResult.error('Calendar error: ${result.stderr.toString().trim()}');
+      final err = result.stderr.toString().trim();
+      if (err.contains("isn't running")) {
+        // Retry with fresh launch
+        await Future.delayed(const Duration(seconds: 2));
+        try { await Process.run('open', ['-a', 'Calendar']); } catch (_) {}
+        await Future.delayed(const Duration(seconds: 5));
+        final retry = await Process.run('osascript', ['-e', script]);
+        if (retry.exitCode == 0) {
+          return ToolResult.success(retry.stdout.toString().trim());
+        }
+      }
+      return ToolResult.error('Calendar error: $err');
     } catch (e) {
       return ToolResult.error('Failed to get calendar events: $e');
     }
@@ -120,7 +129,6 @@ class CalendarCreateTool extends Tool {
     }
 
     try {
-      // Parse YYYY-MM-DD
       final parts = dateStr.split('-');
       if (parts.length != 3) {
         return ToolResult.error('Date must be in YYYY-MM-DD format (e.g., "2026-06-20")');
@@ -129,7 +137,6 @@ class CalendarCreateTool extends Tool {
       final month = int.parse(parts[1]);
       final day = int.parse(parts[2]);
 
-      // Parse HH:MM
       final timeParts = time.split(':');
       final hour = int.parse(timeParts[0]);
       final minute = timeParts.length > 1 ? int.parse(timeParts[1]) : 0;
@@ -152,12 +159,20 @@ tell application "Calendar"
 end tell
 ''';
 
-      final result = await Process.run('osascript', ['-e', script]);
+      var result = await Process.run('osascript', ['-e', script]);
+      
+      // Retry if app wasn't running
+      if (result.exitCode != 0 && result.stderr.toString().contains("isn't running")) {
+        await Future.delayed(const Duration(seconds: 2));
+        try { await Process.run('open', ['-a', 'Calendar']); } catch (_) {}
+        await Future.delayed(const Duration(seconds: 5));
+        result = await Process.run('osascript', ['-e', script]);
+      }
+
       if (result.exitCode == 0) {
         return ToolResult.success('Event "$title" created for $dateStr at $time');
       }
-      final err = result.stderr.toString().trim();
-      return ToolResult.error('Calendar error: $err');
+      return ToolResult.error('Calendar error: ${result.stderr.toString().trim()}');
     } catch (e) {
       return ToolResult.error('Failed to create event: $e');
     }
@@ -206,7 +221,15 @@ tell application "Calendar"
 end tell
 ''';
 
-      final result = await Process.run('osascript', ['-e', script]);
+      var result = await Process.run('osascript', ['-e', script]);
+
+      if (result.exitCode != 0 && result.stderr.toString().contains("isn't running")) {
+        await Future.delayed(const Duration(seconds: 2));
+        try { await Process.run('open', ['-a', 'Calendar']); } catch (_) {}
+        await Future.delayed(const Duration(seconds: 5));
+        result = await Process.run('osascript', ['-e', script]);
+      }
+
       if (result.exitCode == 0) {
         final count = result.stdout.toString().trim();
         if (count == '0') {
