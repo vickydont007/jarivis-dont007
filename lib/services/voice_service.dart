@@ -20,9 +20,12 @@ class VoiceService {
       StreamController<bool>.broadcast();
   final StreamController<String> _statusController =
       StreamController<String>.broadcast();
+  final StreamController<void> _ttsCompletionController =
+      StreamController<void>.broadcast();
 
   bool _isInitialized = false;
   bool _isListening = false;
+  bool _isSpeaking = false;
   bool _sttAvailable = false;
   String _micPermission = 'not_determined';
   VoiceLanguage _currentLanguage = VoiceLanguage.both;
@@ -31,7 +34,9 @@ class VoiceService {
   Stream<String> get finalTranscriptionStream => _finalTranscriptionController.stream;
   Stream<bool> get listeningStream => _listeningController.stream;
   Stream<String> get statusStream => _statusController.stream;
+  Stream<void> get ttsCompletionStream => _ttsCompletionController.stream;
   bool get isListening => _isListening;
+  bool get isSpeaking => _isSpeaking;
   bool get isSTTAvailable => _sttAvailable;
   String get micPermission => _micPermission;
 
@@ -84,6 +89,12 @@ class VoiceService {
       await _flutterTts.setVolume(1.0);
       await _flutterTts.setSpeechRate(0.5);
       await _flutterTts.setPitch(1.0);
+
+      _flutterTts.setCompletionHandler(() {
+        _isSpeaking = false;
+        _ttsCompletionController.add(null);
+        _statusController.add('Speech complete');
+      });
 
       return true;
     } catch (e) {
@@ -169,6 +180,7 @@ class VoiceService {
   Future<void> speak(String text, {VoiceLanguage? language}) async {
     if (!_isInitialized) await initialize();
 
+    _isSpeaking = true;
     final lang = language ?? _currentLanguage;
     switch (lang) {
       case VoiceLanguage.english:
@@ -203,8 +215,10 @@ class VoiceService {
 
   void dispose() {
     _transcriptionController.close();
+    _finalTranscriptionController.close();
     _listeningController.close();
     _statusController.close();
+    _ttsCompletionController.close();
     _flutterTts.stop();
   }
 }

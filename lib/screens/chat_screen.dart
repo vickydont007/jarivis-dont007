@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
@@ -19,10 +20,57 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
   final List<PlatformFile> _attachedFiles = [];
   bool _isSending = false;
+  bool _isVoiceMode = false;
+  StreamSubscription? _ttsCompletionSub;
 
   @override
   void initState() {
     super.initState();
+  }
+
+  void _toggleVoiceMode() {
+    setState(() => _isVoiceMode = !_isVoiceMode);
+    if (_isVoiceMode) {
+      _startVoiceConversation();
+    } else {
+      _stopVoiceConversation();
+    }
+  }
+
+  void _startVoiceConversation() async {
+    final appState = ref.read(appStateProvider);
+    final voiceService = appState.voiceService;
+    if (voiceService == null) return;
+
+    _ttsCompletionSub?.cancel();
+    _ttsCompletionSub = voiceService.ttsCompletionStream.listen((_) {
+      if (_isVoiceMode && mounted) {
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (_isVoiceMode && mounted) {
+            voiceService.startListening();
+          }
+        });
+      }
+    });
+
+    await voiceService.startListening();
+  }
+
+  void _stopVoiceConversation() {
+    final appState = ref.read(appStateProvider);
+    final voiceService = appState.voiceService;
+    voiceService?.stopListening();
+    voiceService?.stopSpeaking();
+    _ttsCompletionSub?.cancel();
+  }
+
+  void _speakResponse(String text) async {
+    final appState = ref.read(appStateProvider);
+    final voiceService = appState.voiceService;
+    if (voiceService == null || !_isVoiceMode) return;
+
+    final cleanText = text.replaceAll(RegExp(r'[*_`#>\-]'), '').replaceAll(RegExp(r'\[.*?\]\(.*?\)'), '');
+    await voiceService.speak(cleanText);
   }
 
   void _pickFiles({bool foldersOnly = false}) async {
@@ -160,6 +208,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ref.read(chatProvider.notifier).addAssistantMessage(localResponse);
       _scrollToBottom();
       _isSending = false;
+      _speakResponse(localResponse);
       return;
     }
 
@@ -220,6 +269,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     ref.read(chatProvider.notifier).addAssistantMessage(response, imageUrls: imageUrls);
     _scrollToBottom();
     _isSending = false;
+    _speakResponse(response);
   }
 
   Future<String?> _handleLocalCommands(String message) async {
@@ -390,6 +440,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
           const SizedBox(width: 8),
           GestureDetector(
+            onTap: _toggleVoiceMode,
+            child: Tooltip(
+              message: _isVoiceMode ? 'Voice conversation ON' : 'Voice conversation OFF',
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: _isVoiceMode ? const Color(0xFF4CAF50).withValues(alpha: 0.2) : const Color(0xFF1E222A),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: _isVoiceMode ? const Color(0xFF4CAF50) : Theme.of(context).dividerColor,
+                  ),
+                ),
+                child: Icon(
+                  _isVoiceMode ? Icons.record_voice_over : Icons.voice_chat,
+                  color: _isVoiceMode ? const Color(0xFF4CAF50) : Colors.grey,
+                  size: 20,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
             onTap: _showAttachMenu,
             child: Container(
               padding: const EdgeInsets.all(10),
@@ -545,6 +617,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
+    _ttsCompletionSub?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
