@@ -193,7 +193,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               },
               cancelToken: cancelToken,
             );
-            response = result['response'] ?? 'No response';
+            response = result['content'] ?? 'No response';
             if (result['error'] != null) {
               response = 'Error: ${result['error']}';
             }
