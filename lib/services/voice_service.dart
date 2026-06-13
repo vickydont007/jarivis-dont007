@@ -38,62 +38,51 @@ class VoiceService {
     try {
       _statusController.add('Initializing speech recognition...');
 
-      // Try to initialize with detailed error handling
-      try {
-        _sttAvailable = await _speechToText.initialize(
-          onError: (error) {
-            print('Speech recognition error: ${error.errorMsg}');
+      _sttAvailable = await _speechToText.initialize(
+        onError: (error) {
+          print('STT Error: ${error.errorMsg}');
+          _isListening = false;
+          _listeningController.add(false);
+
+          if (_isTransientError(error.errorMsg) && _retryCount < _maxRetries) {
+            _retryCount++;
+            final delay = Duration(milliseconds: 500 * pow(2, _retryCount - 1).toInt());
+            _statusController.add('Retrying in ${delay.inSeconds}s... ($_retryCount/$_maxRetries)');
+            Future.delayed(delay, () {
+              if (!_isListening) startListening();
+            });
+          } else if (_retryCount >= _maxRetries) {
+            _statusController.add('Voice recognition unavailable. Use text input.');
+          }
+        },
+        onStatus: (status) {
+          print('STT Status: $status');
+          if (status == 'done' || status == 'notListening' || status == 'cancelled') {
             _isListening = false;
             _listeningController.add(false);
+          }
+          if (status == 'listening') {
+            _retryCount = 0;
+          }
+        },
+      );
 
-            // Auto-retry on transient errors
-            if (_isTransientError(error.errorMsg) && _retryCount < _maxRetries) {
-              _retryCount++;
-              final delay = Duration(milliseconds: 500 * pow(2, _retryCount - 1).toInt());
-              _statusController.add('Retrying in ${delay.inSeconds}s... ($_retryCount/$_maxRetries)');
-              Future.delayed(delay, () {
-                if (!_isListening) startListening();
-              });
-            } else if (_retryCount >= _maxRetries) {
-              _statusController.add('Voice recognition unavailable. Use text input.');
-            }
-          },
-          onStatus: (status) {
-            print('Speech recognition status: $status');
-            if (status == 'done' || status == 'notListening' || status == 'cancelled') {
-              _isListening = false;
-              _listeningController.add(false);
-            }
-            if (status == 'listening') {
-              _retryCount = 0; // Reset retry count on successful listen
-            }
-          },
-        );
-      } catch (e) {
-        print('Speech recognition initialization exception: $e');
-        _sttAvailable = false;
-      }
-
-      print('Speech recognition available: $_sttAvailable');
+      print('STT available: $_sttAvailable');
 
       if (!_sttAvailable) {
-        _statusController.add('Speech recognition not available. Grant microphone permission in System Settings > Privacy & Security > Microphone.');
+        _statusController.add('Mic permission needed. Go to System Settings > Privacy & Security > Microphone.');
       }
 
       // Configure TTS
-      try {
-        await _flutterTts.setVolume(1.0);
-        await _flutterTts.setSpeechRate(0.5);
-        await _flutterTts.setPitch(1.0);
-      } catch (e) {
-        print('TTS configuration error: $e');
-      }
+      await _flutterTts.setVolume(1.0);
+      await _flutterTts.setSpeechRate(0.5);
+      await _flutterTts.setPitch(1.0);
 
       _isInitialized = true;
-      _statusController.add(_sttAvailable ? 'Voice service ready' : 'Voice service ready (STT unavailable)');
+      _statusController.add(_sttAvailable ? 'Voice ready' : 'Voice ready (mic permission needed)');
       return true;
     } catch (e) {
-      print('Failed to initialize voice service: $e');
+      print('Voice init failed: $e');
       _statusController.add('Voice init failed. Use text input.');
       return false;
     }
@@ -102,49 +91,45 @@ class VoiceService {
   Future<bool> startListening() async {
     if (!_isInitialized) {
       final initialized = await initialize();
-      if (!initialized) {
-        return false;
-      }
+      if (!initialized) return false;
     }
 
     if (!_sttAvailable) {
-      _statusController.add('STT unavailable. Use text input.');
+      _statusController.add('STT unavailable. Grant mic permission.');
       return false;
     }
 
-    if (!_isListening) {
-      try {
-        _isListening = true;
-        _listeningController.add(true);
-        _statusController.add('Listening...');
+    if (_isListening) return true;
 
-        String localeId = _getLocaleId();
-        print('Starting to listen with locale: $localeId');
+    try {
+      _isListening = true;
+      _listeningController.add(true);
+      _statusController.add('Listening...');
 
-        await _speechToText.listen(
-          onResult: (result) {
-            print('Speech result: ${result.recognizedWords} (final: ${result.finalResult})');
-            if (result.finalResult && result.recognizedWords.isNotEmpty) {
-              _transcriptionController.add(result.recognizedWords);
-              _retryCount = 0; // Reset on successful result
-            }
-          },
-          localeId: localeId,
-          listenMode: ListenMode.dictation,
-          cancelOnError: true,
-          partialResults: true,
-        );
-        print('Listening started successfully');
-        return true;
-      } catch (e) {
-        print('Failed to start listening: $e');
-        _isListening = false;
-        _listeningController.add(false);
-        _statusController.add('Failed to start listening. Use text input.');
-        return false;
-      }
+      String localeId = _getLocaleId();
+      print('Listening with locale: $localeId');
+
+      await _speechToText.listen(
+        onResult: (result) {
+          print('STT Result: ${result.recognizedWords} (final: ${result.finalResult})');
+          if (result.finalResult && result.recognizedWords.isNotEmpty) {
+            _transcriptionController.add(result.recognizedWords);
+            _retryCount = 0;
+          }
+        },
+        localeId: localeId,
+        listenMode: ListenMode.dictation,
+        cancelOnError: true,
+        partialResults: true,
+      );
+      return true;
+    } catch (e) {
+      print('STT listen failed: $e');
+      _isListening = false;
+      _listeningController.add(false);
+      _statusController.add('Failed to start listening.');
+      return false;
     }
-    return true;
   }
 
   Future<void> stopListening() async {
@@ -152,17 +137,14 @@ class VoiceService {
       await _speechToText.stop();
       _isListening = false;
       _listeningController.add(false);
-      _statusController.add('Stopped listening');
+      _statusController.add('Stopped');
     }
   }
 
   Future<void> speak(String text, {VoiceLanguage? language}) async {
-    if (!_isInitialized) {
-      await initialize();
-    }
+    if (!_isInitialized) await initialize();
 
     final lang = language ?? _currentLanguage;
-
     switch (lang) {
       case VoiceLanguage.english:
         await _flutterTts.setLanguage('en-US');
@@ -171,7 +153,6 @@ class VoiceService {
         await _flutterTts.setLanguage('hi-IN');
         break;
       case VoiceLanguage.both:
-        // Auto-detect: use Hindi if text contains Devanagari script
         if (_containsHindi(text)) {
           await _flutterTts.setLanguage('hi-IN');
         } else {
@@ -179,7 +160,6 @@ class VoiceService {
         }
         break;
     }
-
     await _flutterTts.speak(text);
   }
 
@@ -198,7 +178,6 @@ class VoiceService {
       case VoiceLanguage.hindi:
         return 'hi-IN';
       case VoiceLanguage.both:
-        // Use Hindi locale if user prefers Hindi
         return 'hi-IN';
     }
   }
