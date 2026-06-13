@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/ai_engine.dart';
 import '../core/memory_system.dart';
 import '../core/agent_network.dart';
@@ -197,8 +198,49 @@ class AppStateNotifier extends StateNotifier<AppState> {
           modelName: savedModel,
         );
       }
+
+      // Restore social media connections from SharedPreferences
+      await _restoreSocialConnections();
     } catch (e) {
       print('Failed to load saved state: $e');
+    }
+  }
+
+  Future<void> _restoreSocialConnections() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final fbToken = prefs.getString('facebook_access_token') ?? '';
+    final fbPageId = prefs.getString('facebook_page_id') ?? '';
+    if (fbToken.isNotEmpty && fbPageId.isNotEmpty) {
+      _socialManager?.setupFacebook(accessToken: fbToken, pageId: fbPageId);
+      print('Facebook restored: pageId=$fbPageId');
+    }
+
+    final igToken = prefs.getString('instagram_access_token') ?? '';
+    final igPageId = prefs.getString('instagram_page_id') ?? '';
+    if (igToken.isNotEmpty && igPageId.isNotEmpty) {
+      _socialManager?.setupInstagram(accessToken: igToken, pageId: igPageId);
+      print('Instagram restored: pageId=$igPageId');
+    }
+
+    final waToken = prefs.getString('whatsapp_access_token') ?? '';
+    final waPhoneId = prefs.getString('whatsapp_phone_number_id') ?? '';
+    final waBizId = prefs.getString('whatsapp_business_account_id') ?? '';
+    if (waToken.isNotEmpty && waPhoneId.isNotEmpty && waBizId.isNotEmpty) {
+      _socialManager?.setupWhatsApp(accessToken: waToken, phoneNumberId: waPhoneId, businessAccountId: waBizId);
+      print('WhatsApp restored: phoneId=$waPhoneId');
+    }
+
+    final tgToken = prefs.getString('telegram_bot_token') ?? '';
+    if (tgToken.isNotEmpty) {
+      _socialManager?.setupTelegram(tgToken);
+      print('Telegram restored');
+    }
+
+    final dcToken = prefs.getString('discord_bot_token') ?? '';
+    if (dcToken.isNotEmpty) {
+      _socialManager?.setupDiscord(dcToken);
+      print('Discord restored');
     }
   }
 
