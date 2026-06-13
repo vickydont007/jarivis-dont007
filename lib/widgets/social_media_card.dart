@@ -3,14 +3,37 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/app_provider.dart';
 
-class SocialMediaCard extends ConsumerWidget {
+class SocialMediaCard extends ConsumerStatefulWidget {
   const SocialMediaCard({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final appState = ref.watch(appStateProvider);
-    final socialManager = appState.socialManager;
+  ConsumerState<SocialMediaCard> createState() => _SocialMediaCardState();
+}
 
+class _SocialMediaCardState extends ConsumerState<SocialMediaCard> {
+  Map<String, bool> _connected = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStatus();
+  }
+
+  Future<void> _loadStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _connected = {
+        'telegram': (prefs.getString('telegram_bot_token') ?? '').isNotEmpty,
+        'discord': (prefs.getString('discord_bot_token') ?? '').isNotEmpty,
+        'facebook': (prefs.getString('facebook_access_token') ?? '').isNotEmpty,
+        'instagram': (prefs.getString('instagram_access_token') ?? '').isNotEmpty,
+        'whatsapp': (prefs.getString('whatsapp_access_token') ?? '').isNotEmpty,
+      };
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -37,23 +60,25 @@ class SocialMediaCard extends ConsumerWidget {
           crossAxisSpacing: 10,
           childAspectRatio: 2.2,
           children: [
-            _buildPlatformCard(context, ref, 'Telegram', Icons.telegram, const Color(0xFF0088CC), socialManager?.isPlatformConnected('telegram') ?? false),
-            _buildPlatformCard(context, ref, 'WhatsApp', Icons.chat_rounded, const Color(0xFF25D366), socialManager?.isPlatformConnected('whatsapp') ?? false),
-            _buildPlatformCard(context, ref, 'Instagram', Icons.camera_alt_rounded, const Color(0xFFE4405F), socialManager?.isPlatformConnected('instagram') ?? false),
-            _buildPlatformCard(context, ref, 'Facebook', Icons.facebook_rounded, const Color(0xFF1877F2), socialManager?.isPlatformConnected('facebook') ?? false),
-            _buildPlatformCard(context, ref, 'Discord', Icons.gamepad_rounded, const Color(0xFF5865F2), socialManager?.isPlatformConnected('discord') ?? false),
-            _buildPlatformCard(context, ref, 'Twitter', Icons.tag, const Color(0xFF1DA1F2), false),
+            _buildPlatformCard(context, 'Telegram', Icons.telegram, const Color(0xFF0088CC), _connected['telegram'] ?? false),
+            _buildPlatformCard(context, 'WhatsApp', Icons.chat_rounded, const Color(0xFF25D366), _connected['whatsapp'] ?? false),
+            _buildPlatformCard(context, 'Instagram', Icons.camera_alt_rounded, const Color(0xFFE4405F), _connected['instagram'] ?? false),
+            _buildPlatformCard(context, 'Facebook', Icons.facebook_rounded, const Color(0xFF1877F2), _connected['facebook'] ?? false),
+            _buildPlatformCard(context, 'Discord', Icons.gamepad_rounded, const Color(0xFF5865F2), _connected['discord'] ?? false),
+            _buildPlatformCard(context, 'Twitter', Icons.tag, const Color(0xFF1DA1F2), false),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildPlatformCard(BuildContext context, WidgetRef ref, String platform, IconData icon, Color color, bool isConnected) {
+  Widget _buildPlatformCard(BuildContext context, String platform, IconData icon, Color color, bool isConnected) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => _showConnectDialog(context, ref, platform, color),
+        onTap: () {
+          _showConnectDialog(context, platform, color).then((_) => _loadStatus());
+        },
         borderRadius: BorderRadius.circular(12),
         child: Container(
           decoration: BoxDecoration(
@@ -126,7 +151,7 @@ class SocialMediaCard extends ConsumerWidget {
     );
   }
 
-  void _showConnectDialog(BuildContext context, WidgetRef ref, String platform, Color color) {
+  Future<void> _showConnectDialog(BuildContext context, String platform, Color color) async {
     switch (platform) {
       case 'Facebook':
         _showFacebookDialog(context, ref, color);

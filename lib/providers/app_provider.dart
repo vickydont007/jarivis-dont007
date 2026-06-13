@@ -201,6 +201,9 @@ class AppStateNotifier extends StateNotifier<AppState> {
 
       // Restore social media connections from SharedPreferences
       await _restoreSocialConnections();
+
+      // Force rebuild so widgets see updated social status
+      state = state.copyWith(socialManager: _socialManager);
     } catch (e) {
       print('Failed to load saved state: $e');
     }
