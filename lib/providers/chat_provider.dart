@@ -35,6 +35,12 @@ class ChatMessage {
   }
 }
 
+final _welcomeMessage = ChatMessage(
+  role: 'assistant',
+  content: 'Hello! I am **Nextron**, your AI desktop assistant.\n\nI can help you with:\n- System control (shutdown, restart, sleep)\n- File management (read, write, search)\n- Web browsing and search\n- Code execution (Python/JS)\n- Image analysis\n- And much more!\n\nHow can I help you today?',
+  timestamp: DateTime(2026, 1, 1),
+);
+
 class ChatState {
   final List<ChatMessage> messages;
   final List<Map<String, dynamic>> history;
@@ -42,11 +48,11 @@ class ChatState {
   final CancelToken? cancelToken;
 
   ChatState({
-    this.messages = const [],
+    List<ChatMessage>? messages,
     this.history = const [],
     this.isLoading = false,
     this.cancelToken,
-  });
+  }) : messages = messages ?? [_welcomeMessage];
 
   ChatState copyWith({
     List<ChatMessage>? messages,
@@ -64,24 +70,7 @@ class ChatState {
 }
 
 class ChatNotifier extends StateNotifier<ChatState> {
-  ChatNotifier() : super(ChatState()) {
-    if (state.messages.isEmpty) {
-      _addWelcomeMessage();
-    }
-  }
-
-  void _addWelcomeMessage() {
-    if (state.messages.isNotEmpty) return;
-    state = state.copyWith(
-      messages: [
-        ChatMessage(
-          role: 'assistant',
-          content: 'Hello! I am **Nextron**, your AI desktop assistant.\n\nI can help you with:\n- System control (shutdown, restart, sleep)\n- File management (read, write, search)\n- Web browsing and search\n- Code execution (Python/JS)\n- Image analysis\n- And much more!\n\nHow can I help you today?',
-          timestamp: DateTime.now(),
-        ),
-      ],
-    );
-  }
+  ChatNotifier() : super(ChatState());
 
   void addUserMessage(String content) {
     final token = CancelToken();
@@ -160,7 +149,6 @@ class ChatNotifier extends StateNotifier<ChatState> {
       state.cancelToken!.cancel('Chat cleared');
     }
     state = ChatState();
-    _addWelcomeMessage();
   }
 }
 

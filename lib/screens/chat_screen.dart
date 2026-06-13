@@ -18,6 +18,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final List<PlatformFile> _attachedFiles = [];
+  bool _isSending = false;
 
   @override
   void initState() {
@@ -130,6 +131,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _sendMessage() async {
+    if (_isSending) return;
     String message = _messageController.text.trim();
 
     // Include attached files in message
@@ -144,6 +146,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     if (message.isEmpty) return;
 
+    _isSending = true;
     ref.read(chatProvider.notifier).addUserMessage(message);
     _messageController.clear();
     setState(() {
@@ -156,6 +159,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (localResponse != null) {
       ref.read(chatProvider.notifier).addAssistantMessage(localResponse);
       _scrollToBottom();
+      _isSending = false;
       return;
     }
 
@@ -208,10 +212,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       response = 'Not connected. Please check your API key in Settings.';
     }
 
-    if (cancelToken != null && cancelToken.isCancelled) return;
+    if (cancelToken != null && cancelToken.isCancelled) {
+      _isSending = false;
+      return;
+    }
 
     ref.read(chatProvider.notifier).addAssistantMessage(response, imageUrls: imageUrls);
     _scrollToBottom();
+    _isSending = false;
   }
 
   Future<String?> _handleLocalCommands(String message) async {
