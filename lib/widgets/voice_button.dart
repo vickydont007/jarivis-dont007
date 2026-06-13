@@ -16,6 +16,8 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
     with SingleTickerProviderStateMixin {
   bool _isListening = false;
   String _status = '';
+  bool _permissionGranted = false;
+  bool _checkingPermission = false;
   late AnimationController _animationController;
   late Animation<double> _animation;
 
@@ -29,6 +31,22 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
     _animation = Tween<double>(begin: 1.0, end: 1.5).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
+    _checkPermission();
+  }
+
+  void _checkPermission() async {
+    final appState = ref.read(appStateProvider);
+    final voiceService = appState.voiceService;
+    if (voiceService != null) {
+      // Wait a bit for service to initialize
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (mounted) {
+        setState(() {
+          _permissionGranted = voiceService.micPermission == 'authorized';
+          _status = voiceService.micPermission;
+        });
+      }
+    }
   }
 
   @override
@@ -51,36 +69,68 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
   }
 
   void _toggleListening() async {
+    if (_checkingPermission) return;
+
     final appState = ref.read(appStateProvider);
     final voiceService = appState.voiceService;
 
     if (voiceService == null) {
-      _showPermissionDialog();
+      _showSettingsDialog();
       return;
     }
 
-    if (!voiceService.isSTTAvailable) {
-      _showPermissionDialog();
+    // Check permission first
+    if (!_permissionGranted) {
+      _checkingPermission = true;
+      setState(() {});
+
+      final granted = await voiceService.requestMicPermission();
+      _checkingPermission = false;
+
+      if (granted) {
+        setState(() => _permissionGranted = true);
+        // Now try to listen
+        _startListening();
+      } else {
+        _showSettingsDialog();
+      }
       return;
     }
 
+    // Permission granted, toggle listening
     if (_isListening) {
       setState(() => _isListening = false);
       _animationController.stop();
       _animationController.reset();
       await voiceService.stopListening();
     } else {
-      final started = await voiceService.startListening();
-      if (started) {
-        setState(() => _isListening = true);
-        _animationController.repeat(reverse: true);
-      } else {
-        _showPermissionDialog();
+      _startListening();
+    }
+  }
+
+  void _startListening() async {
+    final appState = ref.read(appStateProvider);
+    final voiceService = appState.voiceService;
+    if (voiceService == null) return;
+
+    final started = await voiceService.startListening();
+    if (started) {
+      setState(() => _isListening = true);
+      _animationController.repeat(reverse: true);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_status.isNotEmpty ? _status : 'Speech recognition unavailable'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 3),
+          ),
+        );
       }
     }
   }
 
-  void _showPermissionDialog() {
+  void _showSettingsDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -121,7 +171,7 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
                   const Text('Steps:', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   Text('1. Click "Open Settings" below', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
-                  Text('2. Find "Nextron" in the list', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
+                  Text('2. Find "nextron_ai" in the list', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
                   Text('3. Turn ON the microphone toggle', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
                   Text('4. Come back and try again', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
                 ],
@@ -160,7 +210,7 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
     return ScaleTransition(
       scale: _animation,
       child: Tooltip(
-        message: _isListening ? 'Stop listening' : (_status.isNotEmpty ? _status : 'Voice input'),
+        message: _isListening ? 'Stop listening' : 'Voice input',
         child: Container(
           decoration: BoxDecoration(
             color: _isListening ? const Color(0xFFE53935) : const Color(0xFF1E222A),
@@ -170,11 +220,17 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
             ),
           ),
           child: IconButton(
-            icon: Icon(
-              _isListening ? Icons.mic : Icons.mic_none,
-              color: Colors.white,
-              size: 20,
-            ),
+            icon: _checkingPermission
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange),
+                  )
+                : Icon(
+                    _isListening ? Icons.mic : Icons.mic_none,
+                    color: Colors.white,
+                    size: 20,
+                  ),
             onPressed: _toggleListening,
           ),
         ),

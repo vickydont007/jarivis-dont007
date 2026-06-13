@@ -20,24 +20,43 @@ public class MicPermissionHandler: NSObject, FlutterPlugin {
     }
 
     private func requestMicPermission(result: @escaping FlutterResult) {
-        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        
+        switch status {
         case .authorized:
-            result(true)
+            // Already authorized
+            result("authorized")
         case .notDetermined:
+            // Need to request
             AVCaptureDevice.requestAccess(for: .audio) { granted in
                 DispatchQueue.main.async {
-                    result(granted)
+                    result(granted ? "authorized" : "denied")
                 }
             }
-        case .denied, .restricted:
-            result(false)
+        case .denied:
+            // User denied - tell them to go to settings
+            result("denied")
+        case .restricted:
+            // Restricted by MDM or parental controls
+            result("restricted")
         @unknown default:
-            result(false)
+            result("unknown")
         }
     }
 
     private func checkMicPermission(result: @escaping FlutterResult) {
         let status = AVCaptureDevice.authorizationStatus(for: .audio)
-        result(status == .authorized || status == .notDetermined)
+        switch status {
+        case .authorized:
+            result("authorized")
+        case .denied:
+            result("denied")
+        case .restricted:
+            result("restricted")
+        case .notDetermined:
+            result("not_determined")
+        @unknown default:
+            result("unknown")
+        }
     }
 }
