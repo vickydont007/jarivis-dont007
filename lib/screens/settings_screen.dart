@@ -726,6 +726,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await prefs.setString('default_city', _defaultCity);
     await prefs.setString('telegram_bot_token', _telegramBotToken);
     await prefs.setString('discord_bot_token', _discordBotToken);
+    await prefs.setString('facebook_access_token', _facebookAccessToken);
+    await prefs.setString('facebook_page_id', _facebookPageId);
+    await prefs.setString('instagram_access_token', _instagramAccessToken);
+    await prefs.setString('instagram_page_id', _instagramPageId);
+    await prefs.setString('whatsapp_access_token', _whatsappAccessToken);
+    await prefs.setString('whatsapp_phone_number_id', _whatsappPhoneNumberId);
+    await prefs.setString('whatsapp_business_account_id', _whatsappBusinessAccountId);
 
     AIProvider provider;
     switch (_selectedAIProvider) {
