@@ -94,29 +94,27 @@ class AgentNetworkPainter extends CustomPainter {
       ..moveTo(from.dx, from.dy)
       ..cubicTo(controlPoint1.dx, controlPoint1.dy, controlPoint2.dx, controlPoint2.dy, to.dx, to.dy);
 
-    // Base line
     final basePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = conn.isActive ? 3.0 : 2.0
+      ..strokeCap = StrokeCap.round
       ..shader = ui.Gradient.linear(from, to, [
-        fromColor.withValues(alpha: conn.isActive ? 0.7 : 0.35),
-        toColor.withValues(alpha: conn.isActive ? 0.7 : 0.35),
+        fromColor.withOpacity(conn.isActive ? 0.7 : 0.35),
+        toColor.withOpacity(conn.isActive ? 0.7 : 0.35),
       ]);
 
     canvas.drawPath(path, basePaint);
 
-    // Glow effect behind line
     final glowPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = conn.isActive ? 8.0 : 5.0
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 6)
       ..shader = ui.Gradient.linear(from, to, [
-        fromColor.withValues(alpha: conn.isActive ? 0.3 : 0.12),
-        toColor.withValues(alpha: conn.isActive ? 0.3 : 0.12),
+        fromColor.withOpacity(conn.isActive ? 0.3 : 0.12),
+        toColor.withOpacity(conn.isActive ? 0.3 : 0.12),
       ]);
     canvas.drawPath(path, glowPaint);
 
-    // Always show flowing particles
     _drawFlowingParticles(canvas, path, fromColor, toColor, t, conn.isActive);
   }
 
@@ -145,14 +143,13 @@ class AgentNetworkPainter extends CustomPainter {
         final alpha = (sin(offset * pi * 2) * 0.5 + 0.5) * (isActive ? 1.0 : 0.7);
 
         final color = Color.lerp(fromColor, toColor, offset)!;
-        particlePaint.color = color.withValues(alpha: alpha);
+        particlePaint.color = color.withOpacity(alpha);
 
         canvas.drawCircle(position, particleSize, particlePaint);
 
-        // Larger glow for particles
         final glowPaint = Paint()
-          ..color = color.withValues(alpha: alpha * 0.4)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+          ..color = color.withOpacity(alpha * 0.4)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, 8);
         canvas.drawCircle(position, particleSize * 3, glowPaint);
       }
     }
@@ -179,39 +176,36 @@ class AgentNetworkPainter extends CustomPainter {
         : 1.0 + sin(t * 1.5) * 0.03;
     final drawRadius = nodeRadius * pulseScale;
 
-    // Outer glow
     final outerGlow = Paint()
       ..style = PaintingStyle.fill
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, drawRadius * 0.5)
-      ..color = agent.color.withValues(alpha: agent.isActive ? 0.25 : 0.12);
+      ..color = agent.color.withOpacity(agent.isActive ? 0.25 : 0.12);
     canvas.drawCircle(pos, drawRadius * 1.3, outerGlow);
 
-    // Background fill
     final bgPaint = Paint()
       ..shader = ui.Gradient.radial(
         pos,
         drawRadius,
         [
-          agent.color.withValues(alpha: 0.35),
-          agent.color.withValues(alpha: 0.15),
-          const Color(0xFF0D1117).withValues(alpha: 0.8),
+          agent.color.withOpacity(agent.isActive ? 0.35 : 0.15),
+          agent.color.withOpacity(agent.isActive ? 0.15 : 0.05),
+          const Color(0xFF0D1117).withOpacity(0.8),
         ],
         [0.0, 0.6, 1.0],
       )
       ..style = PaintingStyle.fill;
     canvas.drawCircle(pos, drawRadius, bgPaint);
 
-    // Border
     final borderPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = isSelected ? 3.5 : 2.5
-      ..color = agent.color.withValues(alpha: isSelected ? 1.0 : 0.8);
+      ..color = agent.color.withOpacity(isSelected ? 1.0 : 0.8);
     canvas.drawCircle(pos, drawRadius, borderPaint);
 
     if (isSelected) {
       final selectGlow = Paint()
-        ..color = agent.color.withValues(alpha: 0.35)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 15);
+        ..color = agent.color.withOpacity(0.35)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 15);
       canvas.drawCircle(pos, drawRadius + 10, selectGlow);
     }
 
@@ -248,16 +242,15 @@ class AgentNetworkPainter extends CustomPainter {
         final ringPaint = Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = isActive ? 1.5 : 1.0
-          ..color = color.withValues(alpha: alpha);
+          ..color = color.withOpacity(alpha);
         canvas.drawCircle(center, ringRadius, ringPaint);
       }
     }
 
-    // Inner glow fill
     final innerGlow = Paint()
       ..style = PaintingStyle.fill
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, radius * 0.6)
-      ..color = color.withValues(alpha: isActive ? 0.15 : 0.08);
+      ..color = color.withOpacity(isActive ? 0.15 : 0.08);
     canvas.drawCircle(center, radius * 1.2, innerGlow);
   }
 
@@ -292,18 +285,18 @@ class AgentNetworkPainter extends CustomPainter {
     labelPainter.text = TextSpan(
       text: agent.name,
       style: TextStyle(
-        color: Colors.white.withValues(alpha: 0.95),
+        color: Colors.white.withOpacity(0.95),
         fontSize: 12,
         fontWeight: FontWeight.w700,
         letterSpacing: 0.5,
         shadows: [
           Shadow(
-            color: Colors.black.withValues(alpha: 0.9),
+            color: Colors.black.withOpacity(0.9),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
           Shadow(
-            color: agent.color.withValues(alpha: 0.5),
+            color: agent.color.withOpacity(0.5),
             blurRadius: 8,
           ),
         ],
@@ -334,12 +327,12 @@ class AgentNetworkPainter extends CustomPainter {
     );
 
     final dotPaint = Paint()..style = PaintingStyle.fill;
-    dotPaint.color = color.withValues(alpha: 0.9);
+    dotPaint.color = color.withOpacity(0.9);
     canvas.drawCircle(dotPos, 3, dotPaint);
 
     final dotGlow = Paint()
-      ..color = color.withValues(alpha: 0.4)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+      ..color = color.withOpacity(0.4)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 4);
     canvas.drawCircle(dotPos, 6, dotGlow);
   }
 
@@ -355,14 +348,14 @@ class AgentNetworkPainter extends CustomPainter {
     final badgeBorder = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
-      ..color = agent.color.withValues(alpha: 0.6);
+      ..color = agent.color.withOpacity(0.6);
     canvas.drawCircle(badgeCenter, badgeRadius, badgeBorder);
 
     final countPainter = TextPainter(textDirection: TextDirection.ltr);
     countPainter.text = TextSpan(
       text: '${agent.tasksCompleted}',
-      style: TextStyle(
-        color: agent.color,
+      style: const TextStyle(
+        color: Colors.white,
         fontSize: 9,
         fontWeight: FontWeight.bold,
       ),
