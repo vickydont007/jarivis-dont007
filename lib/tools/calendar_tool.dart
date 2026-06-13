@@ -1,6 +1,22 @@
 import 'dart:io';
 import 'tool.dart';
 
+Future<bool> _ensureAppRunning(String appName) async {
+  // Check if app is running
+  final checkResult = await Process.run('osascript', [
+    '-e',
+    'tell application "System Events" to (name of processes) contains "$appName"'
+  ]);
+  final isRunning = checkResult.stdout.toString().trim() == 'true';
+  if (isRunning) return true;
+
+  // Launch the app
+  await Process.run('open', ['-a', appName]);
+  // Wait for app to start
+  await Future.delayed(const Duration(seconds: 2));
+  return true;
+}
+
 class CalendarEventsTool extends Tool {
   CalendarEventsTool()
       : super(
@@ -21,9 +37,10 @@ class CalendarEventsTool extends Tool {
     final days = params['days'] as int? ?? 7;
 
     try {
+      await _ensureAppRunning('Calendar');
+
       final script = '''
 tell application "Calendar"
-  activate
   set eventList to {}
   set startDate to current date
   set endDate to startDate + ($days * days)
@@ -124,9 +141,10 @@ class CalendarCreateTool extends Tool {
       final hour = int.parse(timeParts[0]);
       final minute = timeParts.length > 1 ? int.parse(timeParts[1]) : 0;
 
+      await _ensureAppRunning('Calendar');
+
       final script = '''
 tell application "Calendar"
-  activate
   set cal to calendar "Home"
   set evtDate to current date
   set year of evtDate to $year
@@ -146,9 +164,6 @@ end tell
         return ToolResult.success('Event "$title" created for $dateStr at $time');
       }
       final err = result.stderr.toString().trim();
-      if (err.contains('not found') || err.contains('Can\'t continue')) {
-        return ToolResult.error('Calendar app not available. Please open Calendar.app first.');
-      }
       return ToolResult.error('Calendar error: $err');
     } catch (e) {
       return ToolResult.error('Failed to create event: $e');
@@ -180,9 +195,10 @@ class CalendarDeleteTool extends Tool {
     }
 
     try {
+      await _ensureAppRunning('Calendar');
+
       final script = '''
 tell application "Calendar"
-  activate
   set deletedCount to 0
   repeat with cal in calendars
     try

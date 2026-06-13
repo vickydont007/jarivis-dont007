@@ -45,9 +45,11 @@ class ToolExecutor {
     Map<String, dynamic> params, {
     Duration? timeout,
   }) async {
-    final tool = _registry.getTool(toolName);
+    // Sanitize tool name - remove invalid characters
+    final cleanName = _sanitizeToolName(toolName);
+    final tool = _registry.getTool(cleanName);
     if (tool == null) {
-      return ToolResult.error('Tool not found: $toolName');
+      return ToolResult.error('Tool not found: $cleanName');
     }
 
     if (_runningCount >= maxConcurrent) {
@@ -116,6 +118,12 @@ class ToolExecutor {
 
   void clearHistory() {
     _history.clear();
+  }
+
+  String _sanitizeToolName(String name) {
+    // Remove everything after < or | or > or other invalid characters
+    // Keep only alphanumeric, underscore, and hyphen
+    return name.replaceAll(RegExp(r'[<|>].*'), '').replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '');
   }
 
   int get runningCount => _runningCount;

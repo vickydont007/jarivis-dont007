@@ -1,6 +1,19 @@
 import 'dart:io';
 import 'tool.dart';
 
+Future<bool> _ensureAppRunning(String appName) async {
+  final checkResult = await Process.run('osascript', [
+    '-e',
+    'tell application "System Events" to (name of processes) contains "$appName"'
+  ]);
+  final isRunning = checkResult.stdout.toString().trim() == 'true';
+  if (isRunning) return true;
+
+  await Process.run('open', ['-a', appName]);
+  await Future.delayed(const Duration(seconds: 2));
+  return true;
+}
+
 class EmailSendTool extends Tool {
   EmailSendTool()
       : super(
@@ -39,6 +52,8 @@ class EmailSendTool extends Tool {
     }
 
     try {
+      await _ensureAppRunning('Mail');
+
       final script = '''
 tell application "Mail"
   set newMessage to make new outgoing message with properties {subject:"$subject", content:"$body", visible:false}
@@ -51,9 +66,9 @@ end tell
 
       final result = await Process.run('osascript', ['-e', script]);
       if (result.exitCode == 0) {
-        return ToolResult.success('Email sent to $to');
+        return ToolResult.success('Email sent to $to with subject "$subject"');
       }
-      return ToolResult.error(result.stderr.toString());
+      return ToolResult.error('Mail error: ${result.stderr.toString().trim()}');
     } catch (e) {
       return ToolResult.error('Failed to send email: $e');
     }
@@ -80,38 +95,44 @@ class EmailListTool extends Tool {
     final count = params['count'] as int? ?? 5;
 
     try {
+      await _ensureAppRunning('Mail');
+
       final script = '''
 tell application "Mail"
-  set emailList to {}
-  set inbox to mailbox "INBOX" of account 1
-  set messages to messages of inbox
-  repeat with i from 1 to (count of messages)
-    if i > $count then exit repeat
-    set msg to item i of messages
-    set end of emailList to (subject of msg & " ||| " & sender of msg & " ||| " & (date received of msg as string))
+  set msgList to {}
+  set inboxMsgs to messages of inbox
+  set maxCount to (count of inboxMsgs)
+  if maxCount > $count then set maxCount to $count
+  repeat with i from 1 to maxCount
+    set msg to item i of inboxMsgs
+    set end of msgList to (subject of msg) & " ||| " & (sender of msg) & " ||| " & (date received of msg as string) & " ||| " & (read status of msg as string)
   end repeat
   set AppleScript's text item delimiters to "###"
-  return emailList as string
+  if (count of msgList) = 0 then return "NO_EMAILS"
+  return msgList as string
 end tell
 ''';
 
       final result = await Process.run('osascript', ['-e', script]);
       if (result.exitCode == 0) {
         final output = result.stdout.toString().trim();
-        if (output.isEmpty) return ToolResult.success(<dynamic>[]);
+        if (output.isEmpty || output == 'NO_EMAILS') {
+          return ToolResult.success('No emails in inbox.');
+        }
 
-        final emails = output.split('###').map((line) {
+        final emails = output.split('###').where((s) => s.trim().isNotEmpty).map((line) {
           final parts = line.split(' ||| ');
           return {
-            'subject': parts.isNotEmpty ? parts[0] : '',
-            'from': parts.length > 1 ? parts[1] : '',
-            'date': parts.length > 2 ? parts[2] : '',
+            'subject': parts.isNotEmpty ? parts[0].trim() : '',
+            'from': parts.length > 1 ? parts[1].trim() : '',
+            'date': parts.length > 2 ? parts[2].trim() : '',
+            'read': parts.length > 3 ? parts[3].trim() == 'true' : false,
           };
         }).toList();
 
         return ToolResult.success(emails);
       }
-      return ToolResult.error(result.stderr.toString());
+      return ToolResult.error('Mail error: ${result.stderr.toString().trim()}');
     } catch (e) {
       return ToolResult.error('Failed to list emails: $e');
     }
@@ -138,28 +159,37 @@ class EmailReadTool extends Tool {
     final subject = params['subject'] as String?;
 
     if (subject == null) {
-      return ToolResult.error('subject is required to identify the email');
+      return ToolResult.error('subject is required');
     }
 
     try {
+      await _ensureAppRunning('Mail');
+
       final script = '''
 tell application "Mail"
-  set inbox to mailbox "INBOX" of account 1
-  set messages to messages of inbox
-  repeat with msg in messages
-    if subject of msg is "$subject" then
-      return content of msg
+  set inboxMsgs to messages of inbox
+  repeat with msg in inboxMsgs
+    if (subject of msg) contains "$subject" then
+      set msgContent to "From: " & (sender of msg) & "\\n"
+      set msgContent to msgContent & "Date: " & (date received of msg as string) & "\\n"
+      set msgContent to msgContent & "Subject: " & (subject of msg) & "\\n\\n"
+      set msgContent to msgContent & (content of msg)
+      return msgContent
     end if
   end repeat
-  return "Email not found"
+  return "EMAIL_NOT_FOUND"
 end tell
 ''';
 
       final result = await Process.run('osascript', ['-e', script]);
       if (result.exitCode == 0) {
-        return ToolResult.success(result.stdout.toString().trim());
+        final output = result.stdout.toString().trim();
+        if (output == 'EMAIL_NOT_FOUND') {
+          return ToolResult.error('No email found with subject containing "$subject"');
+        }
+        return ToolResult.success(output);
       }
-      return ToolResult.error(result.stderr.toString());
+      return ToolResult.error('Mail error: ${result.stderr.toString().trim()}');
     } catch (e) {
       return ToolResult.error('Failed to read email: $e');
     }
