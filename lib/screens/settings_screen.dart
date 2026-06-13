@@ -27,6 +27,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   String _telegramBotToken = '';
   String _discordBotToken = '';
+  String _facebookAccessToken = '';
+  String _facebookPageId = '';
+  String _instagramAccessToken = '';
+  String _instagramPageId = '';
+  String _whatsappAccessToken = '';
+  String _whatsappPhoneNumberId = '';
+  String _whatsappBusinessAccountId = '';
 
   List<String> _openRouterModels = [];
   bool _isLoadingModels = false;
@@ -62,6 +69,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _defaultCity = prefs.getString('default_city') ?? 'New York';
       _telegramBotToken = prefs.getString('telegram_bot_token') ?? '';
       _discordBotToken = prefs.getString('discord_bot_token') ?? '';
+      _facebookAccessToken = prefs.getString('facebook_access_token') ?? '';
+      _facebookPageId = prefs.getString('facebook_page_id') ?? '';
+      _instagramAccessToken = prefs.getString('instagram_access_token') ?? '';
+      _instagramPageId = prefs.getString('instagram_page_id') ?? '';
+      _whatsappAccessToken = prefs.getString('whatsapp_access_token') ?? '';
+      _whatsappPhoneNumberId = prefs.getString('whatsapp_phone_number_id') ?? '';
+      _whatsappBusinessAccountId = prefs.getString('whatsapp_business_account_id') ?? '';
     });
   }
 
@@ -172,6 +186,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               _buildTelegramTokenField(),
               const SizedBox(height: 16),
               _buildDiscordTokenField(),
+              const SizedBox(height: 16),
+              _buildFacebookFields(),
+              const SizedBox(height: 16),
+              _buildInstagramFields(),
+              const SizedBox(height: 16),
+              _buildWhatsAppFields(),
             ]),
             const SizedBox(height: 20),
             _buildSection('Advanced Features', Icons.auto_awesome, [
@@ -429,6 +449,100 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  Widget _buildFacebookFields() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.facebook, color: Color(0xFF1877F2), size: 20),
+            const SizedBox(width: 8),
+            Text('Facebook', style: TextStyle(color: Colors.grey[300], fontSize: 14, fontWeight: FontWeight.w500)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _buildTextField(
+          'Page Access Token',
+          _facebookAccessToken,
+          (value) => setState(() => _facebookAccessToken = value),
+          isPassword: true,
+          hint: 'EAAxxx...',
+        ),
+        const SizedBox(height: 8),
+        _buildTextField(
+          'Page ID',
+          _facebookPageId,
+          (value) => setState(() => _facebookPageId = value),
+          hint: '123456789',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInstagramFields() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.camera_alt, color: Color(0xFFE4405F), size: 20),
+            const SizedBox(width: 8),
+            Text('Instagram', style: TextStyle(color: Colors.grey[300], fontSize: 14, fontWeight: FontWeight.w500)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _buildTextField(
+          'Access Token',
+          _instagramAccessToken,
+          (value) => setState(() => _instagramAccessToken = value),
+          isPassword: true,
+        ),
+        const SizedBox(height: 8),
+        _buildTextField(
+          'Page ID',
+          _instagramPageId,
+          (value) => setState(() => _instagramPageId = value),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWhatsAppFields() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.chat, color: Color(0xFF25D366), size: 20),
+            const SizedBox(width: 8),
+            Text('WhatsApp Business', style: TextStyle(color: Colors.grey[300], fontSize: 14, fontWeight: FontWeight.w500)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _buildTextField(
+          'Access Token',
+          _whatsappAccessToken,
+          (value) => setState(() => _whatsappAccessToken = value),
+          isPassword: true,
+        ),
+        const SizedBox(height: 8),
+        _buildTextField(
+          'Phone Number ID',
+          _whatsappPhoneNumberId,
+          (value) => setState(() => _whatsappPhoneNumberId = value),
+          hint: '1234567890',
+        ),
+        const SizedBox(height: 8),
+        _buildTextField(
+          'Business Account ID',
+          _whatsappBusinessAccountId,
+          (value) => setState(() => _whatsappBusinessAccountId = value),
+          hint: '123456789',
+        ),
+      ],
+    );
+  }
+
   Widget _buildTextField(
     String label,
     String value,
@@ -655,6 +769,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       modelName: _selectedModel,
     );
 
+    // Setup social media platforms
+    final socialManager = ref.read(appStateProvider).socialManager;
+    if (socialManager != null) {
+      if (_facebookAccessToken.isNotEmpty && _facebookPageId.isNotEmpty) {
+        socialManager.setupFacebook(accessToken: _facebookAccessToken, pageId: _facebookPageId);
+      }
+      if (_instagramAccessToken.isNotEmpty && _instagramPageId.isNotEmpty) {
+        socialManager.setupInstagram(accessToken: _instagramAccessToken, pageId: _instagramPageId);
+      }
+      if (_whatsappAccessToken.isNotEmpty && _whatsappPhoneNumberId.isNotEmpty && _whatsappBusinessAccountId.isNotEmpty) {
+        socialManager.setupWhatsApp(accessToken: _whatsappAccessToken, phoneNumberId: _whatsappPhoneNumberId, businessAccountId: _whatsappBusinessAccountId);
+      }
+    }
+
     setState(() => _isSaving = false);
 
     final appState = ref.read(appStateProvider);
@@ -687,6 +815,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       prefs.remove('default_city'),
       prefs.remove('telegram_bot_token'),
       prefs.remove('discord_bot_token'),
+      prefs.remove('facebook_access_token'),
+      prefs.remove('facebook_page_id'),
+      prefs.remove('instagram_access_token'),
+      prefs.remove('instagram_page_id'),
+      prefs.remove('whatsapp_access_token'),
+      prefs.remove('whatsapp_phone_number_id'),
+      prefs.remove('whatsapp_business_account_id'),
     ]);
 
     setState(() {
@@ -701,6 +836,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _defaultCity = 'New York';
       _telegramBotToken = '';
       _discordBotToken = '';
+      _facebookAccessToken = '';
+      _facebookPageId = '';
+      _instagramAccessToken = '';
+      _instagramPageId = '';
+      _whatsappAccessToken = '';
+      _whatsappPhoneNumberId = '';
+      _whatsappBusinessAccountId = '';
     });
 
     _fetchOpenRouterModels();
