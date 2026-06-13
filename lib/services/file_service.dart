@@ -48,9 +48,69 @@ class FileService {
     return await getAppDirectory();
   }
 
+  // Get accessible directories for sandbox
+  Future<List<String>> getAccessiblePaths() async {
+    final paths = <String>[];
+    final home = Platform.environment['HOME'] ?? '';
+    
+    if (home.isNotEmpty) {
+      // Add user directories
+      paths.add(home);
+      paths.add(p.join(home, 'Desktop'));
+      paths.add(p.join(home, 'Documents'));
+      paths.add(p.join(home, 'Downloads'));
+      paths.add(p.join(home, 'Movies'));
+      paths.add(p.join(home, 'Music'));
+      paths.add(p.join(home, 'Pictures'));
+    }
+    
+    return paths;
+  }
+
+  // Check if path is accessible in sandbox
+  bool isPathAccessible(String path) {
+    final home = Platform.environment['HOME'] ?? '';
+    if (home.isEmpty) return false;
+    
+    // Normalize the path
+    final normalizedPath = p.normalize(path);
+    
+    // Allow access to home directory and subdirectories
+    if (normalizedPath.startsWith(home)) return true;
+    
+    // Allow access to /tmp
+    if (normalizedPath.startsWith('/tmp')) return true;
+    
+    // Allow access to app container
+    if (normalizedPath.contains('com.nextron.ai')) return true;
+    
+    return false;
+  }
+
+  // Get suggested path for user
+  String getSuggestedPath(String requestedPath) {
+    final home = Platform.environment['HOME'] ?? '';
+    if (home.isEmpty) return '/tmp';
+    
+    // If path is under home, use it
+    if (requestedPath.startsWith(home)) return requestedPath;
+    
+    // Otherwise suggest Documents folder
+    return p.join(home, 'Documents');
+  }
+
   // List files in directory
   Future<List<FileInfo>> listFiles(String path) async {
-    final directory = Directory(path);
+    // Normalize the path
+    final normalizedPath = p.normalize(path);
+    
+    // Check if path is accessible
+    if (!isPathAccessible(normalizedPath)) {
+      final suggested = getSuggestedPath(normalizedPath);
+      throw Exception('Cannot access: $normalizedPath\nTry: $suggested');
+    }
+    
+    final directory = Directory(normalizedPath);
     final List<FileInfo> files = [];
 
     if (await directory.exists()) {

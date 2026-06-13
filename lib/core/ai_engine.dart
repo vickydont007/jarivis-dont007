@@ -279,6 +279,23 @@ class AIEngine {
       }
     }
 
+    // If we exit the loop, generate a summary response
+    if (allToolResults.isNotEmpty) {
+      final summary = StringBuffer('I executed ${allToolResults.length} tool(s):\n');
+      for (final result in allToolResults) {
+        final name = result['name'];
+        final success = result['success'] == true ? '✅' : '❌';
+        summary.writeln('$success $name');
+      }
+      return {
+        'success': true,
+        'content': summary.toString(),
+        'toolCalls': allToolCalls,
+        'toolResults': allToolResults,
+        'iterations': maxIterations,
+      };
+    }
+
     return {
       'success': false,
       'error': 'Max tool call iterations reached',
