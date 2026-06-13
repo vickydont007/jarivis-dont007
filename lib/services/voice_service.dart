@@ -134,10 +134,14 @@ class VoiceService {
   Future<bool> requestMicPermission() async {
     _micPermission = await _requestPermission();
     if (_micPermission == 'authorized') {
+      // Force full re-init
       _isInitialized = false;
       _sttAvailable = false;
-      await initialize();
-      return true;
+      _speechToText.cancel();
+      await Future.delayed(const Duration(milliseconds: 500));
+      final result = await initialize();
+      print('Re-init after permission: sttAvailable=$_sttAvailable');
+      return result;
     }
     return false;
   }

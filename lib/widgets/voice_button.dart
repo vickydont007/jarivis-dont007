@@ -59,15 +59,16 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
       return;
     }
 
+    // If STT not available, try re-init once
     if (!voiceService.isSTTAvailable) {
-      // Try to re-initialize (which will trigger permission request)
       final granted = await voiceService.requestMicPermission();
-      if (!granted) {
+      if (!granted || !voiceService.isSTTAvailable) {
         _showSettingsDialog();
         return;
       }
     }
 
+    // STT is available - toggle listening
     if (_isListening) {
       setState(() => _isListening = false);
       _animationController.stop();
