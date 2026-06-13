@@ -1,4 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:sqflite/sqflite.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 
 enum ScheduleType {
@@ -79,109 +83,140 @@ class Schedule {
       'scheduled_at': scheduledAt?.toIso8601String(),
       'completed_at': completedAt?.toIso8601String(),
       'cron_expression': cronExpression,
-      'payload': payload,
+      'payload': jsonEncode(payload),
       'repeat_count': repeatCount,
       'current_repeat': currentRepeat,
     };
   }
+
+  factory Schedule.fromMap(Map<String, dynamic> map) {
+    return Schedule(
+      id: map['id'],
+      name: map['name'],
+      description: map['description'],
+      type: ScheduleType.values.firstWhere((t) => t.name == map['type']),
+      status: ScheduleStatus.values.firstWhere((s) => s.name == map['status']),
+      createdAt: DateTime.parse(map['created_at']),
+      scheduledAt: map['scheduled_at'] != null ? DateTime.parse(map['scheduled_at']) : null,
+      completedAt: map['completed_at'] != null ? DateTime.parse(map['completed_at']) : null,
+      cronExpression: map['cron_expression'],
+      payload: jsonDecode(map['payload'] ?? '{}'),
+      repeatCount: map['repeat_count'] ?? 1,
+      currentRepeat: map['current_repeat'] ?? 0,
+    );
+  }
+
+  Schedule copyWith({
+    ScheduleStatus? status,
+    DateTime? completedAt,
+    int? currentRepeat,
+  }) {
+    return Schedule(
+      id: id,
+      name: name,
+      description: description,
+      type: type,
+      status: status ?? this.status,
+      createdAt: createdAt,
+      scheduledAt: scheduledAt,
+      completedAt: completedAt ?? this.completedAt,
+      cronExpression: cronExpression,
+      payload: payload,
+      repeatCount: repeatCount,
+      currentRepeat: currentRepeat ?? this.currentRepeat,
+    );
+  }
 }
 
 class SchedulerService {
-  final List<Schedule> _schedules = [];
+  static Database? _database;
   final Map<String, Timer> _timers = {};
   final StreamController<Schedule> _scheduleController =
       StreamController<Schedule>.broadcast();
 
   Stream<Schedule> get scheduleStream => _scheduleController.stream;
-  List<Schedule> get schedules => List.unmodifiable(_schedules);
 
   SchedulerService() {
     _startScheduler();
   }
 
+  Future<Database> get database async {
+    if (_database != null) return _database!;
+    _database = await _initDatabase();
+    return _database!;
+  }
+
+  Future<Database> _initDatabase() async {
+    final directory = await getApplicationDocumentsDirectory();
+    final path = join(directory.path, 'nextron_scheduler.db');
+
+    return await openDatabase(
+      path,
+      version: 1,
+      onCreate: (db, version) async {
+        await db.execute('''
+          CREATE TABLE schedules(
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            scheduled_at TEXT,
+            completed_at TEXT,
+            cron_expression TEXT,
+            payload TEXT DEFAULT '{}',
+            repeat_count INTEGER DEFAULT 1,
+            current_repeat INTEGER DEFAULT 0
+          )
+        ''');
+      },
+    );
+  }
+
   void _startScheduler() {
-    // Check for due schedules every minute
     Timer.periodic(const Duration(minutes: 1), (timer) {
       _checkDueSchedules();
     });
   }
 
-  void _checkDueSchedules() {
+  Future<void> _checkDueSchedules() async {
     final now = DateTime.now();
+    final schedules = await getAllSchedules();
 
-    for (final schedule in _schedules) {
+    for (final schedule in schedules) {
       if (schedule.status == ScheduleStatus.pending &&
           schedule.scheduledAt != null &&
           schedule.scheduledAt!.isBefore(now)) {
-        _executeSchedule(schedule);
+        await _executeSchedule(schedule);
       }
     }
   }
 
   Future<void> _executeSchedule(Schedule schedule) async {
-    // Update status
-    final runningSchedule = Schedule(
-      id: schedule.id,
-      name: schedule.name,
-      description: schedule.description,
-      type: schedule.type,
-      status: ScheduleStatus.running,
-      createdAt: schedule.createdAt,
-      scheduledAt: schedule.scheduledAt,
-      cronExpression: schedule.cronExpression,
-      payload: schedule.payload,
-      repeatCount: schedule.repeatCount,
-      currentRepeat: schedule.currentRepeat,
-    );
-
-    _updateSchedule(runningSchedule);
+    final runningSchedule = schedule.copyWith(status: ScheduleStatus.running);
+    await _updateSchedule(runningSchedule);
     _scheduleController.add(runningSchedule);
 
     try {
-      // Execute the scheduled task
       await _executeTask(schedule);
-
-      // Update status to completed
-      final completedSchedule = Schedule(
-        id: schedule.id,
-        name: schedule.name,
-        description: schedule.description,
-        type: schedule.type,
+      final completedSchedule = schedule.copyWith(
         status: ScheduleStatus.completed,
-        createdAt: schedule.createdAt,
-        scheduledAt: schedule.scheduledAt,
         completedAt: DateTime.now(),
-        cronExpression: schedule.cronExpression,
-        payload: schedule.payload,
-        repeatCount: schedule.repeatCount,
         currentRepeat: schedule.currentRepeat + 1,
       );
-
-      _updateSchedule(completedSchedule);
+      await _updateSchedule(completedSchedule);
       _scheduleController.add(completedSchedule);
 
-      // Schedule next repeat if needed
       if (completedSchedule.currentRepeat < completedSchedule.repeatCount) {
-        _scheduleNextRepeat(completedSchedule);
+        await _scheduleNextRepeat(completedSchedule);
       }
     } catch (e) {
-      // Update status to failed
-      final failedSchedule = Schedule(
-        id: schedule.id,
-        name: schedule.name,
-        description: schedule.description,
-        type: schedule.type,
+      final failedSchedule = schedule.copyWith(
         status: ScheduleStatus.failed,
-        createdAt: schedule.createdAt,
-        scheduledAt: schedule.scheduledAt,
         completedAt: DateTime.now(),
-        cronExpression: schedule.cronExpression,
-        payload: schedule.payload,
-        repeatCount: schedule.repeatCount,
-        currentRepeat: schedule.currentRepeat,
       );
-
-      _updateSchedule(failedSchedule);
+      await _updateSchedule(failedSchedule);
       _scheduleController.add(failedSchedule);
     }
   }
@@ -192,24 +227,20 @@ class SchedulerService {
 
     switch (action) {
       case 'notification':
-        // TODO: Show notification
         break;
       case 'system':
-        // Execute system command
         final command = params?['command'] as String?;
         if (command != null) {
           // System commands handled elsewhere
         }
         break;
       case 'ai':
-        // Execute AI task
         final prompt = params?['prompt'] as String?;
         if (prompt != null) {
           // AI task handled elsewhere
         }
         break;
       case 'file':
-        // Execute file operation
         final operation = params?['operation'] as String?;
         final path = params?['path'] as String?;
         if (operation != null && path != null) {
@@ -217,12 +248,11 @@ class SchedulerService {
         }
         break;
       default:
-        // Default task execution
         break;
     }
   }
 
-  void _scheduleNextRepeat(Schedule schedule) {
+  Future<void> _scheduleNextRepeat(Schedule schedule) async {
     DateTime? nextScheduledAt;
 
     switch (schedule.type) {
@@ -240,8 +270,7 @@ class SchedulerService {
     }
 
     if (nextScheduledAt != null) {
-      final nextSchedule = Schedule(
-        id: const Uuid().v4(),
+      final nextSchedule = Schedule.create(
         name: schedule.name,
         description: schedule.description,
         type: schedule.type,
@@ -249,29 +278,26 @@ class SchedulerService {
         cronExpression: schedule.cronExpression,
         payload: schedule.payload,
         repeatCount: schedule.repeatCount,
-        currentRepeat: schedule.currentRepeat,
-        createdAt: DateTime.now(),
       );
-
-      _schedules.add(nextSchedule);
-      _scheduleController.add(nextSchedule);
+      await addSchedule(nextSchedule);
     }
   }
 
-  void _updateSchedule(Schedule schedule) {
-    final index = _schedules.indexWhere((s) => s.id == schedule.id);
-    if (index != -1) {
-      _schedules[index] = schedule;
-    }
+  Future<void> _updateSchedule(Schedule schedule) async {
+    final db = await database;
+    await db.update(
+      'schedules',
+      schedule.toMap(),
+      where: 'id = ?',
+      whereArgs: [schedule.id],
+    );
   }
 
-  // Create schedule from natural language
   Schedule createFromNaturalLanguage(String input) {
     final lowerInput = input.toLowerCase();
     ScheduleType type = ScheduleType.once;
     DateTime? scheduledAt;
 
-    // Parse schedule type
     if (lowerInput.contains('daily') || lowerInput.contains('every day')) {
       type = ScheduleType.daily;
       scheduledAt = DateTime.now().add(const Duration(hours: 1));
@@ -282,7 +308,6 @@ class SchedulerService {
       type = ScheduleType.monthly;
       scheduledAt = DateTime.now().add(const Duration(days: 30));
     } else {
-      // Parse specific time
       final timeMatch = RegExp(r'at (\d{1,2}):?(\d{0,2})').firstMatch(lowerInput);
       if (timeMatch != null) {
         final hour = int.parse(timeMatch.group(1)!);
@@ -303,12 +328,11 @@ class SchedulerService {
     );
   }
 
-  // Add schedule
-  void addSchedule(Schedule schedule) {
-    _schedules.add(schedule);
+  Future<void> addSchedule(Schedule schedule) async {
+    final db = await database;
+    await db.insert('schedules', schedule.toMap());
     _scheduleController.add(schedule);
 
-    // Set timer if scheduled
     if (schedule.scheduledAt != null) {
       final duration = schedule.scheduledAt!.difference(DateTime.now());
       if (duration.isNegative) return;
@@ -319,44 +343,63 @@ class SchedulerService {
     }
   }
 
-  // Cancel schedule
-  void cancelSchedule(String scheduleId) {
+  Future<void> cancelSchedule(String scheduleId) async {
     _timers[scheduleId]?.cancel();
     _timers.remove(scheduleId);
 
-    final index = _schedules.indexWhere((s) => s.id == scheduleId);
-    if (index != -1) {
-      final cancelledSchedule = Schedule(
-        id: _schedules[index].id,
-        name: _schedules[index].name,
-        description: _schedules[index].description,
-        type: _schedules[index].type,
-        status: ScheduleStatus.cancelled,
-        createdAt: _schedules[index].createdAt,
-        scheduledAt: _schedules[index].scheduledAt,
-        cronExpression: _schedules[index].cronExpression,
-        payload: _schedules[index].payload,
-        repeatCount: _schedules[index].repeatCount,
-        currentRepeat: _schedules[index].currentRepeat,
-      );
+    final db = await database;
+    final results = await db.query(
+      'schedules',
+      where: 'id = ?',
+      whereArgs: [scheduleId],
+    );
 
-      _schedules[index] = cancelledSchedule;
+    if (results.isNotEmpty) {
+      final schedule = Schedule.fromMap(results.first);
+      final cancelledSchedule = schedule.copyWith(status: ScheduleStatus.cancelled);
+      await _updateSchedule(cancelledSchedule);
       _scheduleController.add(cancelledSchedule);
     }
   }
 
-  // Get pending schedules
-  List<Schedule> getPendingSchedules() {
-    return _schedules
-        .where((s) => s.status == ScheduleStatus.pending)
-        .toList();
+  Future<List<Schedule>> getAllSchedules() async {
+    final db = await database;
+    final results = await db.query('schedules', orderBy: 'created_at DESC');
+    return results.map((map) => Schedule.fromMap(map)).toList();
   }
 
-  // Get completed schedules
-  List<Schedule> getCompletedSchedules() {
-    return _schedules
-        .where((s) => s.status == ScheduleStatus.completed)
-        .toList();
+  Future<List<Schedule>> getPendingSchedules() async {
+    final db = await database;
+    final results = await db.query(
+      'schedules',
+      where: 'status = ?',
+      whereArgs: [ScheduleStatus.pending.name],
+      orderBy: 'scheduled_at ASC',
+    );
+    return results.map((map) => Schedule.fromMap(map)).toList();
+  }
+
+  Future<List<Schedule>> getCompletedSchedules() async {
+    final db = await database;
+    final results = await db.query(
+      'schedules',
+      where: 'status = ?',
+      whereArgs: [ScheduleStatus.completed.name],
+      orderBy: 'completed_at DESC',
+    );
+    return results.map((map) => Schedule.fromMap(map)).toList();
+  }
+
+  Future<void> deleteSchedule(String scheduleId) async {
+    _timers[scheduleId]?.cancel();
+    _timers.remove(scheduleId);
+
+    final db = await database;
+    await db.delete(
+      'schedules',
+      where: 'id = ?',
+      whereArgs: [scheduleId],
+    );
   }
 
   void dispose() {

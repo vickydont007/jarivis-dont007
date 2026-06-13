@@ -1,4 +1,8 @@
 import 'dart:async';
+import 'package:sqflite/sqflite.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart';
+import 'package:uuid/uuid.dart';
 
 class APIUsageRecord {
   final String id;
@@ -23,29 +27,31 @@ class APIUsageRecord {
     this.requestId,
   });
 
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'provider': provider,
-    'model': model,
-    'prompt_tokens': promptTokens,
-    'completion_tokens': completionTokens,
-    'total_tokens': totalTokens,
-    'cost': cost,
-    'timestamp': timestamp.toIso8601String(),
-    'request_id': requestId,
-  };
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'provider': provider,
+      'model': model,
+      'prompt_tokens': promptTokens,
+      'completion_tokens': completionTokens,
+      'total_tokens': totalTokens,
+      'cost': cost,
+      'timestamp': timestamp.toIso8601String(),
+      'request_id': requestId,
+    };
+  }
 
-  factory APIUsageRecord.fromJson(Map<String, dynamic> json) {
+  factory APIUsageRecord.fromMap(Map<String, dynamic> map) {
     return APIUsageRecord(
-      id: json['id'],
-      provider: json['provider'],
-      model: json['model'],
-      promptTokens: json['prompt_tokens'] ?? 0,
-      completionTokens: json['completion_tokens'] ?? 0,
-      totalTokens: json['total_tokens'] ?? 0,
-      cost: (json['cost'] ?? 0).toDouble(),
-      timestamp: DateTime.parse(json['timestamp']),
-      requestId: json['request_id'],
+      id: map['id'],
+      provider: map['provider'],
+      model: map['model'],
+      promptTokens: map['prompt_tokens'] ?? 0,
+      completionTokens: map['completion_tokens'] ?? 0,
+      totalTokens: map['total_tokens'] ?? 0,
+      cost: (map['cost'] ?? 0).toDouble(),
+      timestamp: DateTime.parse(map['timestamp']),
+      requestId: map['request_id'],
     );
   }
 }
@@ -66,21 +72,13 @@ class CostSummary {
     required this.costByModel,
     required this.tokensByProvider,
   });
-
-  Map<String, dynamic> toJson() => {
-    'total_cost': totalCost,
-    'total_tokens': totalTokens,
-    'total_requests': totalRequests,
-    'cost_by_provider': costByProvider,
-    'cost_by_model': costByModel,
-    'tokens_by_provider': tokensByProvider,
-  };
 }
 
 class CostTracker {
-  final List<APIUsageRecord> _records = [];
+  static Database? _database;
   final StreamController<APIUsageRecord> _recordController =
       StreamController<APIUsageRecord>.broadcast();
+
   final Map<String, double> _modelPricing = {
     'openai/gpt-4': 0.03,
     'openai/gpt-4-turbo': 0.01,
@@ -93,20 +91,64 @@ class CostTracker {
   };
 
   Stream<APIUsageRecord> get recordStream => _recordController.stream;
-  List<APIUsageRecord> get records => List.unmodifiable(_records);
 
-  void recordUsage({
+  CostTracker();
+
+  Future<Database> get database async {
+    if (_database != null) return _database!;
+    _database = await _initDatabase();
+    return _database!;
+  }
+
+  Future<Database> _initDatabase() async {
+    final directory = await getApplicationDocumentsDirectory();
+    final path = join(directory.path, 'nextron_cost.db');
+
+    return await openDatabase(
+      path,
+      version: 1,
+      onCreate: (db, version) async {
+        await db.execute('''
+          CREATE TABLE api_usage(
+            id TEXT PRIMARY KEY,
+            provider TEXT NOT NULL,
+            model TEXT NOT NULL,
+            prompt_tokens INTEGER DEFAULT 0,
+            completion_tokens INTEGER DEFAULT 0,
+            total_tokens INTEGER DEFAULT 0,
+            cost REAL DEFAULT 0.0,
+            timestamp TEXT NOT NULL,
+            request_id TEXT
+          )
+        ''');
+
+        await db.execute('''
+          CREATE INDEX idx_provider ON api_usage(provider)
+        ''');
+
+        await db.execute('''
+          CREATE INDEX idx_model ON api_usage(model)
+        ''');
+
+        await db.execute('''
+          CREATE INDEX idx_timestamp ON api_usage(timestamp)
+        ''');
+      },
+    );
+  }
+
+  Future<void> recordUsage({
     required String provider,
     required String model,
     required int promptTokens,
     required int completionTokens,
     String? requestId,
-  }) {
+  }) async {
     final totalTokens = promptTokens + completionTokens;
     final cost = _calculateCost(model, promptTokens, completionTokens);
 
     final record = APIUsageRecord(
-      id: 'usage_${DateTime.now().millisecondsSinceEpoch}',
+      id: const Uuid().v4(),
       provider: provider,
       model: model,
       promptTokens: promptTokens,
@@ -117,7 +159,8 @@ class CostTracker {
       requestId: requestId,
     );
 
-    _records.add(record);
+    final db = await database;
+    await db.insert('api_usage', record.toMap());
     _recordController.add(record);
   }
 
@@ -130,14 +173,22 @@ class CostTracker {
     _modelPricing[model] = pricePer1kTokens;
   }
 
-  CostSummary getSummary({Duration? period}) {
-    final cutoff = period != null
-        ? DateTime.now().subtract(period)
-        : DateTime(2020);
+  Future<CostSummary> getSummary({Duration? period}) async {
+    final db = await database;
+    String? whereClause;
+    List<dynamic>? whereArgs;
 
-    final filteredRecords = _records
-        .where((r) => r.timestamp.isAfter(cutoff))
-        .toList();
+    if (period != null) {
+      final cutoff = DateTime.now().subtract(period);
+      whereClause = 'timestamp >= ?';
+      whereArgs = [cutoff.toIso8601String()];
+    }
+
+    final results = await db.query(
+      'api_usage',
+      where: whereClause,
+      whereArgs: whereArgs,
+    );
 
     double totalCost = 0;
     int totalTokens = 0;
@@ -145,7 +196,8 @@ class CostTracker {
     final costByModel = <String, double>{};
     final tokensByProvider = <String, int>{};
 
-    for (final record in filteredRecords) {
+    for (final map in results) {
+      final record = APIUsageRecord.fromMap(map);
       totalCost += record.cost;
       totalTokens += record.totalTokens;
 
@@ -160,32 +212,37 @@ class CostTracker {
     return CostSummary(
       totalCost: totalCost,
       totalTokens: totalTokens,
-      totalRequests: filteredRecords.length,
+      totalRequests: results.length,
       costByProvider: costByProvider,
       costByModel: costByModel,
       tokensByProvider: tokensByProvider,
     );
   }
 
-  CostSummary getTodaySummary() {
+  Future<CostSummary> getTodaySummary() async {
     return getSummary(period: const Duration(days: 1));
   }
 
-  CostSummary getWeekSummary() {
+  Future<CostSummary> getWeekSummary() async {
     return getSummary(period: const Duration(days: 7));
   }
 
-  CostSummary getMonthSummary() {
+  Future<CostSummary> getMonthSummary() async {
     return getSummary(period: const Duration(days: 30));
   }
 
-  List<APIUsageRecord> getRecentRecords({int limit = 20}) {
-    final sorted = List<APIUsageRecord>.from(_records)
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-    return sorted.take(limit).toList();
+  Future<List<APIUsageRecord>> getRecentRecords({int limit = 20}) async {
+    final db = await database;
+    final results = await db.query(
+      'api_usage',
+      orderBy: 'timestamp DESC',
+      limit: limit,
+    );
+    return results.map((map) => APIUsageRecord.fromMap(map)).toList();
   }
 
-  Map<String, double> getDailyCosts({int days = 7}) {
+  Future<Map<String, double>> getDailyCosts({int days = 7}) async {
+    final db = await database;
     final dailyCosts = <String, double>{};
     final now = DateTime.now();
 
@@ -195,7 +252,9 @@ class CostTracker {
       dailyCosts[dateKey] = 0;
     }
 
-    for (final record in _records) {
+    final results = await db.query('api_usage');
+    for (final map in results) {
+      final record = APIUsageRecord.fromMap(map);
       final dateKey = '${record.timestamp.year}-${record.timestamp.month.toString().padLeft(2, '0')}-${record.timestamp.day.toString().padLeft(2, '0')}';
       if (dailyCosts.containsKey(dateKey)) {
         dailyCosts[dateKey] = dailyCosts[dateKey]! + record.cost;
@@ -205,7 +264,8 @@ class CostTracker {
     return dailyCosts;
   }
 
-  Map<String, int> getDailyTokens({int days = 7}) {
+  Future<Map<String, int>> getDailyTokens({int days = 7}) async {
+    final db = await database;
     final dailyTokens = <String, int>{};
     final now = DateTime.now();
 
@@ -215,7 +275,9 @@ class CostTracker {
       dailyTokens[dateKey] = 0;
     }
 
-    for (final record in _records) {
+    final results = await db.query('api_usage');
+    for (final map in results) {
+      final record = APIUsageRecord.fromMap(map);
       final dateKey = '${record.timestamp.year}-${record.timestamp.month.toString().padLeft(2, '0')}-${record.timestamp.day.toString().padLeft(2, '0')}';
       if (dailyTokens.containsKey(dateKey)) {
         dailyTokens[dateKey] = dailyTokens[dateKey]! + record.totalTokens;
@@ -225,8 +287,9 @@ class CostTracker {
     return dailyTokens;
   }
 
-  void clear() {
-    _records.clear();
+  Future<void> clear() async {
+    final db = await database;
+    await db.delete('api_usage');
   }
 
   void dispose() {

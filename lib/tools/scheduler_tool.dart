@@ -110,11 +110,11 @@ class SchedulerListTool extends Tool {
     try {
       List<Schedule> schedules;
       if (status == 'pending') {
-        schedules = _service.getPendingSchedules();
+        schedules = await _service.getPendingSchedules();
       } else if (status == 'completed') {
-        schedules = _service.getCompletedSchedules();
+        schedules = await _service.getCompletedSchedules();
       } else {
-        schedules = _service.schedules;
+        schedules = await _service.getAllSchedules();
       }
       final data = schedules.map((s) => s.toMap()).toList();
       return ToolResult.success(data, metadata: {'count': data.length});

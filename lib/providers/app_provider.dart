@@ -2,6 +2,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/ai_engine.dart';
 import '../core/memory_system.dart';
 import '../core/agent_network.dart';
+import '../core/context_memory.dart';
+import '../core/app_state_persistence.dart';
+import '../core/screen_context.dart';
+import '../core/cross_app_bridge.dart';
+import '../core/predictive_automation.dart';
+import '../core/screen_recording.dart';
+import '../core/meeting_assistant.dart';
+import '../core/notification_intelligence.dart';
+import '../core/file_converter.dart';
 import '../services/scheduler_service.dart';
 import '../services/voice_service.dart';
 import '../social/social_manager.dart';
@@ -18,6 +27,15 @@ class AppState {
   final SchedulerService? scheduler;
   final VoiceService? voiceService;
   final SocialManager? socialManager;
+  final ContextMemory? contextMemory;
+  final AppStatePersistence? persistence;
+  final ScreenContext? screenContext;
+  final CrossAppBridge? crossAppBridge;
+  final PredictiveAutomation? predictiveAutomation;
+  final ScreenRecording? screenRecording;
+  final MeetingAssistant? meetingAssistant;
+  final NotificationIntelligence? notificationIntelligence;
+  final FileConverter? fileConverter;
 
   AppState({
     this.aiEngine,
@@ -30,6 +48,15 @@ class AppState {
     this.scheduler,
     this.voiceService,
     this.socialManager,
+    this.contextMemory,
+    this.persistence,
+    this.screenContext,
+    this.crossAppBridge,
+    this.predictiveAutomation,
+    this.screenRecording,
+    this.meetingAssistant,
+    this.notificationIntelligence,
+    this.fileConverter,
   });
 
   AppState copyWith({
@@ -43,6 +70,15 @@ class AppState {
     SchedulerService? scheduler,
     VoiceService? voiceService,
     SocialManager? socialManager,
+    ContextMemory? contextMemory,
+    AppStatePersistence? persistence,
+    ScreenContext? screenContext,
+    CrossAppBridge? crossAppBridge,
+    PredictiveAutomation? predictiveAutomation,
+    ScreenRecording? screenRecording,
+    MeetingAssistant? meetingAssistant,
+    NotificationIntelligence? notificationIntelligence,
+    FileConverter? fileConverter,
   }) {
     return AppState(
       aiEngine: aiEngine ?? this.aiEngine,
@@ -55,6 +91,15 @@ class AppState {
       scheduler: scheduler ?? this.scheduler,
       voiceService: voiceService ?? this.voiceService,
       socialManager: socialManager ?? this.socialManager,
+      contextMemory: contextMemory ?? this.contextMemory,
+      persistence: persistence ?? this.persistence,
+      screenContext: screenContext ?? this.screenContext,
+      crossAppBridge: crossAppBridge ?? this.crossAppBridge,
+      predictiveAutomation: predictiveAutomation ?? this.predictiveAutomation,
+      screenRecording: screenRecording ?? this.screenRecording,
+      meetingAssistant: meetingAssistant ?? this.meetingAssistant,
+      notificationIntelligence: notificationIntelligence ?? this.notificationIntelligence,
+      fileConverter: fileConverter ?? this.fileConverter,
     );
   }
 }
@@ -67,6 +112,15 @@ class AppStateNotifier extends StateNotifier<AppState> {
   SchedulerService? _scheduler;
   VoiceService? _voiceService;
   SocialManager? _socialManager;
+  ContextMemory? _contextMemory;
+  AppStatePersistence? _persistence;
+  ScreenContext? _screenContext;
+  CrossAppBridge? _crossAppBridge;
+  PredictiveAutomation? _predictiveAutomation;
+  ScreenRecording? _screenRecording;
+  MeetingAssistant? _meetingAssistant;
+  NotificationIntelligence? _notificationIntelligence;
+  FileConverter? _fileConverter;
 
   AppStateNotifier() : super(AppState()) {
     _memory = MemorySystem();
@@ -74,11 +128,28 @@ class AppStateNotifier extends StateNotifier<AppState> {
     _scheduler = SchedulerService();
     _voiceService = VoiceService();
     _socialManager = SocialManager();
+    _contextMemory = ContextMemory();
+    _persistence = AppStatePersistence();
+    _screenContext = ScreenContext();
+    _crossAppBridge = CrossAppBridge();
+    _predictiveAutomation = PredictiveAutomation();
+    _screenRecording = ScreenRecording();
+    _meetingAssistant = MeetingAssistant();
+    _notificationIntelligence = NotificationIntelligence();
+    _fileConverter = FileConverter();
 
     _toolManager = ToolManager(
       memory: _memory!,
       network: _agentNetwork!,
       scheduler: _scheduler!,
+      contextMemory: _contextMemory!,
+      screenContext: _screenContext!,
+      crossAppBridge: _crossAppBridge!,
+      predictiveAutomation: _predictiveAutomation!,
+      screenRecording: _screenRecording!,
+      meetingAssistant: _meetingAssistant!,
+      notificationIntelligence: _notificationIntelligence!,
+      fileConverter: _fileConverter!,
     );
     _toolManager!.initialize();
 
@@ -91,7 +162,50 @@ class AppStateNotifier extends StateNotifier<AppState> {
       scheduler: _scheduler,
       voiceService: _voiceService,
       socialManager: _socialManager,
+      contextMemory: _contextMemory,
+      persistence: _persistence,
+      screenContext: _screenContext,
+      crossAppBridge: _crossAppBridge,
+      predictiveAutomation: _predictiveAutomation,
+      screenRecording: _screenRecording,
+      meetingAssistant: _meetingAssistant,
+      notificationIntelligence: _notificationIntelligence,
+      fileConverter: _fileConverter,
     );
+
+    _loadSavedState();
+  }
+
+  Future<void> _loadSavedState() async {
+    try {
+      final savedProvider = await _persistence!.loadSetting<String>('provider');
+      final savedApiKey = await _persistence!.loadSetting<String>('apiKey');
+      final savedModel = await _persistence!.loadSetting<String>('selectedModel');
+
+      if (savedProvider != null && savedApiKey != null && savedApiKey.isNotEmpty) {
+        final provider = AIProvider.values.firstWhere(
+          (p) => p.name == savedProvider,
+          orElse: () => AIProvider.openrouter,
+        );
+        await initializeAI(
+          provider: provider,
+          apiKey: savedApiKey,
+          modelName: savedModel,
+        );
+      }
+    } catch (e) {
+      print('Failed to load saved state: $e');
+    }
+  }
+
+  Future<void> saveState() async {
+    try {
+      await _persistence!.saveSetting('provider', state.provider.name);
+      await _persistence!.saveSetting('apiKey', state.apiKey);
+      await _persistence!.saveSetting('isConnected', state.isConnected);
+    } catch (e) {
+      print('Failed to save state: $e');
+    }
   }
 
   Future<void> initializeAI({
@@ -115,6 +229,11 @@ class AppStateNotifier extends StateNotifier<AppState> {
         provider: provider,
         apiKey: apiKey,
       );
+      await _persistence!.saveSetting('provider', provider.name);
+      await _persistence!.saveSetting('apiKey', apiKey);
+      if (modelName != null) {
+        await _persistence!.saveSetting('selectedModel', modelName);
+      }
     } catch (e) {
       print('Failed to connect to AI: $e');
       state = state.copyWith(
@@ -214,6 +333,14 @@ class AppStateNotifier extends StateNotifier<AppState> {
     _toolManager?.dispose();
     _voiceService?.dispose();
     _socialManager?.dispose();
+    _contextMemory?.dispose();
+    _persistence?.dispose();
+    _screenContext?.dispose();
+    _crossAppBridge?.dispose();
+    _predictiveAutomation?.dispose();
+    _screenRecording?.dispose();
+    _meetingAssistant?.dispose();
+    _notificationIntelligence?.dispose();
     super.dispose();
   }
 }

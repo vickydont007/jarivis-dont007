@@ -272,42 +272,47 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget _buildCostBreakdown() {
     final appState = ref.read(appStateProvider);
     final costTracker = appState.toolManager?.costTracker;
-    final summary = costTracker?.getTodaySummary();
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF161B22),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
+    return FutureBuilder(
+      future: costTracker?.getTodaySummary(),
+      builder: (context, snapshot) {
+        final summary = snapshot.data;
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF161B22),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.attach_money, color: Color(0xFF4CAF50), size: 20),
-              SizedBox(width: 8),
-              Text(
-                'Today\'s Usage',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+              const Row(
+                children: [
+                  Icon(Icons.attach_money, color: Color(0xFF4CAF50), size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Today\'s Usage',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildCostMetric('Total Cost', '\$${(summary?.totalCost ?? 0).toStringAsFixed(4)}'),
+                  _buildCostMetric('Total Tokens', '${summary?.totalTokens ?? 0}'),
+                  _buildCostMetric('Requests', '${summary?.totalRequests ?? 0}'),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildCostMetric('Total Cost', '\$${(summary?.totalCost ?? 0).toStringAsFixed(4)}'),
-              _buildCostMetric('Total Tokens', '${summary?.totalTokens ?? 0}'),
-              _buildCostMetric('Requests', '${summary?.totalRequests ?? 0}'),
-            ],
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 

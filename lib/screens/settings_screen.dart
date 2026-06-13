@@ -173,6 +173,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 16),
               _buildDiscordTokenField(),
             ]),
+            const SizedBox(height: 20),
+            _buildSection('Advanced Features', Icons.auto_awesome, [
+              _buildFeatureInfo('Screen Context', 'Capture and analyze screen content'),
+              const SizedBox(height: 12),
+              _buildFeatureInfo('Cross-App Bridge', 'Interact with other applications'),
+              const SizedBox(height: 12),
+              _buildFeatureInfo('Predictive Automation', 'Learn and automate workflows'),
+              const SizedBox(height: 12),
+              _buildFeatureInfo('Screen Recording', 'Record screen activity'),
+              const SizedBox(height: 12),
+              _buildFeatureInfo('Meeting Assistant', 'Take notes and manage meetings'),
+              const SizedBox(height: 12),
+              _buildFeatureInfo('Notification Intelligence', 'Smart notification management'),
+              const SizedBox(height: 12),
+              _buildFeatureInfo('File Converter', 'Convert files between formats'),
+            ]),
             const SizedBox(height: 28),
             _buildSaveButton(),
             const SizedBox(height: 12),
@@ -243,6 +259,45 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SizedBox(height: 20),
           ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeatureInfo(String title, String description) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D1117),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF30363D)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.check_circle, color: const Color(0xFF4CAF50), size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  description,
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
