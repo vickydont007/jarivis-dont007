@@ -1,21 +1,22 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import '../services/voice_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/app_provider.dart';
 
-class VoiceButton extends StatefulWidget {
+class VoiceButton extends ConsumerStatefulWidget {
   final Function(String)? onTranscription;
 
   const VoiceButton({super.key, this.onTranscription});
 
   @override
-  State<VoiceButton> createState() => _VoiceButtonState();
+  ConsumerState<VoiceButton> createState() => _VoiceButtonState();
 }
 
-class _VoiceButtonState extends State<VoiceButton>
+class _VoiceButtonState extends ConsumerState<VoiceButton>
     with SingleTickerProviderStateMixin {
   bool _isListening = false;
   late AnimationController _animationController;
   late Animation<double> _animation;
-  final VoiceService _voiceService = VoiceService();
 
   @override
   void initState() {
@@ -27,30 +28,41 @@ class _VoiceButtonState extends State<VoiceButton>
     _animation = Tween<double>(begin: 1.0, end: 1.5).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
+  }
 
-    _voiceService.transcriptionStream.listen((text) {
-      if (text.isNotEmpty && widget.onTranscription != null) {
-        widget.onTranscription!(text);
-      }
-    });
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Listen to transcription stream from shared voice service
+    final appState = ref.read(appStateProvider);
+    final voiceService = appState.voiceService;
+    if (voiceService != null) {
+      voiceService.transcriptionStream.listen((text) {
+        if (text.isNotEmpty && widget.onTranscription != null) {
+          widget.onTranscription!(text);
+        }
+      });
+    }
   }
 
   void _toggleListening() async {
+    final appState = ref.read(appStateProvider);
+    final voiceService = appState.voiceService;
+
+    if (voiceService == null || !voiceService.isSTTAvailable) {
+      _showTextInputDialog();
+      return;
+    }
+
     if (_isListening) {
       setState(() {
         _isListening = false;
         _animationController.stop();
         _animationController.reset();
       });
-      await _voiceService.stopListening();
+      await voiceService.stopListening();
     } else {
-      // Check if STT is available, if not show text input
-      if (!_voiceService.isSTTAvailable) {
-        _showTextInputDialog();
-        return;
-      }
-
-      final started = await _voiceService.startListening();
+      final started = await voiceService.startListening();
       if (started) {
         setState(() {
           _isListening = true;
@@ -59,10 +71,18 @@ class _VoiceButtonState extends State<VoiceButton>
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Voice recognition unavailable. Use text input.'),
+            SnackBar(
+              content: const Text('Speech recognition unavailable. Grant permission in System Settings > Privacy & Security > Microphone.'),
               backgroundColor: Colors.orange,
-              duration: Duration(seconds: 2),
+              duration: const Duration(seconds: 4),
+              action: SnackBarAction(
+                label: 'Open Settings',
+                textColor: Colors.white,
+                onPressed: () async {
+                  // Open macOS System Settings
+                  await Process.run('open', ['x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone']);
+                },
+              ),
             ),
           );
           _showTextInputDialog();
@@ -138,7 +158,6 @@ class _VoiceButtonState extends State<VoiceButton>
   @override
   void dispose() {
     _animationController.dispose();
-    _voiceService.dispose();
     super.dispose();
   }
 }

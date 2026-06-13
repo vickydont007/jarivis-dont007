@@ -6,6 +6,11 @@ import 'app.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  FlutterError.onError = (FlutterErrorDetails details) {
+    print('FLUTTER ERROR: ${details.exception}');
+    print('STACK: ${details.stack}');
+  };
+
   // Initialize window manager
   await windowManager.ensureInitialized();
 

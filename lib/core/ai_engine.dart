@@ -51,6 +51,10 @@ class AIEngine {
   final Dio _dio = Dio();
   CostTracker? _costTracker;
   final StreamController<String> _responseController = StreamController<String>.broadcast();
+  
+  // Rate limiter - minimum delay between API calls
+  DateTime _lastRequestTime = DateTime.now().subtract(const Duration(seconds: 10));
+  static const Duration _minDelay = Duration(seconds: 3);
 
   AIEngine({
     required AIProvider provider,
@@ -65,6 +69,17 @@ class AIEngine {
        _modelName = modelName ?? _getDefaultModel(provider),
        _systemPrompt = systemPrompt ?? '',
        _toolDefinitions = toolDefinitions ?? [];
+
+  /// Wait if needed to respect rate limits
+  Future<void> _waitIfNeeded() async {
+    final now = DateTime.now();
+    final elapsed = now.difference(_lastRequestTime);
+    if (elapsed < _minDelay) {
+      final waitTime = _minDelay - elapsed;
+      await Future.delayed(waitTime);
+    }
+    _lastRequestTime = DateTime.now();
+  }
 
   static String _getDefaultBaseUrl(AIProvider provider) {
     switch (provider) {
@@ -123,7 +138,13 @@ class AIEngine {
         lower.contains('make a picture') ||
         lower.contains('create a picture') ||
         lower.startsWith('imagine') ||
-        lower.startsWith('generate');
+        lower.startsWith('generate') ||
+        lower.contains('image banao') ||
+        lower.contains('photo banao') ||
+        lower.contains('picture banao') ||
+        lower.contains('tasveer banao') ||
+        lower.contains('draw ') ||
+        lower.contains('sketch');
   }
 
   List<Map<String, dynamic>> _buildMessages(
@@ -175,18 +196,43 @@ class AIEngine {
     );
   }
 
-  Future<String> sendMessage(String message, {List<Map<String, dynamic>>? history}) async {
+  Future<String> sendMessage(String message, {List<Map<String, dynamic>>? history, CancelToken? cancelToken}) async {
     try {
+      await _waitIfNeeded();
       final messages = _buildMessages(message, history);
       final body = _buildRequestBody(messages);
 
-      final response = await _dio.post(
-        '$_baseUrl/chat/completions',
-        options: _buildOptions(),
-        data: body,
-      );
+      Response? response;
+      for (var retry = 0; retry < 2; retry++) {
+        try {
+          response = await _dio.post(
+            '$_baseUrl/chat/completions',
+            options: _buildOptions(),
+            data: body,
+            cancelToken: cancelToken,
+          );
+          if (response.statusCode == 429) {
+            await Future.delayed(const Duration(seconds: 5));
+            continue;
+          }
+          break;
+        } on DioException catch (e) {
+          if (e.response?.statusCode == 429) {
+            await Future.delayed(const Duration(seconds: 5));
+            continue;
+          }
+          rethrow;
+        }
+      }
+
+      if (response == null || response.statusCode == 429) {
+        return 'Rate limited. Please wait 30 seconds and try again.';
+      }
 
       return _handleResponse(response);
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.cancel) return '*[Stopped]*';
+      return 'Error: $e';
     } catch (e) {
       return 'Error: $e';
     }
@@ -196,20 +242,58 @@ class AIEngine {
     String message, {
     List<Map<String, dynamic>>? history,
     required Future<ToolResult> Function(String name, Map<String, dynamic> args) onToolCall,
-    int maxIterations = 5,
+    int maxIterations = 3,
+    CancelToken? cancelToken,
   }) async {
+    await _waitIfNeeded();
     final messages = _buildMessages(message, history);
     final allToolCalls = <ToolCall>[];
     final allToolResults = <Map<String, dynamic>>[];
 
     for (var i = 0; i < maxIterations; i++) {
+      if (cancelToken != null && cancelToken.isCancelled) {
+        return {
+          'success': false,
+          'error': 'Cancelled by user',
+          'toolCalls': allToolCalls,
+          'toolResults': allToolResults,
+        };
+      }
+
       final body = _buildRequestBody(messages);
 
-      final response = await _dio.post(
-        '$_baseUrl/chat/completions',
-        options: _buildOptions(),
-        data: body,
-      );
+      // Retry logic for rate limits (429)
+      Response? response;
+      for (var retry = 0; retry < 2; retry++) {
+        try {
+          response = await _dio.post(
+            '$_baseUrl/chat/completions',
+            options: _buildOptions(),
+            data: body,
+            cancelToken: cancelToken,
+          );
+          if (response.statusCode == 429) {
+            await Future.delayed(const Duration(seconds: 5));
+            continue;
+          }
+          break;
+        } on DioException catch (e) {
+          if (e.response?.statusCode == 429) {
+            await Future.delayed(const Duration(seconds: 5));
+            continue;
+          }
+          rethrow;
+        }
+      }
+
+      if (response == null || response.statusCode == 429) {
+        return {
+          'success': false,
+          'error': 'Rate limited. Please wait 30 seconds and try again.',
+          'toolCalls': allToolCalls,
+          'toolResults': allToolResults,
+        };
+      }
 
       if (response.statusCode != 200) {
         return {
@@ -267,11 +351,14 @@ class AIEngine {
             'content': result.toDisplayString(),
           });
         }
+
+        // Wait before next API call to avoid rate limiting
+        await _waitIfNeeded();
       } else {
-        final content = message['content'] ?? '';
+        final content = message['content'];
         return {
           'success': true,
-          'content': content,
+          'content': content ?? '',
           'toolCalls': allToolCalls,
           'toolResults': allToolResults,
           'iterations': i + 1,
@@ -279,17 +366,72 @@ class AIEngine {
       }
     }
 
-    // If we exit the loop, generate a summary response
+    // If we exit the loop, generate a summary from tool results
     if (allToolResults.isNotEmpty) {
-      final summary = StringBuffer('I executed ${allToolResults.length} tool(s):\n');
-      for (final result in allToolResults) {
-        final name = result['name'];
-        final success = result['success'] == true ? '✅' : '❌';
-        summary.writeln('$success $name');
+      final summary = StringBuffer();
+      
+      // Check if we have search results
+      final hasSearch = allToolResults.any((r) => r['name'] == 'web_search' || r['name'] == 'web_fetch');
+      
+      if (hasSearch) {
+        summary.writeln('Here are the results:\n');
+        for (final result in allToolResults) {
+          final name = result['name'];
+          final content = (result['result'] as String? ?? '').trim();
+          if (content.isEmpty || content.length < 5) continue;
+          
+          if (name == 'web_search') {
+            // Format search results - extract titles and snippets
+            final lines = content.split('\n');
+            for (final line in lines) {
+              final trimmed = line.trim();
+              if (trimmed.isEmpty) continue;
+              if (trimmed.startsWith('http')) {
+                summary.writeln('  🔗 $trimmed');
+              } else if (trimmed.startsWith('•') || trimmed.startsWith('-')) {
+                summary.writeln('  $trimmed');
+              } else if (RegExp(r'^\d+\.').hasMatch(trimmed)) {
+                summary.writeln('$trimmed');
+              } else if (trimmed.length > 20) {
+                summary.writeln('  $trimmed');
+              }
+            }
+            summary.writeln();
+          } else if (name == 'web_fetch') {
+            // For web fetch, show a preview
+            if (content.length > 500) {
+              summary.writeln('${content.substring(0, 500)}...');
+            } else {
+              summary.writeln(content);
+            }
+            summary.writeln();
+          }
+        }
+      } else {
+        // Generic tool summary
+        for (final result in allToolResults) {
+          final name = result['name'];
+          final content = result['result'] as String? ?? '';
+          if (content.isNotEmpty && content.length > 5) {
+            summary.writeln('[$name]: $content');
+          }
+        }
       }
+      
+      final output = summary.toString().trim();
+      if (output.length > 20) {
+        return {
+          'success': true,
+          'content': output,
+          'toolCalls': allToolCalls,
+          'toolResults': allToolResults,
+          'iterations': maxIterations,
+        };
+      }
+      
       return {
         'success': true,
-        'content': summary.toString(),
+        'content': 'I executed ${allToolResults.length} tool(s) but the results were empty. Please try rephrasing your request.',
         'toolCalls': allToolCalls,
         'toolResults': allToolResults,
         'iterations': maxIterations,
@@ -388,7 +530,15 @@ class AIEngine {
 
   Future<Map<String, dynamic>> generateImage(String prompt) async {
     try {
+      await _waitIfNeeded();
       final imageModel = _getImageModel();
+      
+      // Determine modalities based on model
+      final isImageOnly = imageModel.contains('flux') || 
+                          imageModel.contains('stable-diffusion') ||
+                          imageModel.contains('sourceful');
+      final modalities = isImageOnly ? ['image'] : ['image', 'text'];
+
       final response = await _dio.post(
         '$_baseUrl/chat/completions',
         options: _buildOptions(),
@@ -400,6 +550,7 @@ class AIEngine {
               'content': prompt,
             },
           ],
+          'modalities': modalities,
           'stream': false,
         },
       );
@@ -407,11 +558,40 @@ class AIEngine {
       if (response.statusCode == 200) {
         final data = response.data;
         if (data['choices'] != null && data['choices'].isNotEmpty) {
-          final content = data['choices'][0]['message']['content'] ?? '';
-          final imageUrls = _extractImageUrls(content);
+          final message = data['choices'][0]['message'];
+          final content = message['content'] ?? '';
+          
+          // Check for images in the response
+          final imageUrls = <String>[];
+          
+          // Method 1: Check message.images array
+          if (message['images'] != null) {
+            for (final img in message['images']) {
+              if (img['imageUrl'] != null && img['imageUrl']['url'] != null) {
+                imageUrls.add(img['imageUrl']['url']);
+              }
+            }
+          }
+          
+          // Method 2: Extract from content (base64 or URLs)
+          if (imageUrls.isEmpty) {
+            imageUrls.addAll(_extractImageUrls(content));
+          }
+          
+          // Method 3: Check for base64 in content parts
+          if (imageUrls.isEmpty && message['content'] is List) {
+            for (final part in message['content']) {
+              if (part['type'] == 'image_url' && part['image_url'] != null) {
+                imageUrls.add(part['image_url']['url']);
+              }
+            }
+          }
+
+          _lastRequestTime = DateTime.now();
+          
           return {
-            'success': true,
-            'content': content,
+            'success': imageUrls.isNotEmpty,
+            'content': content.isNotEmpty ? content : 'Image generated!',
             'imageUrls': imageUrls,
             'model': imageModel,
           };
@@ -419,6 +599,12 @@ class AIEngine {
         return {
           'success': false,
           'error': 'No response from AI',
+          'model': imageModel,
+        };
+      } else if (response.statusCode == 429) {
+        return {
+          'success': false,
+          'error': 'Rate limited. Please wait 30 seconds and try again.',
           'model': imageModel,
         };
       } else if (response.statusCode == 401) {
@@ -471,16 +657,17 @@ class AIEngine {
   }
 
   String _getImageModel() {
-    if (_modelName.contains('flux') || _modelName.contains('dall-e') || _modelName.contains('stable-diffusion')) {
+    if (_modelName.contains('flux') || _modelName.contains('dall-e') || _modelName.contains('stable-diffusion') || _modelName.contains('image')) {
       return _modelName;
     }
-    return 'black-forest-labs/flux-schnell:free';
+    // Use Google Gemini for image generation (reliable, supports image output)
+    return 'google/gemini-2.5-flash-image';
   }
 
   static String _getDefaultModel(AIProvider provider) {
     switch (provider) {
       case AIProvider.openrouter:
-        return 'google/gemma-4-26b-a4b-it:free';
+        return 'openrouter/free';
       case AIProvider.ollama:
         return 'llama3.2';
       case AIProvider.openai:

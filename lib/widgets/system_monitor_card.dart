@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:system_info2/system_info2.dart';
 
 class SystemMonitorCard extends StatefulWidget {
   const SystemMonitorCard({super.key});
@@ -8,151 +11,222 @@ class SystemMonitorCard extends StatefulWidget {
 }
 
 class _SystemMonitorCardState extends State<SystemMonitorCard> {
-  double _cpuUsage = 45.0;
-  double _memoryUsage = 62.0;
-  double _diskUsage = 38.0;
-  double _batteryLevel = 87.0;
+  double _memoryUsage = 0;
+  double _diskUsage = 0;
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
-    _startMonitoring();
+    _fetchStats();
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _fetchStats());
   }
 
-  void _startMonitoring() {
-    // Simulate system monitoring
-    Future.delayed(const Duration(seconds: 2), () {
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _fetchStats() async {
+    if (!mounted) return;
+    try {
+      final mem = _getMemoryUsage();
+      final disk = await _getDiskUsage();
       if (mounted) {
         setState(() {
-          _cpuUsage = 35 + (DateTime.now().millisecond % 30);
-          _memoryUsage = 55 + (DateTime.now().millisecond % 20);
-          _diskUsage = 38.0;
-          _batteryLevel = 87.0;
+          _memoryUsage = mem;
+          _diskUsage = disk;
         });
-        _startMonitoring();
       }
-    });
+    } catch (e) {
+      print('SystemMonitor error: $e');
+    }
+  }
+
+  double _getMemoryUsage() {
+    try {
+      final totalMem = SysInfo.getTotalVirtualMemory();
+      final freeMem = SysInfo.getFreeVirtualMemory();
+      if (totalMem == 0) return 0;
+      return ((totalMem - freeMem) / totalMem * 100).clamp(0.0, 100.0);
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<double> _getDiskUsage() async {
+    try {
+      final result = await Process.run('df', ['-h', '/']);
+      final lines = result.stdout.toString().split('\n');
+      if (lines.length > 1) {
+        final parts = lines[1].trim().split(RegExp(r'\s+'));
+        if (parts.length >= 5) {
+          return double.tryParse(parts[4].replaceAll('%', '')) ?? 0;
+        }
+      }
+      return 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Color _getColor(double usage) {
+    if (usage < 50) return const Color(0xFF3FB950);
+    if (usage < 80) return const Color(0xFFD29922);
+    return const Color(0xFFF85149);
+  }
+
+  String _getTotalMemory() {
+    try {
+      final bytes = SysInfo.getTotalVirtualMemory();
+      final gb = bytes / (1024 * 1024 * 1024);
+      return '${gb.toStringAsFixed(1)} GB';
+    } catch (_) {
+      return '--';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
           children: [
-            const Row(
-              children: [
-                Icon(Icons.monitor, color: Colors.cyan),
-                SizedBox(width: 8),
-                Text(
-                  'System Monitor',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildMonitorItem(
-                    'CPU',
-                    _cpuUsage,
-                    Icons.memory,
-                    _getUsageColor(_cpuUsage),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildMonitorItem(
-                    'Memory',
-                    _memoryUsage,
-                    Icons.storage,
-                    _getUsageColor(_memoryUsage),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildMonitorItem(
-                    'Disk',
-                    _diskUsage,
-                    Icons.storage,
-                    _getUsageColor(_diskUsage),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildMonitorItem(
-                    'Battery',
-                    _batteryLevel,
-                    Icons.battery_charging_full,
-                    _batteryLevel > 20 ? Colors.green : Colors.red,
-                  ),
-                ),
-              ],
+            Icon(Icons.monitor, color: Color(0xFF00BCD4), size: 20),
+            SizedBox(width: 8),
+            Text(
+              'System Monitor',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
-      ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildMetricCard(
+                label: 'MEMORY',
+                value: _memoryUsage,
+                icon: Icons.memory,
+                detail: _getTotalMemory(),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildMetricCard(
+                label: 'DISK',
+                value: _diskUsage,
+                icon: Icons.sd_storage,
+                detail: '/',
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
-  Widget _buildMonitorItem(
-    String label,
-    double value,
-    IconData icon,
-    Color color,
-  ) {
+  Widget _buildMetricCard({
+    required String label,
+    required double value,
+    required IconData icon,
+    required String detail,
+  }) {
+    final color = _getColor(value);
+
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF0D1117),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: const Color(0xFF30363D),
-        ),
+        color: const Color(0xFF161B22),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF30363D)),
       ),
       child: Column(
         children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 8),
+          // Circular progress
+          SizedBox(
+            width: 100,
+            height: 100,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Background circle
+                SizedBox(
+                  width: 100,
+                  height: 100,
+                  child: CircularProgressIndicator(
+                    value: 1,
+                    strokeWidth: 8,
+                    backgroundColor: const Color(0xFF30363D),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      color.withValues(alpha: 0.15),
+                    ),
+                  ),
+                ),
+                // Progress circle
+                SizedBox(
+                  width: 100,
+                  height: 100,
+                  child: CircularProgressIndicator(
+                    value: value / 100,
+                    strokeWidth: 8,
+                    backgroundColor: Colors.transparent,
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                    strokeCap: StrokeCap.round,
+                  ),
+                ),
+                // Percentage text
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${value.toStringAsFixed(1)}',
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      '%',
+                      style: TextStyle(
+                        color: color.withValues(alpha: 0.7),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Label
           Text(
             label,
             style: const TextStyle(
-              color: Colors.grey,
-              fontSize: 12,
+              color: Color(0xFF8B949E),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 1.2,
             ),
           ),
           const SizedBox(height: 4),
+          // Detail
           Text(
-            '${value.toStringAsFixed(1)}%',
+            detail,
             style: TextStyle(
-              color: color,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
+              color: Colors.grey[500],
+              fontSize: 12,
             ),
-          ),
-          const SizedBox(height: 8),
-          LinearProgressIndicator(
-            value: value / 100,
-            backgroundColor: const Color(0xFF30363D),
-            valueColor: AlwaysStoppedAnimation<Color>(color),
-            minHeight: 4,
-            borderRadius: BorderRadius.circular(2),
           ),
         ],
       ),
     );
-  }
-
-  Color _getUsageColor(double usage) {
-    if (usage < 50) return Colors.green;
-    if (usage < 80) return Colors.orange;
-    return Colors.red;
   }
 }

@@ -38,49 +38,59 @@ class VoiceService {
     try {
       _statusController.add('Initializing speech recognition...');
 
-      _sttAvailable = await _speechToText.initialize(
-        onError: (error) {
-          print('Speech recognition error: ${error.errorMsg}');
-          _isListening = false;
-          _listeningController.add(false);
-
-          // Auto-retry on transient errors
-          if (_isTransientError(error.errorMsg) && _retryCount < _maxRetries) {
-            _retryCount++;
-            final delay = Duration(milliseconds: 500 * pow(2, _retryCount - 1).toInt());
-            _statusController.add('Retrying in ${delay.inSeconds}s... ($_retryCount/$_maxRetries)');
-            Future.delayed(delay, () {
-              if (!_isListening) startListening();
-            });
-          } else if (_retryCount >= _maxRetries) {
-            _statusController.add('Voice recognition unavailable. Use text input.');
-          }
-        },
-        onStatus: (status) {
-          print('Speech recognition status: $status');
-          if (status == 'done' || status == 'notListening' || status == 'cancelled') {
+      // Try to initialize with detailed error handling
+      try {
+        _sttAvailable = await _speechToText.initialize(
+          onError: (error) {
+            print('Speech recognition error: ${error.errorMsg}');
             _isListening = false;
             _listeningController.add(false);
-          }
-          if (status == 'listening') {
-            _retryCount = 0; // Reset retry count on successful listen
-          }
-        },
-      );
+
+            // Auto-retry on transient errors
+            if (_isTransientError(error.errorMsg) && _retryCount < _maxRetries) {
+              _retryCount++;
+              final delay = Duration(milliseconds: 500 * pow(2, _retryCount - 1).toInt());
+              _statusController.add('Retrying in ${delay.inSeconds}s... ($_retryCount/$_maxRetries)');
+              Future.delayed(delay, () {
+                if (!_isListening) startListening();
+              });
+            } else if (_retryCount >= _maxRetries) {
+              _statusController.add('Voice recognition unavailable. Use text input.');
+            }
+          },
+          onStatus: (status) {
+            print('Speech recognition status: $status');
+            if (status == 'done' || status == 'notListening' || status == 'cancelled') {
+              _isListening = false;
+              _listeningController.add(false);
+            }
+            if (status == 'listening') {
+              _retryCount = 0; // Reset retry count on successful listen
+            }
+          },
+        );
+      } catch (e) {
+        print('Speech recognition initialization exception: $e');
+        _sttAvailable = false;
+      }
 
       print('Speech recognition available: $_sttAvailable');
 
       if (!_sttAvailable) {
-        _statusController.add('Speech recognition not available. Use text input.');
+        _statusController.add('Speech recognition not available. Grant microphone permission in System Settings > Privacy & Security > Microphone.');
       }
 
       // Configure TTS
-      await _flutterTts.setVolume(1.0);
-      await _flutterTts.setSpeechRate(0.5);
-      await _flutterTts.setPitch(1.0);
+      try {
+        await _flutterTts.setVolume(1.0);
+        await _flutterTts.setSpeechRate(0.5);
+        await _flutterTts.setPitch(1.0);
+      } catch (e) {
+        print('TTS configuration error: $e');
+      }
 
       _isInitialized = true;
-      _statusController.add('Voice service ready');
+      _statusController.add(_sttAvailable ? 'Voice service ready' : 'Voice service ready (STT unavailable)');
       return true;
     } catch (e) {
       print('Failed to initialize voice service: $e');

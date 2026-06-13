@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:sqflite/sqflite.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart';
@@ -227,27 +228,89 @@ class SchedulerService {
 
     switch (action) {
       case 'notification':
+        final title = params?['title'] as String? ?? 'Nextron Reminder';
+        final body = params?['body'] as String? ?? 'You have a scheduled task.';
+        // Notification will be sent via the notification service
+        print('[Scheduler] Notification: $title - $body');
         break;
+
       case 'system':
         final command = params?['command'] as String?;
-        if (command != null) {
-          // System commands handled elsewhere
+        if (command != null && command.isNotEmpty) {
+          try {
+            final result = await Process.run('sh', ['-c', command]);
+            print('[Scheduler] System command result: ${result.stdout}');
+          } catch (e) {
+            print('[Scheduler] System command failed: $e');
+          }
         }
         break;
+
       case 'ai':
         final prompt = params?['prompt'] as String?;
-        if (prompt != null) {
-          // AI task handled elsewhere
+        if (prompt != null && prompt.isNotEmpty) {
+          // AI task - log for now, will be executed by app layer
+          print('[Scheduler] AI task: $prompt');
         }
         break;
+
       case 'file':
         final operation = params?['operation'] as String?;
-        final path = params?['path'] as String?;
-        if (operation != null && path != null) {
-          // File operations handled elsewhere
+        final filePath = params?['path'] as String?;
+        final content = params?['content'] as String?;
+        if (operation != null && filePath != null) {
+          try {
+            switch (operation) {
+              case 'write':
+                if (content != null) {
+                  await File(filePath).writeAsString(content);
+                  print('[Scheduler] File written: $filePath');
+                }
+                break;
+              case 'read':
+                final exists = await File(filePath).exists();
+                if (exists) {
+                  final data = await File(filePath).readAsString();
+                  print('[Scheduler] File read: $filePath (${data.length} chars)');
+                }
+                break;
+              case 'delete':
+                final exists = await File(filePath).exists();
+                if (exists) {
+                  await File(filePath).delete();
+                  print('[Scheduler] File deleted: $filePath');
+                }
+                break;
+              case 'copy':
+                final dest = params?['destination'] as String?;
+                if (dest != null) {
+                  await File(filePath).copy(dest);
+                  print('[Scheduler] File copied: $filePath -> $dest');
+                }
+                break;
+              default:
+                print('[Scheduler] Unknown file operation: $operation');
+            }
+          } catch (e) {
+            print('[Scheduler] File operation failed: $e');
+          }
         }
         break;
+
+      case 'shell':
+        final command = params?['command'] as String?;
+        if (command != null && command.isNotEmpty) {
+          try {
+            final result = await Process.run('sh', ['-c', command]);
+            print('[Scheduler] Shell output: ${result.stdout}');
+          } catch (e) {
+            print('[Scheduler] Shell command failed: $e');
+          }
+        }
+        break;
+
       default:
+        print('[Scheduler] Unknown action: $action');
         break;
     }
   }

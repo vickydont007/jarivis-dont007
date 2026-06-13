@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/ai_engine.dart';
 import '../core/memory_system.dart';
@@ -154,6 +155,9 @@ class AppStateNotifier extends StateNotifier<AppState> {
     _toolManager!.initialize();
 
     _agentNetwork!.initializeDefaultNetwork();
+    
+    // Initialize voice service
+    _voiceService!.initialize();
 
     state = state.copyWith(
       memory: _memory,
@@ -245,7 +249,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
     }
   }
 
-  Future<String> sendMessage(String message, {List<Map<String, dynamic>>? history}) async {
+  Future<String> sendMessage(String message, {List<Map<String, dynamic>>? history, CancelToken? cancelToken}) async {
     if (_engine == null) {
       return 'AI Engine not initialized. Please configure in Settings.';
     }
@@ -266,17 +270,45 @@ class AppStateNotifier extends StateNotifier<AppState> {
         return 'Error: ${result['error']}';
       }
 
+      // RAG Context Injection — automatically inject relevant memories
+      var enrichedMessage = message;
+      try {
+        final ragContext = await _toolManager?.ragManager?.getRelevantContext(message);
+        if (ragContext != null && ragContext.isNotEmpty) {
+          enrichedMessage = '$ragContext\n\nUser message: $message';
+        }
+      } catch (e) {
+        // RAG injection is optional, continue with original message
+      }
+
       final result = await _engine!.sendMessageWithTools(
-        message,
+        enrichedMessage,
         history: history,
+        cancelToken: cancelToken,
         onToolCall: (name, args) async {
           return await _toolManager!.executeTool(name, args);
         },
       );
 
-      final response = result['content'] as String? ?? 'No response';
+      final success = result['success'] as bool? ?? false;
+      var response = result['content'] as String? ?? '';
       final toolCalls = result['toolCalls'] as List? ?? [];
       final toolResults = result['toolResults'] as List? ?? [];
+
+      // If no content but tools were executed, use tool summary
+      if (response.isEmpty && toolCalls.isNotEmpty) {
+        final toolSummary = toolResults.map((r) {
+          final name = r['name'];
+          final content = r['result'] as String? ?? '';
+          final status = r['success'] == true ? '✓' : '✗';
+          return '$status $name: ${content.length > 200 ? content.substring(0, 200) + "..." : content}';
+        }).join('\n');
+        response = 'Tools executed:\n$toolSummary';
+      } else if (response.isEmpty && !success) {
+        response = result['error'] as String? ?? 'AI did not return a response. Please try again.';
+      } else if (response.isEmpty) {
+        response = 'I received your message but could not generate a response. Please try again.';
+      }
 
       final responseEntry = MemoryEntry.create(
         content: response,
@@ -288,16 +320,6 @@ class AppStateNotifier extends StateNotifier<AppState> {
         },
       );
       _memory?.addMemory(responseEntry);
-
-      if (toolCalls.isNotEmpty) {
-        final toolSummary = toolResults.map((r) {
-          final name = r['name'];
-          final success = r['success'] == true ? 'OK' : 'FAIL';
-          return '[$success] $name';
-        }).join('\n');
-
-        return '$response\n\n---\nTools executed:\n$toolSummary';
-      }
 
       return response;
     } catch (e) {

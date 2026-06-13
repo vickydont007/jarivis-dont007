@@ -38,6 +38,51 @@ class WeatherData {
     );
   }
 
+  factory WeatherData.fromOpenMeteo(Map<String, dynamic> json, String city) {
+    final current = json['current'] ?? {};
+    final weatherCode = current['weather_code'] ?? 0;
+    final description = _weatherCodeToDescription(weatherCode);
+    final icon = _weatherCodeToIcon(weatherCode);
+    
+    return WeatherData(
+      city: city,
+      temperature: (current['temperature_2m'] ?? 0).toDouble(),
+      feelsLike: (current['apparent_temperature'] ?? 0).toDouble(),
+      humidity: (current['relative_humidity_2m'] ?? 0).toInt(),
+      description: description,
+      icon: icon,
+      windSpeed: (current['wind_speed_10m'] ?? 0).toDouble(),
+      visibility: 10000,
+      timestamp: DateTime.now(),
+    );
+  }
+
+  static String _weatherCodeToDescription(int code) {
+    if (code == 0) return 'Clear sky';
+    if (code <= 3) return 'Partly cloudy';
+    if (code <= 49) return 'Fog';
+    if (code <= 59) return 'Drizzle';
+    if (code <= 69) return 'Rain';
+    if (code <= 79) return 'Snow';
+    if (code <= 82) return 'Rain showers';
+    if (code <= 86) return 'Snow showers';
+    if (code <= 99) return 'Thunderstorm';
+    return 'Unknown';
+  }
+
+  static String _weatherCodeToIcon(int code) {
+    if (code == 0) return '01d';
+    if (code <= 3) return '02d';
+    if (code <= 49) return '50d';
+    if (code <= 59) return '09d';
+    if (code <= 69) return '10d';
+    if (code <= 79) return '13d';
+    if (code <= 82) return '09d';
+    if (code <= 86) return '13d';
+    if (code <= 99) return '11d';
+    return '01d';
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'city': city,
@@ -77,35 +122,71 @@ class WeatherForecast {
 
 class WeatherService {
   final Dio _dio = Dio();
-  String? _apiKey;
 
-  WeatherService({String? apiKey}) : _apiKey = apiKey;
-
-  void setApiKey(String apiKey) {
-    _apiKey = apiKey;
-  }
+  WeatherService();
 
   Future<WeatherData?> getCurrentWeather(String city) async {
-    if (_apiKey == null || _apiKey!.isEmpty) {
-      throw Exception('API key not set. Please set OpenWeatherMap API key in settings.');
-    }
-
+    // Use Open-Meteo (free, no API key needed)
     try {
-      final response = await _dio.get(
-        'https://api.openweathermap.org/data/2.5/weather',
+      // First, geocode the city
+      final geoResponse = await _dio.get(
+        'https://geocoding-api.open-meteo.com/v1/search',
         queryParameters: {
-          'q': city,
-          'appid': _apiKey,
-          'units': 'metric',
+          'name': city,
+          'count': 5,
+          'language': 'en',
         },
       );
 
-      if (response.statusCode == 200) {
-        return WeatherData.fromJson(response.data);
+      print('Geocoding response: ${geoResponse.data}');
+
+      if (geoResponse.statusCode != 200) {
+        print('Geocoding failed with status: ${geoResponse.statusCode}');
+        return null;
+      }
+
+      final data = geoResponse.data;
+      if (data == null || data['results'] == null) {
+        print('No results found for city: $city');
+        return null;
+      }
+
+      final results = data['results'] as List;
+      if (results.isEmpty) {
+        print('Empty results for city: $city');
+        return null;
+      }
+
+      // Use first result
+      final firstResult = results[0];
+      final lat = firstResult['latitude'];
+      final lon = firstResult['longitude'];
+      final resolvedCity = firstResult['name'] ?? city;
+      final country = firstResult['country'] ?? '';
+
+      print('Resolved city: $resolvedCity, Country: $country, Lat: $lat, Lon: $lon');
+
+      // Get current weather
+      final weatherResponse = await _dio.get(
+        'https://api.open-meteo.com/v1/forecast',
+        queryParameters: {
+          'latitude': lat,
+          'longitude': lon,
+          'current': 'temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m',
+          'timezone': 'auto',
+        },
+      );
+
+      print('Weather response: ${weatherResponse.data}');
+
+      if (weatherResponse.statusCode == 200) {
+        final weatherData = WeatherData.fromOpenMeteo(weatherResponse.data, '$resolvedCity, $country');
+        return weatherData;
       }
       return null;
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('Error fetching weather: $e');
+      print('Stack trace: $stackTrace');
       return null;
     }
   }
@@ -114,23 +195,19 @@ class WeatherService {
     double latitude,
     double longitude,
   ) async {
-    if (_apiKey == null || _apiKey!.isEmpty) {
-      throw Exception('API key not set');
-    }
-
     try {
-      final response = await _dio.get(
-        'https://api.openweathermap.org/data/2.5/weather',
+      final weatherResponse = await _dio.get(
+        'https://api.open-meteo.com/v1/forecast',
         queryParameters: {
-          'lat': latitude,
-          'lon': longitude,
-          'appid': _apiKey,
-          'units': 'metric',
+          'latitude': latitude,
+          'longitude': longitude,
+          'current': 'temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m',
+          'timezone': 'auto',
         },
       );
 
-      if (response.statusCode == 200) {
-        return WeatherData.fromJson(response.data);
+      if (weatherResponse.statusCode == 200) {
+        return WeatherData.fromOpenMeteo(weatherResponse.data, 'Current Location');
       }
       return null;
     } catch (e) {
@@ -140,28 +217,64 @@ class WeatherService {
   }
 
   Future<WeatherForecast?> getForecast(String city) async {
-    if (_apiKey == null || _apiKey!.isEmpty) {
-      throw Exception('API key not set');
-    }
-
     try {
-      final response = await _dio.get(
-        'https://api.openweathermap.org/data/2.5/forecast',
+      // Geocode city
+      final geoResponse = await _dio.get(
+        'https://geocoding-api.open-meteo.com/v1/search',
         queryParameters: {
-          'q': city,
-          'appid': _apiKey,
-          'units': 'metric',
-          'cnt': 8, // 5 days / 3-hour intervals
+          'name': city,
+          'count': 1,
+          'language': 'en',
         },
       );
 
-      if (response.statusCode == 200) {
-        final List<WeatherData> daily = [];
-        for (final item in response.data['list']) {
-          daily.add(WeatherData.fromJson(item));
+      if (geoResponse.statusCode != 200 || geoResponse.data['results'] == null) {
+        return null;
+      }
+
+      final results = geoResponse.data['results'] as List;
+      if (results.isEmpty) return null;
+
+      final lat = results[0]['latitude'];
+      final lon = results[0]['longitude'];
+
+      // Get forecast
+      final weatherResponse = await _dio.get(
+        'https://api.open-meteo.com/v1/forecast',
+        queryParameters: {
+          'latitude': lat,
+          'longitude': lon,
+          'daily': 'temperature_2m_max,temperature_2m_min,weather_code',
+          'timezone': 'auto',
+          'forecast_days': 5,
+        },
+      );
+
+      if (weatherResponse.statusCode == 200) {
+        final daily = weatherResponse.data['daily'];
+        final times = daily['time'] as List;
+        final maxTemps = daily['temperature_2m_max'] as List;
+        final minTemps = daily['temperature_2m_min'] as List;
+        final codes = daily['weather_code'] as List;
+
+        final forecastList = <WeatherData>[];
+        for (var i = 0; i < times.length; i++) {
+          final code = codes[i] as int;
+          forecastList.add(WeatherData(
+            city: city,
+            temperature: (maxTemps[i] + minTemps[i]) / 2,
+            feelsLike: minTemps[i].toDouble(),
+            humidity: 50,
+            description: WeatherData._weatherCodeToDescription(code),
+            icon: WeatherData._weatherCodeToIcon(code),
+            windSpeed: 0,
+            visibility: 10000,
+            timestamp: DateTime.parse(times[i]),
+          ));
         }
+
         return WeatherForecast(
-          daily: daily,
+          daily: forecastList,
           timestamp: DateTime.now(),
         );
       }
@@ -172,7 +285,6 @@ class WeatherService {
     }
   }
 
-  // Get weather description emoji
   String getWeatherEmoji(String description) {
     final lowerDesc = description.toLowerCase();
     if (lowerDesc.contains('clear')) return '☀️';
@@ -185,7 +297,6 @@ class WeatherService {
     return '🌤️';
   }
 
-  // Get weather message
   String getWeatherMessage(WeatherData weather) {
     final emoji = getWeatherEmoji(weather.description);
     return '$emoji ${weather.getTemperatureString()} in ${weather.city}\n'

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../widgets/chat_bubble.dart';
 import '../widgets/voice_button.dart';
 import '../providers/app_provider.dart';
+import '../providers/chat_provider.dart';
 import '../services/system_service.dart';
 import '../core/ai_engine.dart';
 
@@ -16,63 +17,31 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final List<Map<String, dynamic>> _messages = [];
-  final List<Map<String, dynamic>> _history = [];
-  bool _isLoading = false;
-  bool _isTyping = false;
 
   @override
   void initState() {
     super.initState();
-    _addWelcomeMessage();
-  }
-
-  void _addWelcomeMessage() {
-    setState(() {
-      _messages.add({
-        'role': 'assistant',
-        'content': 'Hello! I am **Nextron**, your AI desktop assistant.\n\nI can help you with:\n- System control (shutdown, restart, sleep)\n- File management (read, write, search)\n- Web browsing and search\n- Code execution (Python/JS)\n- Image analysis\n- And much more!\n\nHow can I help you today?',
-        'timestamp': DateTime.now(),
-      });
-    });
   }
 
   void _sendMessage() async {
     final message = _messageController.text.trim();
     if (message.isEmpty) return;
 
-    setState(() {
-      _messages.add({
-        'role': 'user',
-        'content': message,
-        'timestamp': DateTime.now(),
-      });
-      _messageController.clear();
-      _isLoading = true;
-      _isTyping = true;
-    });
+    ref.read(chatProvider.notifier).addUserMessage(message);
+    _messageController.clear();
 
     _scrollToBottom();
 
-    _history.add({'role': 'user', 'content': message});
-
     final localResponse = await _handleLocalCommands(message);
     if (localResponse != null) {
-      setState(() {
-        _messages.add({
-          'role': 'assistant',
-          'content': localResponse,
-          'timestamp': DateTime.now(),
-        });
-        _isLoading = false;
-        _isTyping = false;
-      });
-      _history.add({'role': 'assistant', 'content': localResponse});
+      ref.read(chatProvider.notifier).addAssistantMessage(localResponse);
       _scrollToBottom();
       return;
     }
 
     final appState = ref.read(appStateProvider);
+    final chatState = ref.read(chatProvider);
+    final cancelToken = chatState.cancelToken;
     String response;
     List<String> imageUrls = [];
 
@@ -80,6 +49,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       try {
         if (AIEngine.isImageRequest(message)) {
           final result = await appState.aiEngine!.generateImage(message);
+          if (cancelToken != null && cancelToken.isCancelled) return;
           if (result['success'] == true) {
             response = result['content'] ?? 'Image generated!';
             if (result['imageUrls'] != null) {
@@ -89,27 +59,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             response = 'Failed to generate image: ${result['error']}';
           }
         } else {
-          response = await ref.read(appStateProvider.notifier).sendMessage(message, history: _history);
+          response = await ref.read(appStateProvider.notifier).sendMessage(
+                message,
+                history: chatState.history,
+                cancelToken: cancelToken,
+              );
+          if (cancelToken != null && cancelToken.isCancelled) return;
         }
-        _history.add({'role': 'assistant', 'content': response});
       } catch (e) {
+        if (cancelToken != null && cancelToken.isCancelled) return;
         response = 'Error connecting to AI: $e\n\nPlease check your API key in Settings.';
       }
     } else {
       response = _generateMockResponse(message);
-      _history.add({'role': 'assistant', 'content': response});
     }
 
-    setState(() {
-      _messages.add({
-        'role': 'assistant',
-        'content': response,
-        'imageUrls': imageUrls,
-        'timestamp': DateTime.now(),
-      });
-      _isLoading = false;
-      _isTyping = false;
-    });
+    ref.read(chatProvider.notifier).addAssistantMessage(response, imageUrls: imageUrls.isNotEmpty ? imageUrls : null);
 
     _scrollToBottom();
   }
@@ -222,14 +187,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final appState = ref.watch(appStateProvider);
+    final chatState = ref.watch(chatProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0D1117),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Column(
         children: [
           _buildHeader(appState),
           Expanded(child: _buildMessageList()),
-          _buildInputArea(),
+          _buildInputArea(chatState),
         ],
       ),
     );
@@ -238,10 +204,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget _buildHeader(AppState appState) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: const BoxDecoration(
-        color: Color(0xFF161B22),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
         border: Border(
-          bottom: BorderSide(color: Color(0xFF30363D)),
+          bottom: BorderSide(color: Theme.of(context).dividerColor),
         ),
       ),
       child: Row(
@@ -343,7 +309,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Widget _buildMessageList() {
-    return _messages.isEmpty
+    final chatState = ref.watch(chatProvider);
+    final messages = chatState.messages;
+
+    return messages.isEmpty
         ? Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -367,30 +336,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         : ListView.builder(
             controller: _scrollController,
             padding: const EdgeInsets.all(16),
-            itemCount: _messages.length + (_isTyping ? 1 : 0),
+            itemCount: messages.length + (chatState.isLoading ? 1 : 0),
             itemBuilder: (context, index) {
-              if (index == _messages.length) {
+              if (index == messages.length) {
                 return _buildTypingIndicator();
               }
               return ChatBubble(
-                message: _messages[index]['content'],
-                isUser: _messages[index]['role'] == 'user',
-                timestamp: _messages[index]['timestamp'],
-                imageUrls: _messages[index]['imageUrls'] != null
-                    ? List<String>.from(_messages[index]['imageUrls'])
-                    : null,
+                message: messages[index].content,
+                isUser: messages[index].role == 'user',
+                timestamp: messages[index].timestamp,
+                imageUrls: messages[index].imageUrls,
               );
             },
           );
   }
 
-  Widget _buildInputArea() {
+  Widget _buildInputArea(ChatState chatState) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
-        color: Color(0xFF161B22),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
         border: Border(
-          top: BorderSide(color: Color(0xFF30363D)),
+          top: BorderSide(color: Theme.of(context).dividerColor),
         ),
       ),
       child: Row(
@@ -405,9 +372,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: const Color(0xFF0D1117),
+                color: Theme.of(context).colorScheme.background,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF30363D)),
+                border: Border.all(color: Theme.of(context).dividerColor),
               ),
               child: TextField(
                 controller: _messageController,
@@ -420,7 +387,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     horizontal: 16,
                     vertical: 14,
                   ),
-                  suffixIcon: _isLoading
+                  suffixIcon: chatState.isLoading
                       ? const Padding(
                           padding: EdgeInsets.all(12),
                           child: SizedBox(
@@ -439,25 +406,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          _buildSendButton(),
+          _buildSendButton(chatState),
         ],
       ),
     );
   }
 
-  Widget _buildSendButton() {
+  Widget _buildSendButton(ChatState chatState) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       decoration: BoxDecoration(
-        gradient: _isLoading
+        gradient: chatState.isLoading
             ? null
             : const LinearGradient(
                 colors: [Color(0xFF00BCD4), Color(0xFF0097A7)],
               ),
-        color: _isLoading ? Colors.grey[800] : null,
+        color: chatState.isLoading ? const Color(0xFFE53935) : null,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: _isLoading
-            ? []
+        boxShadow: chatState.isLoading
+            ? [
+                BoxShadow(
+                  color: const Color(0xFFE53935).withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ]
             : [
                 BoxShadow(
                   color: const Color(0xFF00BCD4).withValues(alpha: 0.3),
@@ -469,11 +442,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: _isLoading ? null : _sendMessage,
+          onTap: chatState.isLoading
+              ? () => ref.read(chatProvider.notifier).stopMessage()
+              : _sendMessage,
           borderRadius: BorderRadius.circular(12),
-          child: const Padding(
-            padding: EdgeInsets.all(12),
-            child: Icon(Icons.send, color: Colors.white, size: 20),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Icon(
+              chatState.isLoading ? Icons.stop : Icons.send,
+              color: Colors.white,
+              size: 20,
+            ),
           ),
         ),
       ),

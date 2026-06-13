@@ -89,14 +89,9 @@ class _AgentNetworkScreenState extends ConsumerState<AgentNetworkScreen>
     }
   }
 
-  void _onPanUpdate(DragUpdateDetails details) {
-    setState(() {
-      _offset += details.delta;
-    });
-  }
-
   void _onScaleUpdate(ScaleUpdateDetails details) {
     setState(() {
+      _offset += details.focalPointDelta;
       _scale = (_scale * details.scale).clamp(0.3, 3.0);
     });
   }
@@ -231,7 +226,6 @@ class _AgentNetworkScreenState extends ConsumerState<AgentNetworkScreen>
               children: [
                 GestureDetector(
                   onTapUp: _onCanvasTap,
-                  onPanUpdate: _onPanUpdate,
                   onScaleUpdate: _onScaleUpdate,
                   child: CustomPaint(
                     painter: AgentNetworkPainter(

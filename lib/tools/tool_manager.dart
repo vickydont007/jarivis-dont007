@@ -40,6 +40,12 @@ import 'recording_tool.dart';
 import 'meeting_tool.dart';
 import 'notification_tool.dart';
 import 'converter_tool.dart';
+import 'git_tool.dart';
+import 'email_tool.dart';
+import 'calendar_tool.dart';
+import 'database_tool.dart';
+import 'clipboard_tool.dart';
+import 'export_tool.dart';
 
 const String systemPrompt = '''You are Nextron, a powerful AI desktop assistant. You have access to various tools to help users with their tasks.
 
@@ -80,6 +86,12 @@ RULES:
 8. Always generate a text response after executing tools - summarize what you did
 9. Use context tools to remember user preferences, facts, and important details across sessions
 10. Use screen context tools to understand what's on the user's screen
+
+CRITICAL - LIVE DATA:
+- ALWAYS use web_search when the user asks about current events, news, live data, prices, scores, weather, or any real-time information
+- Use web_fetch to read full content from a specific URL
+- NEVER make up current data - search the internet first
+- Examples that REQUIRE web_search: "current price of...", "today's news", "latest score", "what's happening in...", "current weather in..."
 ''';
 
 class ToolManager {
@@ -173,6 +185,13 @@ class ToolManager {
     _registry.registerAll(getAllCodeTools(_codeSandbox));
     _registry.registerAll(getAllMultiModalTools(_multiModal));
     _registry.registerAll(getAllWebAutomationTools(_webAutomation));
+    // New tools
+    _registry.registerAll(getAllGitTools());
+    _registry.registerAll(getAllEmailTools());
+    _registry.registerAll(getAllCalendarTools());
+    _registry.registerAll(getAllDatabaseTools());
+    _registry.registerAll(getAllClipboardTools());
+    _registry.registerAll(getAllExportTools());
   }
 
   ToolRegistry get registry => _registry;

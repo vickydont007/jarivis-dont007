@@ -30,6 +30,12 @@ class NextronApp extends ConsumerWidget {
     brightness: Brightness.dark,
     primarySwatch: Colors.cyan,
     scaffoldBackgroundColor: const Color(0xFF0D1117),
+    colorScheme: const ColorScheme.dark(
+      primary: Color(0xFF00BCD4),
+      secondary: Color(0xFF0097A7),
+      surface: Color(0xFF161B22),
+      background: Color(0xFF0D1117),
+    ),
     textTheme: GoogleFonts.interTextTheme(
       ThemeData(brightness: Brightness.dark).textTheme.apply(
         bodyColor: Colors.white,
@@ -48,12 +54,19 @@ class NextronApp extends ConsumerWidget {
         side: const BorderSide(color: Color(0xFF30363D)),
       ),
     ),
+    dividerColor: const Color(0xFF30363D),
   );
 
   ThemeData get _lightTheme => ThemeData(
     brightness: Brightness.light,
     primarySwatch: Colors.cyan,
     scaffoldBackgroundColor: const Color(0xFFF6F8FA),
+    colorScheme: const ColorScheme.light(
+      primary: Color(0xFF0097A7),
+      secondary: Color(0xFF00BCD4),
+      surface: Colors.white,
+      background: Color(0xFFF6F8FA),
+    ),
     textTheme: GoogleFonts.interTextTheme(
       ThemeData(brightness: Brightness.light).textTheme,
     ),
@@ -69,6 +82,7 @@ class NextronApp extends ConsumerWidget {
         side: const BorderSide(color: Color(0xFFE1E4E8)),
       ),
     ),
+    dividerColor: const Color(0xFFE1E4E8),
   );
 }
 
@@ -109,14 +123,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   Widget _buildNavigationRail(bool isDarkMode) {
     return Container(
       width: 88,
-      decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF0D1117) : Colors.white,
-        border: Border(
-          right: BorderSide(
-            color: isDarkMode ? const Color(0xFF30363D) : const Color(0xFFE1E4E8),
-          ),
-        ),
-      ),
+      color: isDarkMode ? const Color(0xFF0D1117) : Colors.white,
       child: Column(
         children: [
           const SizedBox(height: 20),
@@ -128,7 +135,8 @@ class _MainScreenState extends ConsumerState<MainScreen> {
               onDestinationSelected: (index) {
                 setState(() => _selectedIndex = index);
               },
-              backgroundColor: Colors.transparent,
+              backgroundColor: isDarkMode ? const Color(0xFF0D1117) : Colors.white,
+              indicatorColor: const Color(0xFF00BCD4).withValues(alpha: 0.15),
               selectedIconTheme: const IconThemeData(color: Color(0xFF00BCD4), size: 22),
               unselectedIconTheme: IconThemeData(
                 color: isDarkMode ? Colors.grey[600] : Colors.grey[500],
