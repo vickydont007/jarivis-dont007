@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 import '../widgets/chat_bubble.dart';
 import '../widgets/voice_button.dart';
 import '../providers/app_provider.dart';
 import '../providers/chat_provider.dart';
-import '../services/system_service.dart';
 import '../core/ai_engine.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -17,18 +17,138 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final List<PlatformFile> _attachedFiles = [];
 
   @override
   void initState() {
     super.initState();
   }
 
+  void _pickFiles({bool foldersOnly = false}) async {
+    try {
+      if (foldersOnly) {
+        final result = await FilePicker.platform.getDirectoryPath(
+          dialogTitle: 'Select Folder',
+        );
+        if (result != null) {
+          setState(() {
+            _attachedFiles.add(PlatformFile(
+              name: result.split('/').last,
+              path: result,
+              size: 0,
+            ));
+          });
+        }
+      } else {
+        final result = await FilePicker.platform.pickFiles(
+          allowMultiple: true,
+          dialogTitle: 'Select Files',
+        );
+        if (result != null && result.files.isNotEmpty) {
+          setState(() {
+            _attachedFiles.addAll(result.files);
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('File picker error: $e');
+    }
+  }
+
+  void _showAttachMenu() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E222A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[600],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF00BCD4).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.insert_drive_file, color: Color(0xFF00BCD4), size: 22),
+                ),
+                title: const Text('Attach Files', style: TextStyle(color: Colors.white)),
+                subtitle: Text('Select files to share', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickFiles(foldersOnly: false);
+                },
+              ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4CAF50).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.folder, color: Color(0xFF4CAF50), size: 22),
+                ),
+                title: const Text('Attach Folder', style: TextStyle(color: Colors.white)),
+                subtitle: Text('Select a folder to share', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickFiles(foldersOnly: true);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _removeFile(int index) {
+    setState(() {
+      _attachedFiles.removeAt(index);
+    });
+  }
+
+  String _getFileSize(PlatformFile file) {
+    if (file.size == 0) return '📁 Folder';
+    if (file.size < 1024) return '${file.size} B';
+    if (file.size < 1024 * 1024) return '${(file.size / 1024).toStringAsFixed(1)} KB';
+    return '${(file.size / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
   void _sendMessage() async {
-    final message = _messageController.text.trim();
+    String message = _messageController.text.trim();
+
+    // Include attached files in message
+    if (_attachedFiles.isNotEmpty) {
+      final fileLines = _attachedFiles.map((f) => '📎 ${f.name} (${_getFileSize(f)})\n📂 ${f.path}').join('\n');
+      if (message.isEmpty) {
+        message = 'Attached files:\n$fileLines';
+      } else {
+        message = '$message\n\nAttached files:\n$fileLines';
+      }
+    }
+
     if (message.isEmpty) return;
 
     ref.read(chatProvider.notifier).addUserMessage(message);
     _messageController.clear();
+    setState(() {
+      _attachedFiles.clear();
+    });
 
     _scrollToBottom();
 
@@ -49,131 +169,80 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       try {
         if (AIEngine.isImageRequest(message)) {
           final result = await appState.aiEngine!.generateImage(message);
-          if (cancelToken != null && cancelToken.isCancelled) return;
           if (result['success'] == true) {
-            response = result['content'] ?? 'Image generated!';
-            if (result['imageUrls'] != null) {
-              imageUrls = List<String>.from(result['imageUrls']);
-            }
+            imageUrls = List<String>.from(result['imageUrls'] ?? []);
+            response = result['text'] ?? 'Here is the generated image.';
           } else {
-            response = 'Failed to generate image: ${result['error']}';
+            response = result['error'] ?? 'Failed to generate image.';
           }
         } else {
-          response = await ref.read(appStateProvider.notifier).sendMessage(
-                message,
-                history: chatState.history,
-                cancelToken: cancelToken,
-              );
-          if (cancelToken != null && cancelToken.isCancelled) return;
+          final history = ref.read(chatProvider).messages
+              .where((m) => m.role != 'system')
+              .map((m) => {'role': m.role, 'content': m.content})
+              .toList();
+
+          final toolManager = appState.toolManager;
+          if (toolManager != null) {
+            final result = await appState.aiEngine!.sendMessageWithTools(
+              message,
+              history: history,
+              onToolCall: (name, args) async {
+                ref.read(chatProvider.notifier).addAssistantMessage('🔧 Using $name...');
+                _scrollToBottom();
+                return await toolManager.executeTool(name, args);
+              },
+              cancelToken: cancelToken,
+            );
+            response = result['response'] ?? 'No response';
+            if (result['error'] != null) {
+              response = 'Error: ${result['error']}';
+            }
+          } else {
+            response = await appState.aiEngine!.sendMessage(message, history: history);
+          }
         }
       } catch (e) {
-        if (cancelToken != null && cancelToken.isCancelled) return;
-        response = 'Error connecting to AI: $e\n\nPlease check your API key in Settings.';
+        response = 'Error: $e';
       }
     } else {
-      response = _generateMockResponse(message);
+      response = 'Not connected. Please check your API key in Settings.';
     }
 
-    ref.read(chatProvider.notifier).addAssistantMessage(response, imageUrls: imageUrls.isNotEmpty ? imageUrls : null);
+    if (cancelToken != null && cancelToken.isCancelled) return;
 
+    ref.read(chatProvider.notifier).addAssistantMessage(response, imageUrls: imageUrls);
     _scrollToBottom();
   }
 
   Future<String?> _handleLocalCommands(String message) async {
-    final lowerMessage = message.toLowerCase();
-    final systemService = SystemService();
+    final lower = message.toLowerCase().trim();
 
-    if (lowerMessage == 'yes' || lowerMessage == 'confirm') {
-      return 'Confirmed. What would you like me to do?';
-    }
-
-    if (lowerMessage.contains('shutdown') || lowerMessage.contains('shut down')) {
-      if (lowerMessage.contains('yes') || lowerMessage.contains('confirm')) {
-        await systemService.shutdown();
-        return 'Shutting down the system...';
+    if (lower == 'system info' || lower == 'systeminfo') {
+      final appState = ref.read(appStateProvider);
+      final toolManager = appState.toolManager;
+      if (toolManager != null) {
+        final result = await toolManager.executeTool('system_info', {});
+        return result.toDisplayString();
       }
-      return 'Are you sure you want to shutdown the system? Type "yes" to confirm.';
+      return 'System service not available';
     }
 
-    if (lowerMessage.contains('restart')) {
-      if (lowerMessage.contains('yes') || lowerMessage.contains('confirm')) {
-        await systemService.restart();
-        return 'Restarting the system...';
-      }
-      return 'Are you sure you want to restart the system? Type "yes" to confirm.';
-    }
-
-    if (lowerMessage == 'sleep') {
-      await systemService.sleep();
-      return 'Putting the system to sleep...';
-    }
-
-    if (lowerMessage == 'lock') {
-      await systemService.lock();
-      return 'Locking the system...';
-    }
-
-    if (lowerMessage == 'help') {
-      return '''Here are some things I can help you with:
-
-**System Control**
-- Shutdown, Restart, Sleep, Lock
-
-**File Management**
-- Read, Write, Organize files
-
-**Weather**
-- Check weather forecasts
-
-**Social Media**
-- Telegram, Discord, WhatsApp
-
-**Voice**
-- Speech to text, Text to speech
-
-**Scheduler**
-- Set reminders and alarms
-
-**AI Features**
-- Ask me anything!
-- I can write code, explain concepts, and more''';
+    if (lower == 'help') {
+      return 'Available commands:\n'
+          '- system info: Get system information\n'
+          '- help: Show this help\n\n'
+          'You can also:\n'
+          '- Ask me anything\n'
+          '- Generate images\n'
+          '- Attach files with 📎 button\n'
+          '- Use natural language commands';
     }
 
     return null;
   }
 
-  String _generateMockResponse(String message) {
-    final lowerMessage = message.toLowerCase();
-
-    if (lowerMessage.contains('weather')) {
-      return 'I can help you check the weather. Please tell me which city you want to know the weather for.';
-    }
-
-    if (lowerMessage.contains('file') || lowerMessage.contains('folder')) {
-      return 'I can help you manage files. You can ask me to:\n- List files\n- Read file\n- Write file\n- Organize downloads\n- Search files';
-    }
-
-    if (lowerMessage.contains('telegram')) {
-      return 'Telegram integration is available. Would you like to connect your Telegram bot?';
-    }
-
-    if (lowerMessage.contains('discord')) {
-      return 'Discord integration is available. Would you like to connect your Discord bot?';
-    }
-
-    if (lowerMessage.contains('system info') || lowerMessage.contains('status')) {
-      return 'Getting system information...\n\nCPU: 45%\nMemory: 62%\nDisk: 38%\nBattery: 87%';
-    }
-
-    if (lowerMessage.contains('hello') || lowerMessage.contains('hi')) {
-      return 'Hello! How can I assist you today?';
-    }
-
-    return 'I received your message: "$message"\n\nAI Engine not connected. Please configure your API key in Settings to get real AI responses.';
-  }
-
   void _scrollToBottom() {
-    Future.delayed(const Duration(milliseconds: 100), () {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
@@ -186,169 +255,109 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final appState = ref.watch(appStateProvider);
     final chatState = ref.watch(chatProvider);
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: Column(
-        children: [
-          _buildHeader(appState),
-          Expanded(child: _buildMessageList()),
-          _buildInputArea(chatState),
-        ],
-      ),
+    return Column(
+      children: [
+        Expanded(
+          child: chatState.messages.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00BCD4).withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.android,
+                          size: 48,
+                          color: Color(0xFF00BCD4),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Hello! I am Nextron',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'How can I help you today?',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: chatState.messages.length + (chatState.isLoading ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == chatState.messages.length) {
+                      return _buildTypingIndicator();
+                    }
+                    return ChatBubble(
+                      message: chatState.messages[index].content,
+                      isUser: chatState.messages[index].role == 'user',
+                      timestamp: chatState.messages[index].timestamp,
+                      imageUrls: chatState.messages[index].imageUrls,
+                    );
+                  },
+                ),
+        ),
+        if (_attachedFiles.isNotEmpty) _buildFileChips(),
+        _buildInputArea(chatState),
+      ],
     );
   }
 
-  Widget _buildHeader(AppState appState) {
+  Widget _buildFileChips() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         border: Border(
-          bottom: BorderSide(color: Theme.of(context).dividerColor),
+          top: BorderSide(color: Theme.of(context).dividerColor),
         ),
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF00BCD4), Color(0xFF0097A7)],
+      child: SizedBox(
+        height: 40,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: _attachedFiles.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (context, index) {
+            final file = _attachedFiles[index];
+            final isFolder = file.size == 0;
+            return Chip(
+              avatar: Icon(
+                isFolder ? Icons.folder : Icons.insert_drive_file,
+                size: 18,
+                color: isFolder ? const Color(0xFF4CAF50) : const Color(0xFF00BCD4),
               ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.android, color: Colors.white, size: 24),
-          ),
-          const SizedBox(width: 14),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Nextron',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+              label: Text(
+                file.name,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
               ),
-              const SizedBox(height: 2),
-              Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: appState.isConnected ? const Color(0xFF4CAF50) : const Color(0xFFFF9800),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: (appState.isConnected ? const Color(0xFF4CAF50) : const Color(0xFFFF9800)).withValues(alpha: 0.5),
-                          blurRadius: 6,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    appState.isConnected
-                        ? 'Connected (${appState.provider.name})'
-                        : 'Offline Mode',
-                    style: TextStyle(
-                      color: appState.isConnected ? const Color(0xFF4CAF50) : const Color(0xFFFF9800),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const Spacer(),
-          if (!appState.isConnected)
-            _buildConfigureButton(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildConfigureButton() {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF00BCD4).withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF00BCD4).withValues(alpha: 0.3)),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {},
-          borderRadius: BorderRadius.circular(8),
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.settings, size: 16, color: Color(0xFF00BCD4)),
-                SizedBox(width: 6),
-                Text(
-                  'Configure',
-                  style: TextStyle(
-                    color: Color(0xFF00BCD4),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
+              deleteIcon: const Icon(Icons.close, size: 16, color: Colors.grey),
+              onDeleted: () => _removeFile(index),
+              backgroundColor: const Color(0xFF1E222A),
+              side: BorderSide(color: Theme.of(context).dividerColor),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+            );
+          },
         ),
       ),
     );
-  }
-
-  Widget _buildMessageList() {
-    final chatState = ref.watch(chatProvider);
-    final messages = chatState.messages;
-
-    return messages.isEmpty
-        ? Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.android,
-                  size: 64,
-                  color: const Color(0xFF00BCD4).withValues(alpha: 0.3),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Start a conversation with Nextron',
-                  style: TextStyle(
-                    color: Colors.grey[500],
-                    fontSize: 16,
-                  ),
-                ),
-              ],
-            ),
-          )
-        : ListView.builder(
-            controller: _scrollController,
-            padding: const EdgeInsets.all(16),
-            itemCount: messages.length + (chatState.isLoading ? 1 : 0),
-            itemBuilder: (context, index) {
-              if (index == messages.length) {
-                return _buildTypingIndicator();
-              }
-              return ChatBubble(
-                message: messages[index].content,
-                isUser: messages[index].role == 'user',
-                timestamp: messages[index].timestamp,
-                imageUrls: messages[index].imageUrls,
-              );
-            },
-          );
   }
 
   Widget _buildInputArea(ChatState chatState) {
@@ -368,6 +377,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               _sendMessage();
             },
           ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: _showAttachMenu,
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E222A),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Theme.of(context).dividerColor),
+              ),
+              child: Icon(
+                Icons.attach_file,
+                color: _attachedFiles.isNotEmpty ? const Color(0xFF00BCD4) : Colors.grey,
+                size: 20,
+              ),
+            ),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Container(
@@ -380,7 +406,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 controller: _messageController,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
-                  hintText: 'Type a message...',
+                  hintText: _attachedFiles.isNotEmpty ? 'Add a message...' : 'Type a message...',
                   hintStyle: TextStyle(color: Colors.grey[600]),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(
