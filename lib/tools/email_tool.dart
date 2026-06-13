@@ -1,17 +1,11 @@
 import 'dart:io';
 import 'tool.dart';
 
-Future<bool> _ensureAppRunning(String appName) async {
-  final checkResult = await Process.run('osascript', [
-    '-e',
-    'tell application "System Events" to (name of processes) contains "$appName"'
-  ]);
-  final isRunning = checkResult.stdout.toString().trim() == 'true';
-  if (isRunning) return true;
-
-  await Process.run('open', ['-a', appName]);
-  await Future.delayed(const Duration(seconds: 2));
-  return true;
+Future<void> _launchApp(String appName) async {
+  try {
+    await Process.run('open', ['-a', appName]);
+  } catch (_) {}
+  await Future.delayed(const Duration(seconds: 3));
 }
 
 class EmailSendTool extends Tool {
@@ -52,7 +46,7 @@ class EmailSendTool extends Tool {
     }
 
     try {
-      await _ensureAppRunning('Mail');
+      await _launchApp('Mail');
 
       final script = '''
 tell application "Mail"
@@ -95,7 +89,7 @@ class EmailListTool extends Tool {
     final count = params['count'] as int? ?? 5;
 
     try {
-      await _ensureAppRunning('Mail');
+      await _launchApp('Mail');
 
       final script = '''
 tell application "Mail"
@@ -163,7 +157,7 @@ class EmailReadTool extends Tool {
     }
 
     try {
-      await _ensureAppRunning('Mail');
+      await _launchApp('Mail');
 
       final script = '''
 tell application "Mail"

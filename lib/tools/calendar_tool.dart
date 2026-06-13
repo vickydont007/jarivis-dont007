@@ -1,20 +1,13 @@
 import 'dart:io';
 import 'tool.dart';
 
-Future<bool> _ensureAppRunning(String appName) async {
-  // Check if app is running
-  final checkResult = await Process.run('osascript', [
-    '-e',
-    'tell application "System Events" to (name of processes) contains "$appName"'
-  ]);
-  final isRunning = checkResult.stdout.toString().trim() == 'true';
-  if (isRunning) return true;
-
-  // Launch the app
-  await Process.run('open', ['-a', appName]);
-  // Wait for app to start
-  await Future.delayed(const Duration(seconds: 2));
-  return true;
+Future<void> _launchApp(String appName) async {
+  // Always try to launch - don't check first (Process.run check unreliable)
+  try {
+    await Process.run('open', ['-a', appName]);
+  } catch (_) {}
+  // Wait for app to fully start
+  await Future.delayed(const Duration(seconds: 3));
 }
 
 class CalendarEventsTool extends Tool {
@@ -37,7 +30,7 @@ class CalendarEventsTool extends Tool {
     final days = params['days'] as int? ?? 7;
 
     try {
-      await _ensureAppRunning('Calendar');
+      await _launchApp('Calendar');
 
       final script = '''
 tell application "Calendar"
@@ -141,7 +134,7 @@ class CalendarCreateTool extends Tool {
       final hour = int.parse(timeParts[0]);
       final minute = timeParts.length > 1 ? int.parse(timeParts[1]) : 0;
 
-      await _ensureAppRunning('Calendar');
+      await _launchApp('Calendar');
 
       final script = '''
 tell application "Calendar"
@@ -195,7 +188,7 @@ class CalendarDeleteTool extends Tool {
     }
 
     try {
-      await _ensureAppRunning('Calendar');
+      await _launchApp('Calendar');
 
       final script = '''
 tell application "Calendar"
