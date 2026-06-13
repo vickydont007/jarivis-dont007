@@ -384,6 +384,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               _messageController.text = text;
               _sendMessage();
             },
+            onPartialTranscription: (text) {
+              _messageController.text = text;
+            },
           ),
           const SizedBox(width: 8),
           GestureDetector(

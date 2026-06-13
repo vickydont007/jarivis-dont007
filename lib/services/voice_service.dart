@@ -14,6 +14,8 @@ class VoiceService {
   final FlutterTts _flutterTts = FlutterTts();
   final StreamController<String> _transcriptionController =
       StreamController<String>.broadcast();
+  final StreamController<String> _finalTranscriptionController =
+      StreamController<String>.broadcast();
   final StreamController<bool> _listeningController =
       StreamController<bool>.broadcast();
   final StreamController<String> _statusController =
@@ -26,6 +28,7 @@ class VoiceService {
   VoiceLanguage _currentLanguage = VoiceLanguage.both;
 
   Stream<String> get transcriptionStream => _transcriptionController.stream;
+  Stream<String> get finalTranscriptionStream => _finalTranscriptionController.stream;
   Stream<bool> get listeningStream => _listeningController.stream;
   Stream<String> get statusStream => _statusController.stream;
   bool get isListening => _isListening;
@@ -63,7 +66,11 @@ class VoiceService {
           final text = args['text'] as String? ?? '';
           final isFinal = args['isFinal'] as bool? ?? false;
           if (text.isNotEmpty) {
-            _transcriptionController.add(text);
+            if (isFinal) {
+              _finalTranscriptionController.add(text);
+            } else {
+              _transcriptionController.add(text);
+            }
           }
           if (isFinal) {
             _isListening = false;

@@ -17,16 +17,11 @@ public class MicPermissionHandler: NSObject, FlutterPlugin, SFSpeechRecognizerDe
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
-        case "requestPermission":
-            requestPermission(result: result)
-        case "checkPermission":
-            checkPermission(result: result)
-        case "startListening":
-            startListening(result: result)
-        case "stopListening":
-            stopListening(result: result)
-        default:
-            result(FlutterMethodNotImplemented)
+        case "requestPermission": requestPermission(result: result)
+        case "checkPermission": checkPermission(result: result)
+        case "startListening": startListening(result: result)
+        case "stopListening": stopListening(result: result)
+        default: result(FlutterMethodNotImplemented)
         }
     }
 
@@ -34,9 +29,7 @@ public class MicPermissionHandler: NSObject, FlutterPlugin, SFSpeechRecognizerDe
         AVCaptureDevice.requestAccess(for: .audio) { granted in
             if granted {
                 SFSpeechRecognizer.requestAuthorization { status in
-                    DispatchQueue.main.async {
-                        result(status == .authorized ? "authorized" : "denied")
-                    }
+                    DispatchQueue.main.async { result(status == .authorized ? "authorized" : "denied") }
                 }
             } else {
                 DispatchQueue.main.async { result("denied") }
@@ -47,18 +40,13 @@ public class MicPermissionHandler: NSObject, FlutterPlugin, SFSpeechRecognizerDe
     private func checkPermission(result: @escaping FlutterResult) {
         let mic = AVCaptureDevice.authorizationStatus(for: .audio)
         let speech = SFSpeechRecognizer.authorizationStatus()
-        if mic == .authorized && speech == .authorized {
-            result("authorized")
-        } else if mic == .denied || speech == .denied {
-            result("denied")
-        } else {
-            result("not_determined")
-        }
+        if mic == .authorized && speech == .authorized { result("authorized") }
+        else if mic == .denied || speech == .denied { result("denied") }
+        else { result("not_determined") }
     }
 
     private func startListening(result: @escaping FlutterResult) {
-        recognitionTask?.cancel()
-        recognitionTask = nil
+        stopListening(result: { _ in })
 
         let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
         guard let recognizer = recognizer, recognizer.isAvailable else {
@@ -71,7 +59,20 @@ public class MicPermissionHandler: NSObject, FlutterPlugin, SFSpeechRecognizerDe
             result("error: could not create request")
             return
         }
-        recognitionRequest.shouldReportPartialResults = false
+        recognitionRequest.shouldReportPartialResults = true
+
+        recognitionTask = recognizer.recognitionTask(with: recognitionRequest) { [weak self] (res, error) in
+            guard let self = self else { return }
+            if let res = res {
+                let text = res.bestTranscription.formattedString
+                DispatchQueue.main.async {
+                    self.channel?.invokeMethod("onSpeechResult", arguments: ["text": text, "isFinal": res.isFinal])
+                }
+            }
+            if error != nil || (res?.isFinal ?? false) {
+                self.stopListening(result: { _ in })
+            }
+        }
 
         audioEngine = AVAudioEngine()
         guard let audioEngine = audioEngine else {
@@ -81,21 +82,9 @@ public class MicPermissionHandler: NSObject, FlutterPlugin, SFSpeechRecognizerDe
 
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
+        let inputBus: AVAudioNodeBus = 0
 
-        recognitionTask = recognizer.recognitionTask(with: recognitionRequest) { [weak self] (result, error) in
-            guard let self = self else { return }
-            if let result = result {
-                let text = result.bestTranscription.formattedString
-                DispatchQueue.main.async {
-                    self.channel?.invokeMethod("onSpeechResult", arguments: ["text": text, "isFinal": result.isFinal])
-                }
-            }
-            if error != nil || (result?.isFinal ?? false) {
-                self.stopListening(result: { _ in })
-            }
-        }
-
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
+        inputNode.installTap(onBus: inputBus, bufferSize: 1024, format: recordingFormat) { [weak self] (buffer, _) in
             self?.recognitionRequest?.append(buffer)
         }
 
@@ -110,11 +99,11 @@ public class MicPermissionHandler: NSObject, FlutterPlugin, SFSpeechRecognizerDe
     private func stopListening(result: @escaping FlutterResult) {
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
+        audioEngine = nil
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
         recognitionTask = nil
         recognitionRequest = nil
-        audioEngine = nil
         result("stopped")
     }
 }

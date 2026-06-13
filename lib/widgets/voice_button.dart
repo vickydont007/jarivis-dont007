@@ -6,8 +6,9 @@ import '../providers/app_provider.dart';
 
 class VoiceButton extends ConsumerStatefulWidget {
   final Function(String)? onTranscription;
+  final Function(String)? onPartialTranscription;
 
-  const VoiceButton({super.key, this.onTranscription});
+  const VoiceButton({super.key, this.onTranscription, this.onPartialTranscription});
 
   @override
   ConsumerState<VoiceButton> createState() => _VoiceButtonState();
@@ -20,6 +21,7 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
   late AnimationController _animationController;
   late Animation<double> _animation;
   StreamSubscription? _transcriptionSub;
+  StreamSubscription? _finalTranscriptionSub;
   StreamSubscription? _statusSub;
 
   @override
@@ -40,11 +42,17 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
     if (voiceService == null) return;
 
     _transcriptionSub?.cancel();
+    _finalTranscriptionSub?.cancel();
     _statusSub?.cancel();
 
     _transcriptionSub = voiceService.transcriptionStream.listen((text) {
-      if (text.isNotEmpty && widget.onTranscription != null) {
-        widget.onTranscription!(text);
+      if (text.isNotEmpty) {
+        widget.onPartialTranscription?.call(text);
+      }
+    });
+    _finalTranscriptionSub = voiceService.finalTranscriptionStream.listen((text) {
+      if (text.isNotEmpty) {
+        widget.onTranscription?.call(text);
       }
     });
     _statusSub = voiceService.statusStream.listen((status) {
@@ -195,6 +203,7 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
   @override
   void dispose() {
     _transcriptionSub?.cancel();
+    _finalTranscriptionSub?.cancel();
     _statusSub?.cancel();
     _animationController.dispose();
     super.dispose();
