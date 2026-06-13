@@ -71,7 +71,7 @@ public class MicPermissionHandler: NSObject, FlutterPlugin, SFSpeechRecognizerDe
             result("error: could not create request")
             return
         }
-        recognitionRequest.shouldReportPartialResults = true
+        recognitionRequest.shouldReportPartialResults = false
 
         audioEngine = AVAudioEngine()
         guard let audioEngine = audioEngine else {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,6 +19,8 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
   String _status = '';
   late AnimationController _animationController;
   late Animation<double> _animation;
+  StreamSubscription? _transcriptionSub;
+  StreamSubscription? _statusSub;
 
   @override
   void initState() {
@@ -31,23 +34,24 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
     );
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
+  void _setupListeners() {
     final appState = ref.read(appStateProvider);
     final voiceService = appState.voiceService;
-    if (voiceService != null) {
-      voiceService.transcriptionStream.listen((text) {
-        if (text.isNotEmpty && widget.onTranscription != null) {
-          widget.onTranscription!(text);
-        }
-      });
-      voiceService.statusStream.listen((status) {
-        if (mounted) {
-          setState(() => _status = status);
-        }
-      });
-    }
+    if (voiceService == null) return;
+
+    _transcriptionSub?.cancel();
+    _statusSub?.cancel();
+
+    _transcriptionSub = voiceService.transcriptionStream.listen((text) {
+      if (text.isNotEmpty && widget.onTranscription != null) {
+        widget.onTranscription!(text);
+      }
+    });
+    _statusSub = voiceService.statusStream.listen((status) {
+      if (mounted) {
+        setState(() => _status = status);
+      }
+    });
   }
 
   void _toggleListening() async {
@@ -59,7 +63,6 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
       return;
     }
 
-    // If STT not available, try re-init once
     if (!voiceService.isSTTAvailable) {
       final granted = await voiceService.requestMicPermission();
       if (!granted || !voiceService.isSTTAvailable) {
@@ -68,7 +71,8 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
       }
     }
 
-    // STT is available - toggle listening
+    _setupListeners();
+
     if (_isListening) {
       setState(() => _isListening = false);
       _animationController.stop();
@@ -190,6 +194,8 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
 
   @override
   void dispose() {
+    _transcriptionSub?.cancel();
+    _statusSub?.cancel();
     _animationController.dispose();
     super.dispose();
   }
