@@ -46,6 +46,8 @@ import 'calendar_tool.dart';
 import 'database_tool.dart';
 import 'clipboard_tool.dart';
 import 'export_tool.dart';
+import 'facebook_tool.dart';
+import '../social/social_manager.dart';
 
 const String systemPrompt = '''You are Nextron, a powerful AI desktop assistant. You have access to various tools to help users with their tasks.
 
@@ -80,6 +82,7 @@ AVAILABLE TOOLS:
 - db_connect, db_query, db_list_tables, db_disconnect, db_info: SQLite database operations
 - clipboard_get, clipboard_set, clipboard_history, clipboard_clear: Clipboard operations
 - export_chat_md, export_chat_json: Export chat history
+- facebook_post, facebook_read_posts, facebook_page_info: Facebook Page posting and management
 
 CRITICAL TOOL RULES:
 - Tool names must be EXACTLY as listed above. Never add extra characters like <, >, |, or text after the tool name
@@ -146,6 +149,7 @@ class ToolManager {
   final WebAutomation _webAutomation;
   final AgentCommunication _agentCommunication;
   RAGManager? _ragManager;
+  SocialManager? _socialManager;
 
   ToolManager({
     required MemorySystem memory,
@@ -245,6 +249,13 @@ class ToolManager {
       );
       _ragManager!.setApiKey(apiKey);
       _multiModal.setApiKey(apiKey);
+    }
+  }
+
+  void setSocialManager(SocialManager socialManager) {
+    _socialManager = socialManager;
+    if (_socialManager != null) {
+      _registry.registerAll(getAllFacebookTools(_socialManager!));
     }
   }
 

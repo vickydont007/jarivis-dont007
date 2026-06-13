@@ -82,6 +82,8 @@ class SocialManager {
     }
   }
 
+  FacebookService? getFacebookService() => _facebook;
+
   SocialManager() {
     // Initialize rate limiters for each platform
     _rateLimiters[SocialPlatform.telegram] = RateLimiter(maxRequests: 30);

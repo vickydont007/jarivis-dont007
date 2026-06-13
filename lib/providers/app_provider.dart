@@ -154,6 +154,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
       fileConverter: _fileConverter!,
     );
     _toolManager!.initialize();
+    _toolManager!.setSocialManager(_socialManager!);
 
     _agentNetwork!.initializeDefaultNetwork();
     

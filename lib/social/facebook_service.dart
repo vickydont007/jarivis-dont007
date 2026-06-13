@@ -41,6 +41,120 @@ class FacebookService {
     _pageId = pageId;
   }
 
+  // Create a text post on Page
+  Future<Map<String, dynamic>> createPost(String message) async {
+    if (_accessToken == null || _pageId == null) {
+      throw Exception('Credentials not set');
+    }
+
+    try {
+      final response = await _dio.post(
+        'https://graph.facebook.com/v18.0/$_pageId/feed',
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $_accessToken',
+            'Content-Type': 'application/json',
+          },
+        ),
+        data: {'message': message},
+      );
+
+      if (response.statusCode == 200) {
+        return {'success': true, 'postId': response.data['id']};
+      }
+      return {'success': false, 'error': response.data.toString()};
+    } catch (e) {
+      print('Error creating Facebook post: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // Create a post with image URL
+  Future<Map<String, dynamic>> createPostWithImage(String message, String imageUrl) async {
+    if (_accessToken == null || _pageId == null) {
+      throw Exception('Credentials not set');
+    }
+
+    try {
+      final response = await _dio.post(
+        'https://graph.facebook.com/v18.0/$_pageId/photos',
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $_accessToken',
+            'Content-Type': 'application/json',
+          },
+        ),
+        data: {
+          'url': imageUrl,
+          'caption': message,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return {'success': true, 'postId': response.data['id']};
+      }
+      return {'success': false, 'error': response.data.toString()};
+    } catch (e) {
+      print('Error creating Facebook photo post: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // Get page posts
+  Future<List<dynamic>> getPosts({int limit = 10}) async {
+    if (_accessToken == null || _pageId == null) return [];
+
+    try {
+      final response = await _dio.get(
+        'https://graph.facebook.com/v18.0/$_pageId/feed',
+        options: Options(headers: {'Authorization': 'Bearer $_accessToken'}),
+        queryParameters: {'fields': 'message,created_time,id', 'limit': limit},
+      );
+
+      if (response.statusCode == 200) {
+        return response.data['data'] ?? [];
+      }
+      return [];
+    } catch (e) {
+      print('Error getting Facebook posts: $e');
+      return [];
+    }
+  }
+
+  // Delete a post
+  Future<bool> deletePost(String postId) async {
+    if (_accessToken == null) return false;
+
+    try {
+      final response = await _dio.delete(
+        'https://graph.facebook.com/v18.0/$postId',
+        options: Options(headers: {'Authorization': 'Bearer $_accessToken'}),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Error deleting Facebook post: $e');
+      return false;
+    }
+  }
+
+  // Get page info
+  Future<Map<String, dynamic>?> getPageInfo() async {
+    if (_accessToken == null || _pageId == null) return null;
+
+    try {
+      final response = await _dio.get(
+        'https://graph.facebook.com/v18.0/$_pageId',
+        options: Options(headers: {'Authorization': 'Bearer $_accessToken'}),
+        queryParameters: {'fields': 'name,id,fan_count,about'},
+      );
+
+      if (response.statusCode == 200) return response.data;
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   // Send message
   Future<bool> sendMessage(String recipientId, String message) async {
     if (_accessToken == null || _pageId == null) {
