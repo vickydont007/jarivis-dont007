@@ -1,5 +1,6 @@
 import FlutterMacOS
 import AVFoundation
+import Speech
 
 public class MicPermissionHandler: NSObject, FlutterPlugin {
     public static func register(with registrar: FlutterPluginRegistrar) {
@@ -11,52 +12,55 @@ public class MicPermissionHandler: NSObject, FlutterPlugin {
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
         case "requestPermission":
-            requestMicPermission(result: result)
+            requestPermission(result: result)
         case "checkPermission":
-            checkMicPermission(result: result)
+            checkPermission(result: result)
         default:
             result(FlutterMethodNotImplemented)
         }
     }
 
-    private func requestMicPermission(result: @escaping FlutterResult) {
-        let status = AVCaptureDevice.authorizationStatus(for: .audio)
-        
-        switch status {
-        case .authorized:
-            // Already authorized
-            result("authorized")
-        case .notDetermined:
-            // Need to request
-            AVCaptureDevice.requestAccess(for: .audio) { granted in
+    private func requestPermission(result: @escaping FlutterResult) {
+        // Request both microphone AND speech recognition
+        AVCaptureDevice.requestAccess(for: .audio) { micGranted in
+            if micGranted {
+                // Now request speech recognition
+                SFSpeechRecognizer.requestAuthorization { speechStatus in
+                    DispatchQueue.main.async {
+                        switch speechStatus {
+                        case .authorized:
+                            result("authorized")
+                        case .denied:
+                            result("denied")
+                        case .restricted:
+                            result("restricted")
+                        case .notDetermined:
+                            result("not_determined")
+                        @unknown default:
+                            result("unknown")
+                        }
+                    }
+                }
+            } else {
                 DispatchQueue.main.async {
-                    result(granted ? "authorized" : "denied")
+                    result("denied")
                 }
             }
-        case .denied:
-            // User denied - tell them to go to settings
-            result("denied")
-        case .restricted:
-            // Restricted by MDM or parental controls
-            result("restricted")
-        @unknown default:
-            result("unknown")
         }
     }
 
-    private func checkMicPermission(result: @escaping FlutterResult) {
-        let status = AVCaptureDevice.authorizationStatus(for: .audio)
-        switch status {
-        case .authorized:
+    private func checkPermission(result: @escaping FlutterResult) {
+        let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        let speechStatus = SFSpeechRecognizer.authorizationStatus()
+
+        if micStatus == .authorized && speechStatus == .authorized {
             result("authorized")
-        case .denied:
+        } else if micStatus == .denied || speechStatus == .denied {
             result("denied")
-        case .restricted:
+        } else if micStatus == .restricted || speechStatus == .restricted {
             result("restricted")
-        case .notDetermined:
+        } else {
             result("not_determined")
-        @unknown default:
-            result("unknown")
         }
     }
 }
