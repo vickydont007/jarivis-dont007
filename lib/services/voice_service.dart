@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math';
-import 'package:flutter/services.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
@@ -11,7 +10,6 @@ enum VoiceLanguage {
 }
 
 class VoiceService {
-  static const _channel = MethodChannel('com.nextron.ai/mic_permission');
   final SpeechToText _speechToText = SpeechToText();
   final FlutterTts _flutterTts = FlutterTts();
   final StreamController<String> _transcriptionController =
@@ -27,75 +25,55 @@ class VoiceService {
   static const int _maxRetries = 3;
   VoiceLanguage _currentLanguage = VoiceLanguage.both;
   bool _sttAvailable = false;
-  String _micPermission = 'not_determined'; // authorized, denied, restricted, not_determined
 
   Stream<String> get transcriptionStream => _transcriptionController.stream;
   Stream<bool> get listeningStream => _listeningController.stream;
   Stream<String> get statusStream => _statusController.stream;
   bool get isListening => _isListening;
   bool get isSTTAvailable => _sttAvailable;
-  String get micPermission => _micPermission;
+  String get micPermission => _sttAvailable ? 'authorized' : 'unavailable';
 
   Future<bool> initialize() async {
     if (_isInitialized) return true;
 
     try {
-      // Step 1: Check current permission status
-      _statusController.add('Checking microphone permission...');
-      _micPermission = await _checkMicPermission();
-      print('Mic permission status: $_micPermission');
+      _statusController.add('Initializing speech recognition...');
 
-      // Step 2: If not determined, request permission
-      if (_micPermission == 'not_determined') {
-        _micPermission = await _requestMicPermission();
-        print('Mic permission after request: $_micPermission');
+      // Initialize speech_to_text - this will trigger permission dialog on macOS
+      _sttAvailable = await _speechToText.initialize(
+        onError: (error) {
+          print('STT Error: ${error.errorMsg}');
+          _isListening = false;
+          _listeningController.add(false);
+
+          if (_isTransientError(error.errorMsg) && _retryCount < _maxRetries) {
+            _retryCount++;
+            final delay = Duration(milliseconds: 500 * pow(2, _retryCount - 1).toInt());
+            _statusController.add('Retrying... ($_retryCount/$_maxRetries)');
+            Future.delayed(delay, () {
+              if (!_isListening) startListening();
+            });
+          }
+        },
+        onStatus: (status) {
+          print('STT Status: $status');
+          if (status == 'done' || status == 'notListening' || status == 'cancelled') {
+            _isListening = false;
+            _listeningController.add(false);
+          }
+          if (status == 'listening') {
+            _retryCount = 0;
+          }
+        },
+      );
+
+      print('STT available: $_sttAvailable');
+
+      if (!_sttAvailable) {
+        _statusController.add('Speech recognition unavailable. Check microphone permission in System Settings.');
       }
 
-      // Step 3: If denied or restricted, show settings message
-      if (_micPermission == 'denied' || _micPermission == 'restricted') {
-        _sttAvailable = false;
-        _isInitialized = true;
-        _statusController.add('Mic permission denied. Go to System Settings > Privacy & Security > Microphone.');
-        return false;
-      }
-
-      // Step 4: If authorized, init STT
-      if (_micPermission == 'authorized') {
-        _statusController.add('Initializing speech recognition...');
-        try {
-          _sttAvailable = await _speechToText.initialize(
-            onError: (error) {
-              print('STT Error: ${error.errorMsg}');
-              _isListening = false;
-              _listeningController.add(false);
-
-              if (_isTransientError(error.errorMsg) && _retryCount < _maxRetries) {
-                _retryCount++;
-                final delay = Duration(milliseconds: 500 * pow(2, _retryCount - 1).toInt());
-                _statusController.add('Retrying... ($_retryCount/$_maxRetries)');
-                Future.delayed(delay, () {
-                  if (!_isListening) startListening();
-                });
-              }
-            },
-            onStatus: (status) {
-              print('STT Status: $status');
-              if (status == 'done' || status == 'notListening' || status == 'cancelled') {
-                _isListening = false;
-                _listeningController.add(false);
-              }
-              if (status == 'listening') {
-                _retryCount = 0;
-              }
-            },
-          );
-        } catch (e) {
-          print('STT init error: $e');
-          _sttAvailable = false;
-        }
-      }
-
-      // Step 5: Configure TTS
+      // Configure TTS
       await _flutterTts.setVolume(1.0);
       await _flutterTts.setSpeechRate(0.5);
       await _flutterTts.setPitch(1.0);
@@ -105,7 +83,7 @@ class VoiceService {
       if (_sttAvailable) {
         _statusController.add('Voice ready');
       } else {
-        _statusController.add('Speech recognition unavailable.');
+        _statusController.add('Voice unavailable');
       }
 
       return _sttAvailable;
@@ -116,36 +94,11 @@ class VoiceService {
     }
   }
 
-  Future<String> _checkMicPermission() async {
-    try {
-      final result = await _channel.invokeMethod('checkPermission');
-      return result ?? 'unknown';
-    } catch (e) {
-      print('Check permission error: $e');
-      return 'unknown';
-    }
-  }
-
-  Future<String> _requestMicPermission() async {
-    try {
-      final result = await _channel.invokeMethod('requestPermission');
-      return result ?? 'denied';
-    } catch (e) {
-      print('Request permission error: $e');
-      return 'denied';
-    }
-  }
-
   Future<bool> requestMicPermission() async {
-    _micPermission = await _requestMicPermission();
-    if (_micPermission == 'authorized') {
-      // Re-initialize STT
-      _isInitialized = false;
-      _sttAvailable = false;
-      await initialize();
-      return true;
-    }
-    return false;
+    // Re-initialize to trigger permission request
+    _isInitialized = false;
+    _sttAvailable = false;
+    return await initialize();
   }
 
   Future<bool> startListening() async {
@@ -155,7 +108,7 @@ class VoiceService {
     }
 
     if (!_sttAvailable) {
-      _statusController.add('STT unavailable. Grant mic permission.');
+      _statusController.add('STT unavailable.');
       return false;
     }
 

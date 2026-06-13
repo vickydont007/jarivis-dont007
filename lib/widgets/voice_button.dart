@@ -16,8 +16,6 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
     with SingleTickerProviderStateMixin {
   bool _isListening = false;
   String _status = '';
-  bool _permissionGranted = false;
-  bool _checkingPermission = false;
   late AnimationController _animationController;
   late Animation<double> _animation;
 
@@ -31,22 +29,6 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
     _animation = Tween<double>(begin: 1.0, end: 1.5).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
-    _checkPermission();
-  }
-
-  void _checkPermission() async {
-    final appState = ref.read(appStateProvider);
-    final voiceService = appState.voiceService;
-    if (voiceService != null) {
-      // Wait a bit for service to initialize
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (mounted) {
-        setState(() {
-          _permissionGranted = voiceService.micPermission == 'authorized';
-          _status = voiceService.micPermission;
-        });
-      }
-    }
   }
 
   @override
@@ -69,8 +51,6 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
   }
 
   void _toggleListening() async {
-    if (_checkingPermission) return;
-
     final appState = ref.read(appStateProvider);
     final voiceService = appState.voiceService;
 
@@ -79,53 +59,27 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
       return;
     }
 
-    // Check permission first
-    if (!_permissionGranted) {
-      _checkingPermission = true;
-      setState(() {});
-
+    if (!voiceService.isSTTAvailable) {
+      // Try to re-initialize (which will trigger permission request)
       final granted = await voiceService.requestMicPermission();
-      _checkingPermission = false;
-
-      if (granted) {
-        setState(() => _permissionGranted = true);
-        // Now try to listen
-        _startListening();
-      } else {
+      if (!granted) {
         _showSettingsDialog();
+        return;
       }
-      return;
     }
 
-    // Permission granted, toggle listening
     if (_isListening) {
       setState(() => _isListening = false);
       _animationController.stop();
       _animationController.reset();
       await voiceService.stopListening();
     } else {
-      _startListening();
-    }
-  }
-
-  void _startListening() async {
-    final appState = ref.read(appStateProvider);
-    final voiceService = appState.voiceService;
-    if (voiceService == null) return;
-
-    final started = await voiceService.startListening();
-    if (started) {
-      setState(() => _isListening = true);
-      _animationController.repeat(reverse: true);
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_status.isNotEmpty ? _status : 'Speech recognition unavailable'),
-            backgroundColor: Colors.orange,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+      final started = await voiceService.startListening();
+      if (started) {
+        setState(() => _isListening = true);
+        _animationController.repeat(reverse: true);
+      } else {
+        _showSettingsDialog();
       }
     }
   }
@@ -147,7 +101,7 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
               child: const Icon(Icons.mic, color: Color(0xFFFF9800), size: 22),
             ),
             const SizedBox(width: 12),
-            const Text('Microphone Permission', style: TextStyle(color: Colors.white, fontSize: 18)),
+            const Text('Enable Microphone', style: TextStyle(color: Colors.white, fontSize: 18)),
           ],
         ),
         content: Column(
@@ -155,10 +109,10 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Nextron needs microphone access for voice input.',
+              'To use voice input, enable microphone for Nextron:',
               style: TextStyle(color: Colors.grey[400], fontSize: 14),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -168,12 +122,13 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Steps:', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Text('1. Click "Open Settings" below', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
-                  Text('2. Find "nextron_ai" in the list', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
-                  Text('3. Turn ON the microphone toggle', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
-                  Text('4. Come back and try again', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
+                  Text('1. Click "Open Settings" below', style: TextStyle(color: Colors.grey[300], fontSize: 13)),
+                  const SizedBox(height: 4),
+                  Text('2. Click the lock icon and enter password', style: TextStyle(color: Colors.grey[300], fontSize: 13)),
+                  const SizedBox(height: 4),
+                  Text('3. Find "nextron_ai" and turn it ON', style: TextStyle(color: Colors.grey[300], fontSize: 13)),
+                  const SizedBox(height: 4),
+                  Text('4. Come back and tap mic again', style: TextStyle(color: Colors.grey[300], fontSize: 13)),
                 ],
               ),
             ),
@@ -220,17 +175,11 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
             ),
           ),
           child: IconButton(
-            icon: _checkingPermission
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange),
-                  )
-                : Icon(
-                    _isListening ? Icons.mic : Icons.mic_none,
-                    color: Colors.white,
-                    size: 20,
-                  ),
+            icon: Icon(
+              _isListening ? Icons.mic : Icons.mic_none,
+              color: Colors.white,
+              size: 20,
+            ),
             onPressed: _toggleListening,
           ),
         ),
