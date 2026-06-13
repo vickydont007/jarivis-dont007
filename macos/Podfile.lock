@@ -13,8 +13,6 @@ PODS:
   - shared_preferences_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
-  - speech_to_text_macos (0.0.1):
-    - FlutterMacOS
   - sqflite_darwin (0.0.4):
     - Flutter
     - FlutterMacOS
@@ -31,7 +29,6 @@ DEPENDENCIES:
   - screen_retriever (from `Flutter/ephemeral/.symlinks/plugins/screen_retriever/macos`)
   - share_plus (from `Flutter/ephemeral/.symlinks/plugins/share_plus/macos`)
   - shared_preferences_foundation (from `Flutter/ephemeral/.symlinks/plugins/shared_preferences_foundation/darwin`)
-  - speech_to_text_macos (from `Flutter/ephemeral/.symlinks/plugins/speech_to_text_macos/macos`)
   - sqflite_darwin (from `Flutter/ephemeral/.symlinks/plugins/sqflite_darwin/darwin`)
   - system_tray (from `Flutter/ephemeral/.symlinks/plugins/system_tray/macos`)
   - window_manager (from `Flutter/ephemeral/.symlinks/plugins/window_manager/macos`)
@@ -51,8 +48,6 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/share_plus/macos
   shared_preferences_foundation:
     :path: Flutter/ephemeral/.symlinks/plugins/shared_preferences_foundation/darwin
-  speech_to_text_macos:
-    :path: Flutter/ephemeral/.symlinks/plugins/speech_to_text_macos/macos
   sqflite_darwin:
     :path: Flutter/ephemeral/.symlinks/plugins/sqflite_darwin/darwin
   system_tray:
@@ -68,7 +63,6 @@ SPEC CHECKSUMS:
   screen_retriever: 59634572a57080243dd1bf715e55b6c54f241a38
   share_plus: 76dd39142738f7a68dd57b05093b5e8193f220f7
   shared_preferences_foundation: 5086985c1d43c5ba4d5e69a4e8083a389e2909e6
-  speech_to_text_macos: ae04291713998dede24b85d3b50bd8fedcbfb565
   sqflite_darwin: 5a7236e3b501866c1c9befc6771dfd73ffb8702d
   system_tray: e53c972838c69589ff2e77d6d3abfd71332f9e5d
   window_manager: 3a1844359a6295ab1e47659b1a777e36773cd6e8

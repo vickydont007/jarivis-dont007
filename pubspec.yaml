@@ -24,8 +24,7 @@ dependencies:
   path_provider: ^2.1.2
   path: ^1.9.0
 
-  # Voice
-  speech_to_text: ^6.6.0
+  # Voice - using native Swift Speech framework
   flutter_tts: ^3.8.3
 
   # System
