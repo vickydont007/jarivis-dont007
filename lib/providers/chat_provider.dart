@@ -65,10 +65,13 @@ class ChatState {
 
 class ChatNotifier extends StateNotifier<ChatState> {
   ChatNotifier() : super(ChatState()) {
-    _addWelcomeMessage();
+    if (state.messages.isEmpty) {
+      _addWelcomeMessage();
+    }
   }
 
   void _addWelcomeMessage() {
+    if (state.messages.isNotEmpty) return;
     state = state.copyWith(
       messages: [
         ChatMessage(
