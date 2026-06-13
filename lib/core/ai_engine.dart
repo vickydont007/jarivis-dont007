@@ -54,7 +54,7 @@ class AIEngine {
   
   // Rate limiter - minimum delay between API calls
   DateTime _lastRequestTime = DateTime.now().subtract(const Duration(seconds: 10));
-  static const Duration _minDelay = Duration(seconds: 3);
+  static const Duration _minDelay = Duration(seconds: 1);
 
   AIEngine({
     required AIProvider provider,
@@ -226,7 +226,7 @@ class AIEngine {
       }
 
       if (response == null || response.statusCode == 429) {
-        return 'Rate limited. Please wait 30 seconds and try again.';
+        return 'Rate limited by API. Retrying in a few seconds...';
       }
 
       return _handleResponse(response);
@@ -289,7 +289,7 @@ class AIEngine {
       if (response == null || response.statusCode == 429) {
         return {
           'success': false,
-          'error': 'Rate limited. Please wait 30 seconds and try again.',
+          'error': 'Rate limited by API. Please wait a moment and try again.',
           'toolCalls': allToolCalls,
           'toolResults': allToolResults,
         };
@@ -604,7 +604,7 @@ class AIEngine {
       } else if (response.statusCode == 429) {
         return {
           'success': false,
-          'error': 'Rate limited. Please wait 30 seconds and try again.',
+          'error': 'Rate limited by API. Please wait a moment and try again.',
           'model': imageModel,
         };
       } else if (response.statusCode == 401) {

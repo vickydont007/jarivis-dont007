@@ -74,6 +74,22 @@ AVAILABLE TOOLS:
 - start_meeting, end_meeting, add_meeting_note, get_meeting_notes, get_meetings, update_meeting_summary, delete_meeting: Meeting assistant
 - create_notification_rule, get_notification_rules, record_notification_event, toggle_notification_rule, delete_notification_rule, get_recent_notifications, get_notification_stats: Notification intelligence
 - convert_file, get_supported_formats, check_format_supported: File conversion
+- git_status, git_add, git_commit, git_push, git_pull, git_diff, git_log, git_branch, git_checkout, git_merge: Git operations
+- email_send, email_list, email_read: Email via macOS Mail app
+- calendar_events, calendar_create, calendar_delete: Calendar via macOS Calendar app
+- db_connect, db_query, db_list_tables, db_disconnect, db_info: SQLite database operations
+- clipboard_get, clipboard_set, clipboard_history, clipboard_clear: Clipboard operations
+- export_chat_md, export_chat_json: Export chat history
+
+CRITICAL TOOL RULES:
+- Tool names must be EXACTLY as listed above. Never add extra characters like <, >, |, or text after the tool name
+- Example CORRECT: calendar_create with params {title: "Meeting", date: "2026-06-20", time: "10:00"}
+- Example WRONG: calendar_create<|channel|>commentary (THIS IS INVALID)
+
+CALENDAR DATE FORMAT:
+- Date MUST be YYYY-MM-DD format (e.g., "2026-06-20" for 20 June 2026)
+- Time MUST be HH:MM in 24-hour format (e.g., "10:00" for 10 AM, "14:30" for 2:30 PM)
+- Example: calendar_create(title: "Team Meeting", date: "2026-06-20", time: "10:00")
 
 RULES:
 1. Always use tools when the user asks you to perform actions
