@@ -432,6 +432,22 @@ class AgentOrchestrator {
     return '💬 I received your message: "${task.description}"\n\nHow can I help you further?';
   }
 
+  Future<String> delegateTask(String message) async {
+    // Find the best agent for this task
+    final bestAgent = getBestAgentForTask(message);
+    if (bestAgent == null) {
+      return 'No suitable agent found for this task';
+    }
+
+    // Create and execute the task
+    final task = await createTask(
+      agentId: bestAgent.id,
+      description: message,
+    );
+
+    return await executeTask(task);
+  }
+
   Future<String> delegateToSubAgent({
     required String parentAgentId,
     required String subAgentType,

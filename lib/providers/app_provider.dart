@@ -13,6 +13,7 @@ import '../core/screen_recording.dart';
 import '../core/meeting_assistant.dart';
 import '../core/notification_intelligence.dart';
 import '../core/file_converter.dart';
+import '../core/agent_orchestrator.dart';
 import '../services/scheduler_service.dart';
 import '../services/voice_service.dart';
 import '../social/social_manager.dart';
@@ -38,6 +39,7 @@ class AppState {
   final MeetingAssistant? meetingAssistant;
   final NotificationIntelligence? notificationIntelligence;
   final FileConverter? fileConverter;
+  final AgentOrchestrator? agentOrchestrator;
 
   AppState({
     this.aiEngine,
@@ -59,6 +61,7 @@ class AppState {
     this.meetingAssistant,
     this.notificationIntelligence,
     this.fileConverter,
+    this.agentOrchestrator,
   });
 
   AppState copyWith({
@@ -81,6 +84,7 @@ class AppState {
     MeetingAssistant? meetingAssistant,
     NotificationIntelligence? notificationIntelligence,
     FileConverter? fileConverter,
+    AgentOrchestrator? agentOrchestrator,
   }) {
     return AppState(
       aiEngine: aiEngine ?? this.aiEngine,
@@ -102,6 +106,7 @@ class AppState {
       meetingAssistant: meetingAssistant ?? this.meetingAssistant,
       notificationIntelligence: notificationIntelligence ?? this.notificationIntelligence,
       fileConverter: fileConverter ?? this.fileConverter,
+      agentOrchestrator: agentOrchestrator ?? this.agentOrchestrator,
     );
   }
 }
@@ -123,6 +128,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
   MeetingAssistant? _meetingAssistant;
   NotificationIntelligence? _notificationIntelligence;
   FileConverter? _fileConverter;
+  AgentOrchestrator? _agentOrchestrator;
 
   AppStateNotifier() : super(AppState()) {
     _memory = MemorySystem();
@@ -139,6 +145,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
     _meetingAssistant = MeetingAssistant();
     _notificationIntelligence = NotificationIntelligence();
     _fileConverter = FileConverter();
+    _agentOrchestrator = AgentOrchestrator();
 
     _toolManager = ToolManager(
       memory: _memory!,
@@ -155,6 +162,11 @@ class AppStateNotifier extends StateNotifier<AppState> {
     );
     _toolManager!.initialize();
     _toolManager!.setSocialManager(_socialManager!);
+
+    // Wire orchestrator to AI engine and tools
+    if (_engine != null && _toolManager != null) {
+      _agentOrchestrator!.setEngine(_engine!, _toolManager!);
+    }
 
     _agentNetwork!.initializeDefaultNetwork();
     
@@ -177,6 +189,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
       meetingAssistant: _meetingAssistant,
       notificationIntelligence: _notificationIntelligence,
       fileConverter: _fileConverter,
+      agentOrchestrator: _agentOrchestrator,
     );
 
     _loadSavedState();
@@ -300,6 +313,33 @@ class AppStateNotifier extends StateNotifier<AppState> {
       return 'AI Engine not initialized. Please configure in Settings.';
     }
 
+    // Check if orchestrator should handle this as a delegated task
+    final shouldDelegate = _agentOrchestrator != null && _shouldDelegateToAgent(message);
+    
+    if (shouldDelegate) {
+      // Delegate to agent orchestrator
+      final delegatedResponse = await _agentOrchestrator!.delegateTask(message);
+      if (delegatedResponse.isNotEmpty) {
+        // Still save to memory
+        final memoryEntry = MemoryEntry.create(
+          content: message,
+          category: 'chat',
+          metadata: {'role': 'user'},
+        );
+        _memory?.addMemory(memoryEntry);
+        
+        final responseEntry = MemoryEntry.create(
+          content: delegatedResponse,
+          category: 'chat',
+          metadata: {'role': 'assistant', 'delegated': true},
+        );
+        _memory?.addMemory(responseEntry);
+        
+        return delegatedResponse;
+      }
+      // Fall through to normal flow if agent couldn't handle
+    }
+
     try {
       final memoryEntry = MemoryEntry.create(
         content: message,
@@ -371,6 +411,18 @@ class AppStateNotifier extends StateNotifier<AppState> {
     } catch (e) {
       return 'Error: $e';
     }
+  }
+
+  bool _shouldDelegateToAgent(String message) {
+    // Delegate if message contains task-like keywords
+    final taskKeywords = [
+      'schedule', 'remind', 'create', 'write', 'analyze', 'search', 'find',
+      'build', 'run', 'execute', 'automate', 'organize', 'backup', 'sync',
+      'post', 'send', 'message', 'email', 'meeting', 'record', 'summarize',
+      'convert', 'translate', 'fetch', 'download', 'upload', 'monitor',
+    ];
+    final lower = message.toLowerCase();
+    return taskKeywords.any((k) => lower.contains(k));
   }
 
   Stream<String> sendMessageStream(String message, {List<Map<String, dynamic>>? history}) async* {
