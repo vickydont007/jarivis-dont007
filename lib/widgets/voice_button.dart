@@ -18,6 +18,7 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
     with SingleTickerProviderStateMixin {
   bool _isListening = false;
   String _status = '';
+  String _lastText = '';
   late AnimationController _animationController;
   late Animation<double> _animation;
   StreamSubscription? _transcriptionSub;
@@ -47,17 +48,31 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
 
     _transcriptionSub = voiceService.transcriptionStream.listen((text) {
       if (text.isNotEmpty) {
+        _lastText = text;
         widget.onPartialTranscription?.call(text);
       }
     });
     _finalTranscriptionSub = voiceService.finalTranscriptionStream.listen((text) {
       if (text.isNotEmpty) {
+        _lastText = text;
         widget.onTranscription?.call(text);
       }
     });
-    _statusSub = voiceService.statusStream.listen((status) {
-      if (mounted) {
-        setState(() => _status = status);
+    _statusSub = voiceService.listeningStream.listen((listening) {
+      if (!listening && mounted && _isListening) {
+        // Mic stopped - send whatever text is in the field
+        setState(() => _isListening = false);
+        _animationController.stop();
+        _animationController.reset();
+        // Delay slightly to ensure final text is set
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (widget.onTranscription != null) {
+            final text = _lastText;
+            if (text.isNotEmpty) {
+              widget.onTranscription!(text);
+            }
+          }
+        });
       }
     });
   }
@@ -87,6 +102,7 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
       _animationController.reset();
       await voiceService.stopListening();
     } else {
+      _lastText = '';
       final started = await voiceService.startListening();
       if (started) {
         setState(() => _isListening = true);
