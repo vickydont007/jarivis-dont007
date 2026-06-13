@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:flutter/services.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
@@ -10,6 +11,7 @@ enum VoiceLanguage {
 }
 
 class VoiceService {
+  static const _channel = MethodChannel('com.nextron.ai/mic_permission');
   final SpeechToText _speechToText = SpeechToText();
   final FlutterTts _flutterTts = FlutterTts();
   final StreamController<String> _transcriptionController =
@@ -36,54 +38,89 @@ class VoiceService {
     if (_isInitialized) return true;
 
     try {
+      _statusController.add('Requesting microphone permission...');
+
+      // Step 1: Request mic permission via native code
+      bool micGranted = false;
+      try {
+        micGranted = await _channel.invokeMethod('requestPermission') ?? false;
+      } catch (e) {
+        print('Native mic permission error: $e');
+      }
+
+      print('Mic permission granted: $micGranted');
+
+      if (!micGranted) {
+        _statusController.add('Microphone permission denied. Grant in System Settings > Privacy & Security > Microphone.');
+        _sttAvailable = false;
+        _isInitialized = true;
+        return false;
+      }
+
       _statusController.add('Initializing speech recognition...');
 
-      _sttAvailable = await _speechToText.initialize(
-        onError: (error) {
-          print('STT Error: ${error.errorMsg}');
-          _isListening = false;
-          _listeningController.add(false);
-
-          if (_isTransientError(error.errorMsg) && _retryCount < _maxRetries) {
-            _retryCount++;
-            final delay = Duration(milliseconds: 500 * pow(2, _retryCount - 1).toInt());
-            _statusController.add('Retrying in ${delay.inSeconds}s... ($_retryCount/$_maxRetries)');
-            Future.delayed(delay, () {
-              if (!_isListening) startListening();
-            });
-          } else if (_retryCount >= _maxRetries) {
-            _statusController.add('Voice recognition unavailable. Use text input.');
-          }
-        },
-        onStatus: (status) {
-          print('STT Status: $status');
-          if (status == 'done' || status == 'notListening' || status == 'cancelled') {
+      // Step 2: Initialize speech_to_text
+      try {
+        _sttAvailable = await _speechToText.initialize(
+          onError: (error) {
+            print('STT Error: ${error.errorMsg}');
             _isListening = false;
             _listeningController.add(false);
-          }
-          if (status == 'listening') {
-            _retryCount = 0;
-          }
-        },
-      );
+
+            if (_isTransientError(error.errorMsg) && _retryCount < _maxRetries) {
+              _retryCount++;
+              final delay = Duration(milliseconds: 500 * pow(2, _retryCount - 1).toInt());
+              _statusController.add('Retrying... ($_retryCount/$_maxRetries)');
+              Future.delayed(delay, () {
+                if (!_isListening) startListening();
+              });
+            }
+          },
+          onStatus: (status) {
+            print('STT Status: $status');
+            if (status == 'done' || status == 'notListening' || status == 'cancelled') {
+              _isListening = false;
+              _listeningController.add(false);
+            }
+            if (status == 'listening') {
+              _retryCount = 0;
+            }
+          },
+        );
+      } catch (e) {
+        print('STT init error: $e');
+        _sttAvailable = false;
+      }
 
       print('STT available: $_sttAvailable');
 
-      if (!_sttAvailable) {
-        _statusController.add('Mic permission needed. Go to System Settings > Privacy & Security > Microphone.');
-      }
-
-      // Configure TTS
+      // Step 3: Configure TTS
       await _flutterTts.setVolume(1.0);
       await _flutterTts.setSpeechRate(0.5);
       await _flutterTts.setPitch(1.0);
 
       _isInitialized = true;
-      _statusController.add(_sttAvailable ? 'Voice ready' : 'Voice ready (mic permission needed)');
-      return true;
+
+      if (_sttAvailable) {
+        _statusController.add('Voice ready');
+      } else {
+        _statusController.add('Speech recognition unavailable. Check microphone permission.');
+      }
+
+      return _sttAvailable;
     } catch (e) {
       print('Voice init failed: $e');
-      _statusController.add('Voice init failed. Use text input.');
+      _statusController.add('Voice init failed.');
+      return false;
+    }
+  }
+
+  Future<bool> requestMicPermission() async {
+    try {
+      final result = await _channel.invokeMethod('requestPermission');
+      return result ?? false;
+    } catch (e) {
+      print('Permission request failed: $e');
       return false;
     }
   }
@@ -107,7 +144,6 @@ class VoiceService {
       _statusController.add('Listening...');
 
       String localeId = _getLocaleId();
-      print('Listening with locale: $localeId');
 
       await _speechToText.listen(
         onResult: (result) {
@@ -191,11 +227,6 @@ class VoiceService {
     if (errorMsg == null) return false;
     const transientErrors = ['error_busy', 'error_server', 'network'];
     return transientErrors.any((e) => errorMsg.toLowerCase().contains(e));
-  }
-
-  Future<List<String>> getAvailableLanguages() async {
-    final languages = await _flutterTts.getLanguages;
-    return List<String>.from(languages);
   }
 
   void dispose() {
