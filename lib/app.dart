@@ -5,11 +5,11 @@ import 'theme/app_theme.dart';
 import 'theme/app_colors.dart';
 import 'widgets/sidebar/floating_sidebar.dart';
 import 'widgets/command/command_palette.dart';
-import 'screens/assistant_screen.dart';
-import 'screens/memory_screen.dart';
-import 'screens/agents_screen.dart';
-import 'screens/automation_screen.dart';
-import 'screens/agent_playground_screen.dart';
+import 'screens/briefing_screen.dart';
+import 'screens/inbox_screen.dart';
+import 'screens/research_screen.dart';
+import 'screens/projects_screen.dart';
+import 'screens/calendar_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/developer_screen.dart';
 import 'screens/runtime_validation_screen.dart';
@@ -43,11 +43,11 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
   bool _isSidebarExpanded = false;
 
   final List<Widget> _screens = [
-    const AssistantScreen(),
-    const MemoryScreen(),
-    const AgentsScreen(),
-    const AutomationScreen(),
-    const AgentPlaygroundScreen(),
+    const BriefingScreen(),
+    const InboxScreen(),
+    const ResearchScreen(),
+    const ProjectsScreen(),
+    const CalendarScreen(),
     const SettingsScreen(),
   ];
 
@@ -153,19 +153,19 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
 
   void _handleCommand(String command) {
     switch (command) {
-      case 'Assistant':
+      case 'Briefing':
         _navigateTo(0);
         break;
-      case 'Memory':
+      case 'Inbox':
         _navigateTo(1);
         break;
-      case 'Agents':
+      case 'Research':
         _navigateTo(2);
         break;
-      case 'Automations':
+      case 'Projects':
         _navigateTo(3);
         break;
-      case 'Playground':
+      case 'Calendar':
         _navigateTo(4);
         break;
       case 'Settings':
