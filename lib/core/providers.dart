@@ -5,6 +5,7 @@ import '../core/services/orb_state_manager.dart';
 import '../core/services/agent_manager.dart';
 import '../core/services/memory_service.dart';
 import '../core/services/briefing_service.dart';
+import '../core/services/agent_executor.dart';
 import '../core/repositories/timeline_repository.dart';
 import '../core/repositories/agent_repository.dart';
 import '../core/repositories/task_repository.dart';

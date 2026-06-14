@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../core/models/orb_state.dart';
@@ -115,6 +117,14 @@ class _RuntimeValidationScreenState extends State<RuntimeValidationScreen> {
       TestResult(
         name: 'Orb State Transitions',
         description: 'Verify Orb state changes: idle → thinking → speaking → idle',
+      ),
+      TestResult(
+        name: 'Real Web Fetch',
+        description: 'Make real HTTP request to DuckDuckGo API and verify response',
+      ),
+      TestResult(
+        name: 'Real File I/O',
+        description: 'Create, read, search, and delete real files on disk',
       ),
     ]);
   }
@@ -548,6 +558,117 @@ class _RuntimeValidationScreenState extends State<RuntimeValidationScreen> {
   }
 
   // ═══════════════════════════════════════════════════════════════════
+  // Test 6: Real Web Fetch
+  // ═══════════════════════════════════════════════════════════════════
+
+  Future<void> _testRealWebFetch(TestResult test) async {
+    final steps = <String>[];
+    final dio = Dio();
+
+    // Step 1: Hit DuckDuckGo Instant Answer API
+    steps.add('GET https://api.duckduckgo.com/?q=Flutter&format=json');
+    _updateTest(test, TestStatus.running, steps);
+
+    try {
+      final response = await dio.get(
+        'https://api.duckduckgo.com/',
+        queryParameters: {'q': 'Flutter', 'format': 'json', 'no_html': '1'},
+        options: Options(
+          sendTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 10),
+        ),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+      steps.add('✓ HTTP ${response.statusCode} OK');
+      _updateTest(test, TestStatus.running, steps);
+
+      // Step 2: Parse response
+      final data = response.data as Map<String, dynamic>;
+      final abstract = data['AbstractText'] as String? ?? '';
+      final topics = data['RelatedTopics'] as List? ?? [];
+      steps.add('✓ Response parsed: abstract="${abstract.length > 50 ? abstract.substring(0, 50) + "..." : abstract}", ${topics.length} topics');
+      _updateTest(test, TestStatus.running, steps);
+
+      // Step 3: Verify we got real data
+      if (abstract.isEmpty && topics.isEmpty) {
+        throw Exception('No data returned from API');
+      }
+      steps.add('✓ Real data verified from DuckDuckGo API');
+      _updateTest(test, TestStatus.passed, steps);
+    } on DioException catch (e) {
+      throw Exception('HTTP request failed: ${e.message}');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Test 7: Real File I/O
+  // ═══════════════════════════════════════════════════════════════════
+
+  Future<void> _testRealFileIO(TestResult test) async {
+    final steps = <String>[];
+    final tmpDir = Directory.systemTemp.createTempSync('validation_');
+
+    try {
+      // Step 1: Create a real file
+      final testFile = File('${tmpDir.path}/test_output.txt');
+      final content = 'JARVIS Runtime Validation — ${DateTime.now().toIso8601String()}';
+      steps.add('Creating file: ${testFile.path}');
+      _updateTest(test, TestStatus.running, steps);
+
+      await testFile.writeAsString(content);
+      if (!await testFile.exists()) {
+        throw Exception('File was not created');
+      }
+      steps.add('✓ File created (${content.length} bytes)');
+      _updateTest(test, TestStatus.running, steps);
+
+      // Step 2: Read it back
+      final readBack = await testFile.readAsString();
+      if (readBack != content) {
+        throw Exception('Content mismatch');
+      }
+      steps.add('✓ File read back — content matches');
+      _updateTest(test, TestStatus.running, steps);
+
+      // Step 3: List directory
+      final files = await tmpDir.list().toList();
+      steps.add('✓ Directory listing: ${files.length} entries');
+      _updateTest(test, TestStatus.running, steps);
+
+      // Step 4: Search by extension
+      final txtFiles = files.where((f) => f.path.endsWith('.txt')).toList();
+      if (txtFiles.isEmpty) throw Exception('Should find .txt file');
+      steps.add('✓ File search found ${txtFiles.length} .txt file(s)');
+      _updateTest(test, TestStatus.running, steps);
+
+      // Step 5: Delete
+      await testFile.delete();
+      if (await testFile.exists()) {
+        throw Exception('File should be deleted');
+      }
+      steps.add('✓ File deleted');
+      _updateTest(test, TestStatus.running, steps);
+
+      // Step 6: Write to home directory (sandbox test)
+      final home = Platform.environment['HOME'] ?? '';
+      if (home.isNotEmpty) {
+        final homeTest = File('$home/Documents/jarvis_validation_test.txt');
+        await homeTest.writeAsString('sandbox test');
+        final exists = await homeTest.exists();
+        steps.add('✓ Home directory write: ${exists ? "success" : "failed"}');
+        await homeTest.delete();
+      }
+
+      _updateTest(test, TestStatus.passed, steps);
+    } finally {
+      tmpDir.deleteSync(recursive: true);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
   // Runner
   // ═══════════════════════════════════════════════════════════════════
 
@@ -581,6 +702,8 @@ class _RuntimeValidationScreenState extends State<RuntimeValidationScreen> {
       _testAgentMemory,
       _testAutomationAgentTrigger,
       _testOrbStateTransitions,
+      _testRealWebFetch,
+      _testRealFileIO,
     ];
 
     for (var i = 0; i < _tests.length; i++) {
