@@ -9,6 +9,7 @@ import 'screens/assistant_screen.dart';
 import 'screens/memory_screen.dart';
 import 'screens/agents_screen.dart';
 import 'screens/automation_screen.dart';
+import 'screens/agent_playground_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/developer_screen.dart';
 
@@ -45,6 +46,7 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
     const MemoryScreen(),
     const AgentsScreen(),
     const AutomationScreen(),
+    const AgentPlaygroundScreen(),
     const SettingsScreen(),
   ];
 
@@ -85,6 +87,12 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
           case LogicalKeyboardKey.digit5:
             _navigateTo(4);
             return true;
+          case LogicalKeyboardKey.digit6:
+            _navigateTo(5);
+            return true;
+          case LogicalKeyboardKey.digit7:
+            _navigateTo(6);
+            return true;
         }
       }
       return false;
@@ -100,7 +108,7 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
 
   @override
   Widget build(BuildContext context) {
-    final isDeveloperMode = _selectedIndex == 5;
+    final isDeveloperMode = _selectedIndex == 6;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -139,7 +147,6 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
   }
 
   void _handleCommand(String command) {
-    // Handle command palette selections
     switch (command) {
       case 'Assistant':
         _navigateTo(0);
@@ -153,8 +160,11 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
       case 'Automations':
         _navigateTo(3);
         break;
-      case 'Settings':
+      case 'Playground':
         _navigateTo(4);
+        break;
+      case 'Settings':
+        _navigateTo(5);
         break;
     }
   }

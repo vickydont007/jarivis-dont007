@@ -80,9 +80,15 @@ class _CommandPaletteState extends State<CommandPalette>
       category: 'Navigate',
     ),
     CommandItem(
+      icon: Icons.science_outlined,
+      label: 'Playground',
+      shortcut: '⌘5',
+      category: 'Navigate',
+    ),
+    CommandItem(
       icon: Icons.settings_outlined,
       label: 'Settings',
-      shortcut: '⌘5',
+      shortcut: '⌘6',
       category: 'Navigate',
     ),
   ];
