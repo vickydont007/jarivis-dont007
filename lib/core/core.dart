@@ -18,6 +18,9 @@ export 'services/orb_state_manager.dart';
 export 'services/agent_manager.dart';
 export 'services/memory_service.dart';
 export 'services/briefing_service.dart';
+export 'services/persistent_scheduler.dart';
+export 'services/agent_collaboration.dart';
+export 'services/memory_search.dart';
 
 // Providers
 export 'providers.dart';

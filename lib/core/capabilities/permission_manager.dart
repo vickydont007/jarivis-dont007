@@ -1,10 +1,19 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart';
 import 'tool_registry.dart';
 
 enum PermissionAction {
   granted,
   denied,
   prompt,
+}
+
+enum PermissionPolicy {
+  allowOnce,
+  alwaysAllow,
+  deny,
 }
 
 class PermissionRequest {
@@ -40,14 +49,105 @@ class PermissionRule {
 }
 
 class PermissionManager {
+  static Database? _database;
+  static const _dbName = 'nextron_permissions.db';
+
   final Map<String, PermissionLevel> _grantedPermissions = {};
   final Map<String, PermissionLevel> _toolPermissions = {};
+  final Map<String, PermissionPolicy> _toolPolicies = {};
   final List<PermissionRule> _rules = [];
   final List<PermissionRequest> _requests = [];
   final StreamController<PermissionRequest> _requestController =
       StreamController<PermissionRequest>.broadcast();
+  final StreamController<Map<String, PermissionPolicy>> _policyController =
+      StreamController<Map<String, PermissionPolicy>>.broadcast();
 
   Stream<PermissionRequest> get requests => _requestController.stream;
+  Stream<Map<String, PermissionPolicy>> get policyUpdates => _policyController.stream;
+
+  Future<void> initialize() async {
+    await _initDatabase();
+    await _loadPolicies();
+    await _loadRules();
+  }
+
+  Future<Database> get database async {
+    if (_database != null) return _database!;
+    _database = await _initDatabase();
+    return _database!;
+  }
+
+  Future<Database> _initDatabase() async {
+    final path = join(await getDatabasesPath(), _dbName);
+    return await openDatabase(
+      path,
+      version: 1,
+      onCreate: (db, version) async {
+        await db.execute('''
+          CREATE TABLE tool_policies (
+            tool_name TEXT PRIMARY KEY,
+            policy TEXT NOT NULL,
+            permission_level TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE permission_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pattern TEXT NOT NULL,
+            level TEXT NOT NULL,
+            auto_grant INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE permission_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tool_name TEXT NOT NULL,
+            action TEXT NOT NULL,
+            policy TEXT NOT NULL,
+            timestamp TEXT NOT NULL
+          )
+        ''');
+      },
+    );
+  }
+
+  Future<void> _loadPolicies() async {
+    final db = await database;
+    final results = await db.query('tool_policies');
+    for (final row in results) {
+      final toolName = row['tool_name'] as String;
+      final policy = PermissionPolicy.values.firstWhere(
+        (p) => p.name == row['policy'],
+      );
+      final level = PermissionLevel.values.firstWhere(
+        (l) => l.name == row['permission_level'],
+      );
+      _toolPolicies[toolName] = policy;
+      _toolPermissions[toolName] = level;
+      if (policy == PermissionPolicy.alwaysAllow) {
+        _grantedPermissions[toolName] = level;
+      }
+    }
+  }
+
+  Future<void> _loadRules() async {
+    final db = await database;
+    final results = await db.query('permission_rules');
+    for (final row in results) {
+      _rules.add(PermissionRule(
+        pattern: row['pattern'] as String,
+        level: PermissionLevel.values.firstWhere(
+          (l) => l.name == row['level'],
+        ),
+        autoGrant: (row['auto_grant'] as int) == 1,
+      ));
+    }
+  }
 
   void setToolPermission(String toolName, PermissionLevel level) {
     _toolPermissions[toolName] = level;
@@ -65,16 +165,48 @@ class PermissionManager {
     _rules.add(rule);
   }
 
+  Future<void> setToolPolicy(String toolName, PermissionPolicy policy, PermissionLevel level) async {
+    _toolPolicies[toolName] = policy;
+    _toolPermissions[toolName] = level;
+
+    if (policy == PermissionPolicy.alwaysAllow) {
+      _grantedPermissions[toolName] = level;
+    } else {
+      _grantedPermissions.remove(toolName);
+    }
+
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    await db.insert(
+      'tool_policies',
+      {
+        'tool_name': toolName,
+        'policy': policy.name,
+        'permission_level': level.name,
+        'created_at': now,
+        'updated_at': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+
+    _policyController.add(Map.unmodifiable(_toolPolicies));
+  }
+
+  PermissionPolicy? getToolPolicy(String toolName) {
+    return _toolPolicies[toolName];
+  }
+
+  Map<String, PermissionPolicy> getAllPolicies() {
+    return Map.unmodifiable(_toolPolicies);
+  }
+
   PermissionLevel getEffectiveLevel(String toolName) {
-    // Check explicit grant first
     final granted = _grantedPermissions[toolName];
     if (granted != null) return granted;
 
-    // Check tool default
     final toolDefault = _toolPermissions[toolName];
     if (toolDefault != null) return toolDefault;
 
-    // Check pattern rules
     for (final rule in _rules) {
       if (_matchesPattern(toolName, rule.pattern)) {
         return rule.level;
@@ -93,12 +225,23 @@ class PermissionManager {
     return hasPermission(toolName, definition.requiredPermission);
   }
 
+  Future<void> _logPermission(String toolName, String action, String policy) async {
+    final db = await database;
+    await db.insert('permission_log', {
+      'tool_name': toolName,
+      'action': action,
+      'policy': policy,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+  }
+
   Future<PermissionRequest> requestPermission({
     required String toolName,
     required PermissionLevel level,
   }) async {
-    // Check if already granted
     if (hasPermission(toolName, level)) {
+      final policy = _toolPolicies[toolName];
+      await _logPermission(toolName, 'auto_granted', policy?.name ?? 'default');
       final request = PermissionRequest(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         toolName: toolName,
@@ -110,11 +253,11 @@ class PermissionManager {
       return request;
     }
 
-    // Check auto-grant rules
     for (final rule in _rules) {
       if (_matchesPattern(toolName, rule.pattern) && rule.autoGrant) {
         if (rule.level.index >= level.index) {
           grantPermission(toolName, rule.level);
+          await _logPermission(toolName, 'rule_granted', 'rule:${rule.pattern}');
           final request = PermissionRequest(
             id: DateTime.now().millisecondsSinceEpoch.toString(),
             toolName: toolName,
@@ -128,7 +271,6 @@ class PermissionManager {
       }
     }
 
-    // Create pending request
     final request = PermissionRequest(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       toolName: toolName,
@@ -140,7 +282,7 @@ class PermissionManager {
     return request;
   }
 
-  void resolveRequest(String requestId, PermissionAction action) {
+  Future<void> resolveRequest(String requestId, PermissionAction action, {bool alwaysAllow = false}) async {
     final request = _requests.firstWhere(
       (r) => r.id == requestId,
       orElse: () => throw Exception('Request not found'),
@@ -149,7 +291,16 @@ class PermissionManager {
     request.resolvedAt = DateTime.now();
 
     if (action == PermissionAction.granted) {
-      grantPermission(request.toolName, request.requestedLevel);
+      if (alwaysAllow) {
+        await setToolPolicy(request.toolName, PermissionPolicy.alwaysAllow, request.requestedLevel);
+        await _logPermission(request.toolName, 'always_allowed', 'user');
+      } else {
+        grantPermission(request.toolName, request.requestedLevel);
+        await _logPermission(request.toolName, 'once_allowed', 'user');
+      }
+    } else {
+      await setToolPolicy(request.toolName, PermissionPolicy.deny, PermissionLevel.none);
+      await _logPermission(request.toolName, 'denied', 'user');
     }
   }
 
@@ -159,6 +310,16 @@ class PermissionManager {
 
   Map<String, PermissionLevel> getAllGranted() {
     return Map.unmodifiable(_grantedPermissions);
+  }
+
+  Future<List<Map<String, dynamic>>> getPermissionLog({int limit = 50}) async {
+    final db = await database;
+    final results = await db.query(
+      'permission_log',
+      orderBy: 'timestamp DESC',
+      limit: limit,
+    );
+    return results;
   }
 
   bool _matchesPattern(String toolName, String pattern) {
@@ -177,10 +338,14 @@ class PermissionManager {
       'granted': _grantedPermissions.length,
       'pending': getPendingRequests().length,
       'rules': _rules.length,
+      'policies': _toolPolicies.length,
+      'alwaysAllow': _toolPolicies.values.where((p) => p == PermissionPolicy.alwaysAllow).length,
+      'deny': _toolPolicies.values.where((p) => p == PermissionPolicy.deny).length,
     };
   }
 
   void dispose() {
     _requestController.close();
+    _policyController.close();
   }
 }

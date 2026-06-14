@@ -20,6 +20,15 @@ import '../core/emotion_detector.dart';
 import '../core/girlfriend_memory.dart';
 import '../core/conversation_manager.dart';
 import '../core/services/orb_state_manager.dart';
+import '../core/services/timeline_service.dart';
+import '../core/services/agent_manager.dart';
+import '../core/services/memory_service.dart';
+import '../core/services/persistent_scheduler.dart';
+import '../core/services/daily_briefing_service.dart';
+import '../core/services/agent_collaboration.dart';
+import '../core/services/memory_search.dart';
+import '../core/capabilities/permission_manager.dart';
+import '../core/repositories/timeline_repository.dart';
 import '../core/providers.dart';
 import '../services/scheduler_service.dart';
 import '../services/voice_service.dart';
@@ -47,6 +56,11 @@ class AppState {
   final NotificationIntelligence? notificationIntelligence;
   final FileConverter? fileConverter;
   final AgentOrchestrator? agentOrchestrator;
+  final PermissionManager? permissionManager;
+  final PersistentScheduler? persistentScheduler;
+  final DailyBriefingService? dailyBriefingService;
+  final AgentCollaboration? agentCollaboration;
+  final MemorySearch? memorySearch;
 
   AppState({
     this.aiEngine,
@@ -69,6 +83,11 @@ class AppState {
     this.notificationIntelligence,
     this.fileConverter,
     this.agentOrchestrator,
+    this.permissionManager,
+    this.persistentScheduler,
+    this.dailyBriefingService,
+    this.agentCollaboration,
+    this.memorySearch,
   });
 
   AppState copyWith({
@@ -92,6 +111,11 @@ class AppState {
     NotificationIntelligence? notificationIntelligence,
     FileConverter? fileConverter,
     AgentOrchestrator? agentOrchestrator,
+    PermissionManager? permissionManager,
+    PersistentScheduler? persistentScheduler,
+    DailyBriefingService? dailyBriefingService,
+    AgentCollaboration? agentCollaboration,
+    MemorySearch? memorySearch,
   }) {
     return AppState(
       aiEngine: aiEngine ?? this.aiEngine,
@@ -114,6 +138,11 @@ class AppState {
       notificationIntelligence: notificationIntelligence ?? this.notificationIntelligence,
       fileConverter: fileConverter ?? this.fileConverter,
       agentOrchestrator: agentOrchestrator ?? this.agentOrchestrator,
+      permissionManager: permissionManager ?? this.permissionManager,
+      persistentScheduler: persistentScheduler ?? this.persistentScheduler,
+      dailyBriefingService: dailyBriefingService ?? this.dailyBriefingService,
+      agentCollaboration: agentCollaboration ?? this.agentCollaboration,
+      memorySearch: memorySearch ?? this.memorySearch,
     );
   }
 }
@@ -138,6 +167,13 @@ class AppStateNotifier extends StateNotifier<AppState> {
   AgentOrchestrator? _agentOrchestrator;
   MemoryEvolution? _memoryEvolution;
   ConversationManager? _conversationManager;
+  
+  // Phase 5 services
+  PermissionManager? _permissionManager;
+  PersistentScheduler? _persistentScheduler;
+  DailyBriefingService? _dailyBriefingService;
+  AgentCollaboration? _agentCollaboration;
+  MemorySearch? _memorySearch;
 
   AppStateNotifier({OrbStateManager? orb}) : super(AppState()) {
     _memory = MemorySystem();
@@ -157,6 +193,11 @@ class AppStateNotifier extends StateNotifier<AppState> {
     _agentOrchestrator = AgentOrchestrator();
     _memoryEvolution = MemoryEvolution();
     _conversationManager = ConversationManager(_engine);
+    
+    // Phase 5: Initialize autonomous systems
+    _permissionManager = PermissionManager();
+    _persistentScheduler = PersistentScheduler();
+    _memorySearch = MemorySearch();
 
     _toolManager = ToolManager(
       memory: _memory!,
@@ -183,6 +224,10 @@ class AppStateNotifier extends StateNotifier<AppState> {
     
     // Initialize voice service
     _voiceService!.initialize();
+    
+    // Phase 5: Initialize autonomous systems
+    _permissionManager!.initialize();
+    _persistentScheduler!.initialize();
 
     state = state.copyWith(
       memory: _memory,
@@ -201,6 +246,11 @@ class AppStateNotifier extends StateNotifier<AppState> {
       notificationIntelligence: _notificationIntelligence,
       fileConverter: _fileConverter,
       agentOrchestrator: _agentOrchestrator,
+      permissionManager: _permissionManager,
+      persistentScheduler: _persistentScheduler,
+      dailyBriefingService: _dailyBriefingService,
+      agentCollaboration: _agentCollaboration,
+      memorySearch: _memorySearch,
     );
 
     _loadSavedState();
@@ -232,6 +282,27 @@ class AppStateNotifier extends StateNotifier<AppState> {
     } catch (e) {
       print('Failed to load saved state: $e');
     }
+  }
+
+  Future<void> initializePhase5Services({
+    required TimelineService timeline,
+    required AgentManager agents,
+    required MemoryService memory,
+  }) async {
+    _dailyBriefingService = DailyBriefingService(
+      timeline: timeline,
+      agents: agents,
+      memory: memory,
+    );
+    _agentCollaboration = AgentCollaboration(
+      agentManager: agents,
+      timeline: timeline,
+      orb: OrbStateManager(),
+    );
+    state = state.copyWith(
+      dailyBriefingService: _dailyBriefingService,
+      agentCollaboration: _agentCollaboration,
+    );
   }
 
   Future<void> _restoreSocialConnections() async {

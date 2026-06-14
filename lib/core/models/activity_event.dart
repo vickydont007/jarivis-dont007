@@ -18,6 +18,8 @@ enum ActivityType {
   conversationEnded,
   briefingGenerated,
   systemEvent,
+  toolUsed,
+  error,
 }
 
 class ActivityEvent {

@@ -6,6 +6,11 @@ import '../core/services/agent_manager.dart';
 import '../core/services/memory_service.dart';
 import '../core/services/briefing_service.dart';
 import '../core/services/agent_executor.dart';
+import '../core/services/persistent_scheduler.dart';
+import '../core/services/daily_briefing_service.dart';
+import '../core/services/agent_collaboration.dart';
+import '../core/services/memory_search.dart';
+import '../core/services/memory_search.dart' show MemorySearchResult;
 import '../core/repositories/timeline_repository.dart';
 import '../core/repositories/agent_repository.dart';
 import '../core/repositories/task_repository.dart';
@@ -110,4 +115,70 @@ final memoriesStreamProvider = StreamProvider.autoDispose((ref) {
 final briefingProvider = FutureProvider.autoDispose((ref) async {
   final briefingService = ref.watch(briefingServiceProvider);
   return briefingService.generateBriefing();
+});
+
+// ─── Phase 5: Persistent Scheduler ────────────────────────────────
+
+final persistentSchedulerProvider = Provider<PersistentScheduler>((ref) {
+  return PersistentScheduler();
+});
+
+// ─── Phase 5: Daily Briefing Service ──────────────────────────────
+
+final dailyBriefingServiceProvider = Provider<DailyBriefingService>((ref) {
+  final timeline = ref.watch(timelineServiceProvider);
+  final agents = ref.watch(agentManagerProvider);
+  final memory = ref.watch(memoryServiceProvider);
+  return DailyBriefingService(
+    timeline: timeline,
+    agents: agents,
+    memory: memory,
+  );
+});
+
+// ─── Phase 5: Agent Collaboration ─────────────────────────────────
+
+final agentCollaborationProvider = Provider<AgentCollaboration>((ref) {
+  final agents = ref.watch(agentManagerProvider);
+  final timeline = ref.watch(timelineServiceProvider);
+  final orb = ref.watch(orbStateManagerProvider);
+  return AgentCollaboration(
+    agentManager: agents,
+    timeline: timeline,
+    orb: orb,
+  );
+});
+
+// ─── Phase 5: Memory Search ───────────────────────────────────────
+
+final memorySearchProvider = Provider<MemorySearch>((ref) {
+  return MemorySearch();
+});
+
+// ─── Phase 5: Daily Briefing Provider ─────────────────────────────
+
+final dailyBriefingProvider = FutureProvider.autoDispose((ref) async {
+  final service = ref.watch(dailyBriefingServiceProvider);
+  return service.generateBriefing();
+});
+
+// ─── Phase 5: Execution History ───────────────────────────────────
+
+final executionHistoryProvider = FutureProvider.autoDispose<List>((ref) async {
+  final scheduler = ref.watch(persistentSchedulerProvider);
+  return scheduler.getExecutionHistory(limit: 30);
+});
+
+// ─── Phase 5: Active Schedules ────────────────────────────────────
+
+final activeSchedulesProvider = FutureProvider.autoDispose<List>((ref) async {
+  final scheduler = ref.watch(persistentSchedulerProvider);
+  return scheduler.getActiveSchedules();
+});
+
+// ─── Phase 5: Memory Search Provider ──────────────────────────────
+
+final memorySearchResultsProvider = FutureProvider.autoDispose.family<List<MemorySearchResult>, String>((ref, query) async {
+  final search = ref.watch(memorySearchProvider);
+  return search.search(query, limit: 10);
 });
