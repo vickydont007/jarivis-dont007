@@ -2,6 +2,7 @@ import 'dart:async';
 import 'timeline_service.dart';
 import 'memory_service.dart';
 import 'memory_search.dart';
+import 'external_knowledge.dart';
 import '../models/activity_event.dart';
 import '../models/memory_record.dart';
 
@@ -43,14 +44,17 @@ class KnowledgeHub {
   final TimelineService _timeline;
   final MemoryService _memory;
   final MemorySearch _memorySearch;
+  final ExternalKnowledge _externalKnowledge;
 
   KnowledgeHub({
     required TimelineService timeline,
     required MemoryService memory,
     required MemorySearch memorySearch,
+    ExternalKnowledge? externalKnowledge,
   })  : _timeline = timeline,
         _memory = memory,
-        _memorySearch = memorySearch;
+        _memorySearch = memorySearch,
+        _externalKnowledge = externalKnowledge ?? ExternalKnowledge();
 
   Future<Map<String, dynamic>> getUnifiedContext() async {
     final memories = await _memory.recentMemories(limit: 20);
@@ -72,6 +76,12 @@ class KnowledgeHub {
     final topCategories = _analyzeCategories(memories);
     final recentTopics = _extractTopics(memories);
 
+    Map<String, int> externalStats = {};
+    try {
+      externalStats = await _externalKnowledge.getIngestionStats();
+    } catch (e) {
+    }
+
     return {
       'totalMemories': memories.length,
       'totalEvents': events.length,
@@ -81,13 +91,13 @@ class KnowledgeHub {
       'recentTopics': recentTopics,
       'mood': _inferMood(events),
       'activityLevel': _activityLevel(events),
+      'externalKnowledge': externalStats,
     };
   }
 
   Future<List<KnowledgeNode>> searchAcrossAll(String query) async {
     final results = <KnowledgeNode>[];
 
-    // Search memories
     final memoryResults = await _memorySearch.search(query, limit: 10);
     for (final mem in memoryResults) {
       results.add(KnowledgeNode(
@@ -101,7 +111,6 @@ class KnowledgeHub {
       ));
     }
 
-    // Search timeline
     final events = await _timeline.getRecent(limit: 100);
     final queryWords = query.toLowerCase().split(RegExp(r'\s+')).where((w) => w.length > 2).toList();
     for (final event in events) {
@@ -120,8 +129,24 @@ class KnowledgeHub {
       }
     }
 
+    try {
+      final externalResults = await _externalKnowledge.search(query, limit: 10);
+      for (final ext in externalResults) {
+        results.add(KnowledgeNode(
+          id: ext.id,
+          type: ext.type,
+          title: ext.title,
+          content: ext.content,
+          timestamp: ext.ingestedAt,
+          tags: ext.tags,
+          relevance: 0.8,
+        ));
+      }
+    } catch (e) {
+    }
+
     results.sort((a, b) => b.relevance.compareTo(a.relevance));
-    return results.take(15).toList();
+    return results.take(20).toList();
   }
 
   Future<List<KnowledgeConnection>> findConnections(String nodeId) async {

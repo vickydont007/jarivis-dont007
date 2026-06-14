@@ -9,6 +9,11 @@ import 'memory_search.dart';
 import 'daily_briefing_service.dart';
 import 'agent_manager.dart';
 import 'orb_state_manager.dart';
+import 'watchlist_monitor.dart';
+import 'project_analyzer.dart';
+import 'email_service.dart';
+import 'calendar_intel.dart';
+import 'external_knowledge.dart';
 import '../models/activity_event.dart';
 
 enum InsightType { watchlist, project, meeting, system, crossLink }
@@ -117,6 +122,11 @@ class ProactiveEngine {
   final MemoryService _memory;
   final MemorySearch _memorySearch;
   final OrbStateManager _orb;
+  final WatchlistMonitor _watchlistMonitor;
+  final ProjectAnalyzer _projectAnalyzer;
+  final EmailService _emailService;
+  final CalendarIntel _calendarIntel;
+  final ExternalKnowledge _externalKnowledge;
 
   Timer? _monitorTimer;
   final StreamController<Insight> _insightController =
@@ -131,10 +141,20 @@ class ProactiveEngine {
     required MemoryService memory,
     required MemorySearch memorySearch,
     required OrbStateManager orb,
+    required WatchlistMonitor watchlistMonitor,
+    required ProjectAnalyzer projectAnalyzer,
+    required EmailService emailService,
+    required CalendarIntel calendarIntel,
+    required ExternalKnowledge externalKnowledge,
   })  : _timeline = timeline,
         _memory = memory,
         _memorySearch = memorySearch,
-        _orb = orb;
+        _orb = orb,
+        _watchlistMonitor = watchlistMonitor,
+        _projectAnalyzer = projectAnalyzer,
+        _emailService = emailService,
+        _calendarIntel = calendarIntel,
+        _externalKnowledge = externalKnowledge;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -184,123 +204,114 @@ class ProactiveEngine {
       _orb.requestThinking('proactive');
       await _scanWatchlists();
       await _analyzeProjects();
-      await _detectCrossLinks();
+      await _checkEmail();
       await _checkMeetingPrep();
+      await _detectCrossLinks();
       _orb.releaseThinking('proactive');
     } catch (e) {
       _orb.releaseThinking('proactive');
     }
   }
 
-  // ─── Watchlist Monitoring ──────────────────────────────────────
+  // ─── Watchlist Monitoring (Real Web Search) ───────────────────
 
   Future<void> _scanWatchlists() async {
     final watchlists = await _loadWatchlists();
-    final recentMemories = await _memory.recentMemories(limit: 50);
 
     for (final entry in watchlists) {
-      final query = entry.topic.toLowerCase();
-      final words = query.split(RegExp(r'\s+')).where((w) => w.length > 2).toList();
+      final articles = await _watchlistMonitor.searchTopic(entry.topic);
 
-      final newFindings = <String>[];
-      for (final memory in recentMemories) {
-        final content = memory.content.toLowerCase();
-        final matches = words.where((w) => content.contains(w)).length;
-        if (matches >= (words.length * 0.5).ceil() && matches > 0) {
-          if (!entry.lastFindings.contains(memory.content)) {
-            newFindings.add(memory.content);
-          }
+      if (articles.isNotEmpty) {
+        // Store in external knowledge
+        for (final article in articles) {
+          await _externalKnowledge.ingest(
+            type: 'article',
+            title: article.title,
+            content: article.summary,
+            source: 'Watchlist:${entry.topic}',
+            url: article.url,
+            tags: [entry.topic, 'watchlist', 'web'],
+          );
+
+          // Generate insight
+          final insight = Insight(
+            id: 'watchlist_${article.url.hashCode}',
+            type: InsightType.watchlist,
+            priority: InsightPriority.medium,
+            title: 'New article for "${entry.topic}": ${article.title}',
+            body: article.summary.length > 200
+                ? '${article.summary.substring(0, 200)}...'
+                : article.summary,
+            source: 'Watchlist Monitor',
+            createdAt: DateTime.now(),
+            metadata: {'topic': entry.topic, 'url': article.url},
+          );
+          await _addInsight(insight);
+          await _watchlistMonitor.markAlerted(article.url);
         }
       }
 
-      if (newFindings.isNotEmpty) {
-        final insight = Insight(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          type: InsightType.watchlist,
-          priority: InsightPriority.medium,
-          title: 'New findings for "${entry.topic}"',
-          body: '${newFindings.length} new match${newFindings.length > 1 ? 'es' : ''} found in your memories:\n${newFindings.take(3).map((f) => '• ${f.length > 80 ? f.substring(0, 80) + "..." : f}').join("\n")}',
-          source: 'Watchlist',
-          createdAt: DateTime.now(),
-          metadata: {'topic': entry.topic, 'findingCount': newFindings.length},
-        );
-        await _addInsight(insight);
-      }
-
-      // Update watchlist entry
       entry.lastChecked = DateTime.now();
-      entry.findingCount += newFindings.length;
-      entry.lastFindings = [...newFindings, ...entry.lastFindings].take(10).toList();
+      final count = await _watchlistMonitor.getArticleCount(entry.topic);
+      entry.findingCount = count;
     }
 
     await _saveWatchlists(watchlists);
   }
 
-  // ─── Project Analysis ─────────────────────────────────────────
+  // ─── Project Analysis (Real Git Analysis) ────────────────────
 
   Future<void> _analyzeProjects() async {
-    final projects = await _loadProjects();
+    final prefs = await SharedPreferences.getInstance();
+    final data = prefs.getString('user_projects');
+    if (data == null) return;
 
+    final projects = jsonDecode(data) as List;
     for (final project in projects) {
-      // Check timeline for project-related activity
-      final recentEvents = await _timeline.getRecent(limit: 100);
-      final projectEvents = recentEvents.where((e) =>
-        e.description.toLowerCase().contains(project.name.toLowerCase()) ||
-        e.metadata['project'] == project.name,
-      ).toList();
+      final name = project['name'] as String? ?? '';
+      final path = project['path'] as String? ?? '';
+      if (path.isEmpty) continue;
 
-      if (projectEvents.isEmpty) continue;
+      final result = await _projectAnalyzer.analyze(name, path);
 
-      // Analyze activity patterns
-      final now = DateTime.now();
-      final lastWeek = now.subtract(const Duration(days: 7));
-      final recentCount = projectEvents.where((e) =>
-        e.timestamp.isAfter(lastWeek),
-      ).length;
+      // Store in external knowledge
+      await _externalKnowledge.ingest(
+        type: 'project',
+        title: 'Project Analysis: $name',
+        content: 'Health: ${result.health} (${result.score}/100)\n'
+            'Commits (7d): ${result.commitCount7d}\n'
+            'Commits (30d): ${result.commitCount30d}\n'
+            'TODOs: ${result.todoCount}\n'
+            'Findings: ${result.findings.join(", ")}',
+        source: 'Project Analyzer',
+        tags: [name, 'project', result.health],
+      );
 
-      final failedCount = projectEvents.where((e) =>
-        e.type == ActivityType.agentFailed ||
-        e.type == ActivityType.error,
-      ).length;
+      // Generate insight if health changed or new findings
+      final lastScoreKey = 'project_score_$name';
+      final lastScore = prefs.getInt(lastScoreKey) ?? 0;
 
-      // Generate insights based on patterns
-      if (recentCount == 0 && project.status == 'active') {
+      if (result.score != lastScore) {
+        InsightPriority priority;
+        if (result.health == 'Needs Attention' || result.health == 'Stalled') {
+          priority = InsightPriority.high;
+        } else {
+          priority = InsightPriority.low;
+        }
+
         await _addInsight(Insight(
-          id: '${project.name}_inactive_${now.millisecondsSinceEpoch}',
+          id: 'project_${name}_${DateTime.now().millisecondsSinceEpoch}',
           type: InsightType.project,
-          priority: InsightPriority.low,
-          title: '${project.name} has been quiet',
-          body: 'No activity detected in the last 7 days. Consider reviewing or archiving.',
+          priority: priority,
+          title: '${result.health}: $name',
+          body: 'Score: ${result.score}/100 — ${result.findings.isNotEmpty ? result.findings.first : "All good"}'
+              '${result.lastCommitMessage != null ? "\nLast commit: ${result.lastCommitMessage}" : ""}',
           source: 'Project Analyzer',
-          createdAt: now,
-          metadata: {'project': project.name},
+          createdAt: DateTime.now(),
+          metadata: {'project': name, 'score': result.score, 'health': result.health},
         ));
-      }
 
-      if (failedCount > 3) {
-        await _addInsight(Insight(
-          id: '${project.name}_issues_${now.millisecondsSinceEpoch}',
-          type: InsightType.project,
-          priority: InsightPriority.high,
-          title: 'Issues detected in ${project.name}',
-          body: '$failedCount failures detected in recent activity. May need attention.',
-          source: 'Project Analyzer',
-          createdAt: now,
-          metadata: {'project': project.name, 'failures': failedCount},
-        ));
-      }
-
-      if (recentCount > 5) {
-        await _addInsight(Insight(
-          id: '${project.name}_active_${now.millisecondsSinceEpoch}',
-          type: InsightType.project,
-          priority: InsightPriority.low,
-          title: '${project.name} is active',
-          body: '$recentCount events in the last 7 days. Good momentum!',
-          source: 'Project Analyzer',
-          createdAt: now,
-          metadata: {'project': project.name, 'events': recentCount},
-        ));
+        await prefs.setInt(lastScoreKey, result.score);
       }
     }
   }
@@ -350,47 +361,84 @@ class ProactiveEngine {
     }
   }
 
-  // ─── Meeting Prep ─────────────────────────────────────────────
+  // ─── Email Checking ──────────────────────────────────────────
+
+  Future<void> _checkEmail() async {
+    if (!_emailService.isConfigured) return;
+
+    try {
+      final emails = await _emailService.fetchUnread();
+      for (final email in emails) {
+        // Store in external knowledge
+        await _externalKnowledge.ingest(
+          type: 'email',
+          title: 'Email: ${email.subject}',
+          content: 'From: ${email.sender}\n${email.preview}',
+          source: 'Email:${email.sender}',
+          tags: ['email', email.isMeeting ? 'meeting' : '', email.hasDeadline ? 'deadline' : '', email.isImportant ? 'important' : ''],
+        );
+
+        InsightPriority priority;
+        if (email.isMeeting || email.hasDeadline) {
+          priority = InsightPriority.urgent;
+        } else if (email.isImportant) {
+          priority = InsightPriority.high;
+        } else {
+          priority = InsightPriority.medium;
+        }
+
+        await _addInsight(Insight(
+          id: 'email_${email.id}',
+          type: InsightType.system,
+          priority: priority,
+          title: email.isMeeting
+              ? '📅 Meeting: ${email.subject}'
+              : email.hasDeadline
+                  ? '⏰ Deadline: ${email.subject}'
+                  : '📧 ${email.subject}',
+          body: 'From: ${email.sender}\n${email.preview.length > 100 ? "${email.preview.substring(0, 100)}..." : email.preview}',
+          source: 'Email',
+          createdAt: email.date,
+          metadata: {
+            'sender': email.sender,
+            'isMeeting': email.isMeeting,
+            'hasDeadline': email.hasDeadline,
+          },
+        ));
+      }
+    } catch (e) {
+      // Email check failed
+    }
+  }
+
+  // ─── Meeting Prep (CalendarIntel) ─────────────────────────────
 
   Future<void> _checkMeetingPrep() async {
-    final prefs = await SharedPreferences.getInstance();
-    final data = prefs.getString('calendar_events');
-    if (data == null) return;
-
-    final events = jsonDecode(data) as List;
-    final now = DateTime.now();
-
-    for (final event in events) {
-      final eventDate = DateTime.parse(event['date']);
-      final diff = eventDate.difference(now);
-
-      // Generate meeting prep 1 hour before
-      if (diff.inMinutes > 0 && diff.inMinutes <= 60) {
-        final key = 'meeting_${event['title']}_${eventDate.millisecondsSinceEpoch}';
-
+    try {
+      final briefs = await _calendarIntel.checkUpcomingMeetings();
+      for (final brief in briefs) {
+        final key = 'meeting_${brief.meetingTitle}_${brief.meetingTime.millisecondsSinceEpoch}';
         if (_insights.any((i) => i.id == key)) continue;
-
-        // Search for related context
-        final searchResults = await _memorySearch.search(event['title'], limit: 5);
-        final contextSummary = searchResults.isNotEmpty
-            ? searchResults.map((r) => '• ${r.content.length > 60 ? r.content.substring(0, 60) + "..." : r.content}').join('\n')
-            : 'No related context found.';
 
         await _addInsight(Insight(
           id: key,
           type: InsightType.meeting,
           priority: InsightPriority.urgent,
-          title: 'Meeting in ${diff.inMinutes} min: ${event['title']}',
-          body: 'Preparation context:\n$contextSummary',
+          title: 'Meeting in ${brief.minutesUntil} min: ${brief.meetingTitle}',
+          body: brief.contextSummary,
           source: 'Meeting Prep',
-          createdAt: now,
+          createdAt: DateTime.now(),
           metadata: {
-            'meetingTitle': event['title'],
-            'minutesUntil': diff.inMinutes,
-            'relatedMemories': searchResults.length,
+            'meetingTitle': brief.meetingTitle,
+            'minutesUntil': brief.minutesUntil,
+            'relatedMemories': brief.relatedMemories.length,
+            'relatedEmails': brief.relatedEmails.length,
+            'relatedProjects': brief.relatedProjects.length,
           },
         ));
       }
+    } catch (e) {
+      // Meeting prep check failed
     }
   }
 
@@ -470,19 +518,6 @@ class ProactiveEngine {
         jsonEncode(watchlists.map((w) => w.toJson()).toList()));
   }
 
-  // ─── Project Persistence ──────────────────────────────────────
-
-  Future<List<_ProjectRef>> _loadProjects() async {
-    final prefs = await SharedPreferences.getInstance();
-    final data = prefs.getString('user_projects');
-    if (data == null) return [];
-    final list = jsonDecode(data) as List;
-    return list.map((e) => _ProjectRef(
-      name: e['name'],
-      status: e['status'] ?? 'active',
-    )).toList();
-  }
-
   // ─── Insight Persistence ──────────────────────────────────────
 
   Future<void> _loadInsights() async {
@@ -508,10 +543,4 @@ class ProactiveEngine {
     _monitorTimer?.cancel();
     _insightController.close();
   }
-}
-
-class _ProjectRef {
-  final String name;
-  final String status;
-  _ProjectRef({required this.name, required this.status});
 }

@@ -13,6 +13,11 @@ import '../core/services/memory_search.dart';
 import '../core/services/memory_search.dart' show MemorySearchResult;
 import '../core/services/proactive_engine.dart';
 import '../core/services/knowledge_hub.dart';
+import '../core/services/watchlist_monitor.dart';
+import '../core/services/project_analyzer.dart';
+import '../core/services/email_service.dart';
+import '../core/services/calendar_intel.dart';
+import '../core/services/external_knowledge.dart';
 import '../core/repositories/timeline_repository.dart';
 import '../core/repositories/agent_repository.dart';
 import '../core/repositories/task_repository.dart';
@@ -187,16 +192,55 @@ final memorySearchResultsProvider = FutureProvider.autoDispose.family<List<Memor
 
 // ─── Phase 7: Proactive Engine ───────────────────────────────────
 
+final watchlistMonitorProvider = Provider<WatchlistMonitor>((ref) {
+  return WatchlistMonitor();
+});
+
+final projectAnalyzerProvider = Provider<ProjectAnalyzer>((ref) {
+  return ProjectAnalyzer();
+});
+
+final emailServiceProvider = Provider<EmailService>((ref) {
+  return EmailService();
+});
+
+final externalKnowledgeProvider = Provider<ExternalKnowledge>((ref) {
+  return ExternalKnowledge();
+});
+
+final calendarIntelProvider = Provider<CalendarIntel>((ref) {
+  final memory = ref.watch(memoryServiceProvider);
+  final memorySearch = ref.watch(memorySearchProvider);
+  final knowledgeHub = ref.watch(knowledgeHubProvider);
+  final email = ref.watch(emailServiceProvider);
+  return CalendarIntel(
+    memory: memory,
+    memorySearch: memorySearch,
+    knowledgeHub: knowledgeHub,
+    emailService: email,
+  );
+});
+
 final proactiveEngineProvider = Provider<ProactiveEngine>((ref) {
   final timeline = ref.watch(timelineServiceProvider);
   final memory = ref.watch(memoryServiceProvider);
   final memorySearch = ref.watch(memorySearchProvider);
   final orb = ref.watch(orbStateManagerProvider);
+  final watchlist = ref.watch(watchlistMonitorProvider);
+  final analyzer = ref.watch(projectAnalyzerProvider);
+  final email = ref.watch(emailServiceProvider);
+  final calendarIntel = ref.watch(calendarIntelProvider);
+  final externalKnowledge = ref.watch(externalKnowledgeProvider);
   return ProactiveEngine(
     timeline: timeline,
     memory: memory,
     memorySearch: memorySearch,
     orb: orb,
+    watchlistMonitor: watchlist,
+    projectAnalyzer: analyzer,
+    emailService: email,
+    calendarIntel: calendarIntel,
+    externalKnowledge: externalKnowledge,
   );
 });
 
@@ -206,10 +250,12 @@ final knowledgeHubProvider = Provider<KnowledgeHub>((ref) {
   final timeline = ref.watch(timelineServiceProvider);
   final memory = ref.watch(memoryServiceProvider);
   final memorySearch = ref.watch(memorySearchProvider);
+  final externalKnowledge = ref.watch(externalKnowledgeProvider);
   return KnowledgeHub(
     timeline: timeline,
     memory: memory,
     memorySearch: memorySearch,
+    externalKnowledge: externalKnowledge,
   );
 });
 

@@ -29,6 +29,11 @@ import '../core/services/agent_collaboration.dart';
 import '../core/services/memory_search.dart';
 import '../core/services/proactive_engine.dart';
 import '../core/services/knowledge_hub.dart';
+import '../core/services/watchlist_monitor.dart';
+import '../core/services/project_analyzer.dart';
+import '../core/services/email_service.dart';
+import '../core/services/calendar_intel.dart';
+import '../core/services/external_knowledge.dart';
 import '../core/capabilities/permission_manager.dart';
 import '../core/repositories/timeline_repository.dart';
 import '../core/providers.dart';
@@ -240,6 +245,19 @@ class AppStateNotifier extends StateNotifier<AppState> {
       memory: MemoryService(timeline: TimelineService(repository: InMemoryTimelineRepository())),
       memorySearch: MemorySearch(),
       orb: OrbStateManager(),
+      watchlistMonitor: WatchlistMonitor(),
+      projectAnalyzer: ProjectAnalyzer(),
+      emailService: EmailService(),
+      calendarIntel: CalendarIntel(
+        memory: MemoryService(timeline: TimelineService(repository: InMemoryTimelineRepository())),
+        memorySearch: MemorySearch(),
+        knowledgeHub: KnowledgeHub(
+          timeline: TimelineService(repository: InMemoryTimelineRepository()),
+          memory: MemoryService(timeline: TimelineService(repository: InMemoryTimelineRepository())),
+          memorySearch: MemorySearch(),
+        ),
+      ),
+      externalKnowledge: ExternalKnowledge(),
     );
     _proactiveEngine!.initialize();
 
