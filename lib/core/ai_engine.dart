@@ -48,6 +48,7 @@ class AIEngine {
   String _systemPrompt = '';
   List<Map<String, dynamic>> _toolDefinitions = [];
   AIEngineState state = AIEngineState.disconnected;
+  bool _ollamaToolsSupported = true;
   final Dio _dio = Dio();
   CostTracker? _costTracker;
   final StreamController<String> _responseController = StreamController<String>.broadcast();
@@ -121,7 +122,27 @@ class AIEngine {
   List<Map<String, dynamic>> get toolDefinitions => _toolDefinitions;
 
   Future<void> connect() async {
-    state = AIEngineState.connected;
+    if (_provider == AIProvider.ollama) {
+      try {
+        final dio = Dio();
+        final response = await dio.get(
+          'http://localhost:11434/api/tags',
+          options: Options(
+            receiveTimeout: const Duration(seconds: 3),
+            validateStatus: (status) => status! < 500,
+          ),
+        );
+        if (response.statusCode == 200) {
+          state = AIEngineState.connected;
+        } else {
+          throw Exception('Ollama not responding');
+        }
+      } catch (e) {
+        throw Exception('Cannot connect to Ollama at localhost:11434. Is Ollama running?');
+      }
+    } else {
+      state = AIEngineState.connected;
+    }
   }
 
   Future<void> disconnect() async {
@@ -168,6 +189,7 @@ class AIEngine {
   Map<String, dynamic> _buildRequestBody(
     List<Map<String, dynamic>> messages, {
     bool stream = false,
+    bool includeTools = true,
   }) {
     final body = <String, dynamic>{
       'model': _getModelName(),
@@ -175,7 +197,7 @@ class AIEngine {
       'stream': stream,
     };
 
-    if (_toolDefinitions.isNotEmpty) {
+    if (includeTools && _toolDefinitions.isNotEmpty && _ollamaToolsSupported) {
       body['tools'] = _toolDefinitions;
       body['tool_choice'] = 'auto';
     }
@@ -229,7 +251,28 @@ class AIEngine {
         return 'Rate limited by API. Retrying in a few seconds...';
       }
 
-      return _handleResponse(response);
+      // If Ollama says model doesn't support tools, retry without
+      if (response.statusCode != 200 && _provider == AIProvider.ollama) {
+        final errorData = response.data;
+        final errorMsg = errorData is Map ? (errorData['error']?['message'] ?? '') : '';
+        if (errorMsg.contains('does not support tools')) {
+          _ollamaToolsSupported = false;
+          final bodyNoTools = _buildRequestBody(messages, includeTools: false);
+          try {
+            response = await _dio.post(
+              '$_baseUrl/chat/completions',
+              options: _buildOptions(),
+              data: bodyNoTools,
+              cancelToken: cancelToken,
+            );
+          } catch (e) {}
+        }
+      }
+
+      if (response != null) {
+        return _handleResponse(response);
+      }
+      return 'Error: No response from Ollama';
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel) return '*[Stopped]*';
       return 'Error: $e';
@@ -296,12 +339,45 @@ class AIEngine {
       }
 
       if (response.statusCode != 200) {
-        return {
-          'success': false,
-          'error': 'API error: ${response.statusCode}',
-          'toolCalls': allToolCalls,
-          'toolResults': allToolResults,
-        };
+        final errorData = response.data;
+        final errorMsg = errorData is Map ? (errorData['error']?['message'] ?? '') : '';
+        
+        // If Ollama says model doesn't support tools, retry without tools
+        if (_provider == AIProvider.ollama && errorMsg.contains('does not support tools')) {
+          _ollamaToolsSupported = false;
+          final bodyNoTools = _buildRequestBody(messages, includeTools: false);
+          try {
+            response = await _dio.post(
+              '$_baseUrl/chat/completions',
+              options: _buildOptions(),
+              data: bodyNoTools,
+              cancelToken: cancelToken,
+            );
+          } catch (e) {
+            return {
+              'success': false,
+              'error': 'API error: $errorMsg',
+              'toolCalls': allToolCalls,
+              'toolResults': allToolResults,
+            };
+          }
+          
+          if (response.statusCode != 200) {
+            return {
+              'success': false,
+              'error': 'API error: ${response.statusCode}',
+              'toolCalls': allToolCalls,
+              'toolResults': allToolResults,
+            };
+          }
+        } else {
+          return {
+            'success': false,
+            'error': 'API error: ${response.statusCode}',
+            'toolCalls': allToolCalls,
+            'toolResults': allToolResults,
+          };
+        }
       }
 
       final data = response.data;
@@ -480,7 +556,10 @@ class AIEngine {
     } else if (response.statusCode == 404) {
       return 'Error: Model not found (${_getModelName()}). Try another model.';
     } else if (response.statusCode == 401) {
-      return 'Error: Invalid API key. Please check your OpenRouter API key.';
+      if (_provider == AIProvider.ollama) {
+        return 'Error: Ollama authentication failed. Check Ollama settings.';
+      }
+      return 'Error: Invalid API key. Please check your API key in Settings.';
     } else if (response.statusCode == 402) {
       return 'Error: Insufficient credits.';
     } else {
@@ -667,9 +746,9 @@ class AIEngine {
   static String _getDefaultModel(AIProvider provider) {
     switch (provider) {
       case AIProvider.openrouter:
-        return 'openrouter/free';
+        return 'google/gemma-4-26b-a4b-it:free';
       case AIProvider.ollama:
-        return 'llama3.2';
+        return 'gemma4:e4b';
       case AIProvider.openai:
         return 'gpt-4';
       case AIProvider.anthropic:

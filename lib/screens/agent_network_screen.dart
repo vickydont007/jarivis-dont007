@@ -7,7 +7,6 @@ import '../core/task_router.dart';
 import '../core/agent_orchestrator.dart' as orch;
 import '../providers/app_provider.dart';
 import '../widgets/agent_network_painter.dart';
-import '../widgets/agent_stats_bar.dart';
 import '../widgets/agent_detail_panel.dart';
 
 class AgentNetworkScreen extends ConsumerStatefulWidget {
@@ -31,11 +30,12 @@ class _AgentNetworkScreenState extends ConsumerState<AgentNetworkScreen>
   Offset _offset = Offset.zero;
   bool _showDetailPanel = false;
   List<orch.AgentTask> _runningTasks = [];
+  DateTime? _startTime;
 
   @override
   void initState() {
     super.initState();
-    // Use shared AgentNetwork from AppState
+    _startTime = DateTime.now();
     final appState = ref.read(appStateProvider);
     _network = appState.agentNetwork!;
     _orchestrator = appState.agentOrchestrator;
@@ -43,7 +43,7 @@ class _AgentNetworkScreenState extends ConsumerState<AgentNetworkScreen>
 
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 10),
+      duration: const Duration(seconds: 20),
     )..repeat();
 
     _spawnAnimationController = AnimationController(
@@ -55,7 +55,6 @@ class _AgentNetworkScreenState extends ConsumerState<AgentNetworkScreen>
       if (mounted) setState(() {});
     });
 
-    // Listen to orchestrator task updates
     if (_orchestrator != null) {
       _taskSubscription = _orchestrator!.taskStream.listen((task) {
         if (mounted) {
@@ -121,7 +120,7 @@ class _AgentNetworkScreenState extends ConsumerState<AgentNetworkScreen>
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF161B22),
+          backgroundColor: const Color(0xFF0A0E1A),
           title: const Text(
             'Spawn New Agent',
             style: TextStyle(color: Colors.white),
@@ -135,14 +134,14 @@ class _AgentNetworkScreenState extends ConsumerState<AgentNetworkScreen>
                   labelText: 'Agent Name',
                   labelStyle: TextStyle(color: Colors.grey[400]),
                   filled: true,
-                  fillColor: const Color(0xFF0D1117),
+                  fillColor: const Color(0xFF050810),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFF30363D)),
+                    borderSide: const BorderSide(color: Color(0xFF1E3A5F)),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFF30363D)),
+                    borderSide: const BorderSide(color: Color(0xFF1E3A5F)),
                   ),
                 ),
                 onChanged: (v) => agentName = v,
@@ -155,14 +154,14 @@ class _AgentNetworkScreenState extends ConsumerState<AgentNetworkScreen>
                   labelText: 'Role',
                   labelStyle: TextStyle(color: Colors.grey[400]),
                   filled: true,
-                  fillColor: const Color(0xFF0D1117),
+                  fillColor: const Color(0xFF050810),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFF30363D)),
+                    borderSide: const BorderSide(color: Color(0xFF1E3A5F)),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFF30363D)),
+                    borderSide: const BorderSide(color: Color(0xFF1E3A5F)),
                   ),
                 ),
                 items: dyn_agent.AgentRole.values.map((role) {
@@ -191,7 +190,7 @@ class _AgentNetworkScreenState extends ConsumerState<AgentNetworkScreen>
                       _doSpawnAgent(agentName, selectedRole);
                     }
                   : null,
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFA500)),
               child: const Text('Spawn'),
             ),
           ],
@@ -231,97 +230,24 @@ class _AgentNetworkScreenState extends ConsumerState<AgentNetworkScreen>
     });
   }
 
+  String _getUptime() {
+    if (_startTime == null) return '+00:00:00';
+    final diff = DateTime.now().difference(_startTime!);
+    final hours = diff.inHours.toString().padLeft(2, '0');
+    final minutes = (diff.inMinutes % 60).toString().padLeft(2, '0');
+    final seconds = (diff.inSeconds % 60).toString().padLeft(2, '0');
+    return '+$hours:$minutes:$seconds';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D1117),
+      backgroundColor: const Color(0xFF050810),
       body: Column(
         children: [
-          AgentStatsBar(network: _network),
-          if (_runningTasks.isNotEmpty)
-            Container(
-              height: 120,
-              margin: const EdgeInsets.all(12),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF161B22),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.cyan.withValues(alpha: 0.3)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.play_circle, color: Colors.cyan, size: 18),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Running Tasks',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                      const Spacer(),
-                      Text(
-                        '${_runningTasks.length} active',
-                        style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                      Expanded(
-                    child: ListView.builder(
-                      itemCount: _runningTasks.length,
-                      itemBuilder: (context, index) {
-                        final task = _runningTasks[index];
-                        final agent = _network.agents.firstWhere(
-                          (a) => a.id == task.agentId,
-                          orElse: () => dyn_agent.DynamicAgent(id: 'unknown', name: 'Unknown', role: dyn_agent.AgentRole.custom),
-                        );
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 4),
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0D1117),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: Colors.cyan.withValues(alpha: 0.2)),
-                          ),
-                          child: Row(
-                            children: [
-                              SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.cyan),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      task.description.length > 50 
-                                        ? '${task.description.substring(0, 50)}...'
-                                        : task.description,
-                                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                                    ),
-                                    Text(
-                                      'Agent: ${agent.name} (${agent.role.name})',
-                                      style: TextStyle(color: Colors.grey[400], fontSize: 10),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          _buildStatsBar(),
+          _buildTitle(),
+          if (_runningTasks.isNotEmpty) _buildRunningTasksPanel(),
           Expanded(
             child: Stack(
               children: [
@@ -386,22 +312,201 @@ class _AgentNetworkScreenState extends ConsumerState<AgentNetworkScreen>
     );
   }
 
+  Widget _buildStatsBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A0E1A),
+        border: Border(
+          bottom: BorderSide(color: const Color(0xFF1E3A5F).withOpacity(0.3)),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _buildStatItem('AGENTS', '${_network.agentCount}'),
+          const SizedBox(width: 30),
+          _buildStatItem('LINES', '${_network.connectionCount}'),
+          const SizedBox(width: 30),
+          _buildStatItem('TASKS', '${_network.totalTasks}'),
+          const SizedBox(width: 30),
+          _buildStatItem('UPTIME', _getUptime()),
+          const SizedBox(width: 30),
+          _buildActiveBadge(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String label, String value) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.grey[500],
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 1.5,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActiveBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A0E1A),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF00BCD4).withOpacity(0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: const Color(0xFF00BCD4),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF00BCD4).withOpacity(0.5),
+                  blurRadius: 6,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '${_network.activeAgents} ACTIVE',
+            style: const TextStyle(
+              color: Color(0xFF00BCD4),
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTitle() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: const Text(
+        'Solar System',
+        style: TextStyle(
+          color: Colors.white70,
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 1,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRunningTasksPanel() {
+    return Container(
+      height: 100,
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A0E1A),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFFFA500).withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.play_circle, color: Color(0xFFFFA500), size: 16),
+              const SizedBox(width: 6),
+              const Text(
+                'Running Tasks',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+              ),
+              const Spacer(),
+              Text(
+                '${_runningTasks.length} active',
+                style: TextStyle(color: Colors.grey[400], fontSize: 11),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Expanded(
+            child: ListView.builder(
+              itemCount: _runningTasks.length,
+              itemBuilder: (context, index) {
+                final task = _runningTasks[index];
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 3),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF050810),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.5,
+                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFFA500)),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          task.description.length > 40
+                              ? '${task.description.substring(0, 40)}...'
+                              : task.description,
+                          style: const TextStyle(color: Colors.white, fontSize: 10),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildToolButton(IconData icon, String tooltip, VoidCallback onPressed) {
     return Tooltip(
       message: tooltip,
       child: GestureDetector(
         onTap: onPressed,
         child: Container(
-          width: 40,
-          height: 40,
+          width: 36,
+          height: 36,
           decoration: BoxDecoration(
-            color: const Color(0xFF161B22),
+            color: const Color(0xFF0A0E1A),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: Colors.cyan.withValues(alpha: 0.3),
+              color: const Color(0xFF1E3A5F).withOpacity(0.5),
             ),
           ),
-          child: Icon(icon, color: Colors.cyan, size: 20),
+          child: Icon(icon, color: const Color(0xFF4A90D9), size: 18),
         ),
       ),
     );

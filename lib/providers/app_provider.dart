@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/ai_engine.dart';
+import '../core/agent_personality.dart';
 import '../core/memory_system.dart';
 import '../core/agent_network.dart';
 import '../core/context_memory.dart';
@@ -14,6 +15,12 @@ import '../core/meeting_assistant.dart';
 import '../core/notification_intelligence.dart';
 import '../core/file_converter.dart';
 import '../core/agent_orchestrator.dart';
+import '../core/memory_evolution.dart';
+import '../core/emotion_detector.dart';
+import '../core/girlfriend_memory.dart';
+import '../core/conversation_manager.dart';
+import '../core/services/orb_state_manager.dart';
+import '../core/providers.dart';
 import '../services/scheduler_service.dart';
 import '../services/voice_service.dart';
 import '../social/social_manager.dart';
@@ -129,12 +136,14 @@ class AppStateNotifier extends StateNotifier<AppState> {
   NotificationIntelligence? _notificationIntelligence;
   FileConverter? _fileConverter;
   AgentOrchestrator? _agentOrchestrator;
+  MemoryEvolution? _memoryEvolution;
+  ConversationManager? _conversationManager;
 
-  AppStateNotifier() : super(AppState()) {
+  AppStateNotifier({OrbStateManager? orb}) : super(AppState()) {
     _memory = MemorySystem();
     _agentNetwork = AgentNetwork();
     _scheduler = SchedulerService();
-    _voiceService = VoiceService();
+    _voiceService = VoiceService(orb: orb);
     _socialManager = SocialManager();
     _contextMemory = ContextMemory();
     _persistence = AppStatePersistence();
@@ -146,6 +155,8 @@ class AppStateNotifier extends StateNotifier<AppState> {
     _notificationIntelligence = NotificationIntelligence();
     _fileConverter = FileConverter();
     _agentOrchestrator = AgentOrchestrator();
+    _memoryEvolution = MemoryEvolution();
+    _conversationManager = ConversationManager(_engine);
 
     _toolManager = ToolManager(
       memory: _memory!,
@@ -277,12 +288,19 @@ class AppStateNotifier extends StateNotifier<AppState> {
     String? baseUrl,
     String? modelName,
   }) async {
+    final personality = await AgentPersonality.load();
+    await GirlfriendMemory.init();
+    await _memoryEvolution!.database;
+
     _engine = _toolManager!.createAIEngine(
       provider: provider,
       apiKey: apiKey,
       baseUrl: baseUrl,
       modelName: modelName,
+      personality: personality,
     );
+
+    _conversationManager = ConversationManager(_engine);
 
     try {
       await _engine!.connect();
@@ -313,14 +331,43 @@ class AppStateNotifier extends StateNotifier<AppState> {
       return 'AI Engine not initialized. Please configure in Settings.';
     }
 
+    // Detect emotion from user message
+    final emotionResult = EmotionDetector.detect(message);
+    
+    // Save emotion to memory evolution
+    await _memoryEvolution!.recordEmotion(
+      emotion: emotionResult.emotion,
+      confidence: emotionResult.confidence,
+      intensity: emotionResult.intensity,
+      context: message,
+      triggers: emotionResult.triggers,
+    );
+
+    // Auto-extract facts from message for girlfriend memory
+    await GirlfriendMemory.autoExtractFromMessage(message);
+    await GirlfriendMemory.rememberDailyUpdate(message);
+    await GirlfriendMemory.recordFirstConversation();
+
+    // Get emotion and relationship context for AI
+    final emotionContext = await _memoryEvolution!.getCurrentMoodContext();
+    final relationshipContext = GirlfriendMemory.getRelationshipContext();
+
+    // Recreate engine with updated emotion context
+    final personality = await AgentPersonality.load();
+    _engine = _toolManager!.createAIEngine(
+      provider: state.provider,
+      apiKey: state.apiKey,
+      personality: personality,
+      emotionContext: emotionContext,
+      relationshipContext: relationshipContext,
+    );
+
     // Check if orchestrator should handle this as a delegated task
     final shouldDelegate = _agentOrchestrator != null && _shouldDelegateToAgent(message);
     
     if (shouldDelegate) {
-      // Delegate to agent orchestrator
       final delegatedResponse = await _agentOrchestrator!.delegateTask(message);
       if (delegatedResponse.isNotEmpty) {
-        // Still save to memory
         final memoryEntry = MemoryEntry.create(
           content: message,
           category: 'chat',
@@ -335,9 +382,15 @@ class AppStateNotifier extends StateNotifier<AppState> {
         );
         _memory?.addMemory(responseEntry);
         
+        await _memoryEvolution!.recordInteraction(
+          userMessage: message,
+          aiResponse: delegatedResponse,
+          emotion: emotionResult.emotion,
+          emotionConfidence: emotionResult.confidence,
+        );
+        
         return delegatedResponse;
       }
-      // Fall through to normal flow if agent couldn't handle
     }
 
     try {
@@ -356,16 +409,13 @@ class AppStateNotifier extends StateNotifier<AppState> {
         return 'Error: ${result['error']}';
       }
 
-      // RAG Context Injection — automatically inject relevant memories
       var enrichedMessage = message;
       try {
         final ragContext = await _toolManager?.ragManager?.getRelevantContext(message);
         if (ragContext != null && ragContext.isNotEmpty) {
           enrichedMessage = '$ragContext\n\nUser message: $message';
         }
-      } catch (e) {
-        // RAG injection is optional, continue with original message
-      }
+      } catch (e) {}
 
       final result = await _engine!.sendMessageWithTools(
         enrichedMessage,
@@ -381,7 +431,6 @@ class AppStateNotifier extends StateNotifier<AppState> {
       final toolCalls = result['toolCalls'] as List? ?? [];
       final toolResults = result['toolResults'] as List? ?? [];
 
-      // If no content but tools were executed, use tool summary
       if (response.isEmpty && toolCalls.isNotEmpty) {
         final toolSummary = toolResults.map((r) {
           final name = r['name'];
@@ -406,6 +455,23 @@ class AppStateNotifier extends StateNotifier<AppState> {
         },
       );
       _memory?.addMemory(responseEntry);
+
+      // Record interaction with emotion
+      await _memoryEvolution!.recordInteraction(
+        userMessage: message,
+        aiResponse: response,
+        toolsUsed: toolCalls.map((t) => t.toString()).toList(),
+        emotion: emotionResult.emotion,
+        emotionConfidence: emotionResult.confidence,
+      );
+
+      // Track girlfriend memory
+      final shortResponse = response.length > 50 ? response.substring(0, 50) : response;
+      await GirlfriendMemory.rememberSharedExperience('User said: $message, AI responded with: $shortResponse...');
+
+      // Add to conversation manager
+      await _conversationManager!.addMessage('user', message);
+      await _conversationManager!.addMessage('assistant', response);
 
       return response;
     } catch (e) {
@@ -466,5 +532,6 @@ class AppStateNotifier extends StateNotifier<AppState> {
 }
 
 final appStateProvider = StateNotifierProvider<AppStateNotifier, AppState>((ref) {
-  return AppStateNotifier();
+  final orb = ref.watch(orbStateManagerProvider);
+  return AppStateNotifier(orb: orb);
 });

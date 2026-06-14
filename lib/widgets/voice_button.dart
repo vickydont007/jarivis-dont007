@@ -7,8 +7,16 @@ import '../providers/app_provider.dart';
 class VoiceButton extends ConsumerStatefulWidget {
   final Function(String)? onTranscription;
   final Function(String)? onPartialTranscription;
+  final VoidCallback? onListeningStart;
+  final bool isEnabled;
 
-  const VoiceButton({super.key, this.onTranscription, this.onPartialTranscription});
+  const VoiceButton({
+    super.key,
+    this.onTranscription,
+    this.onPartialTranscription,
+    this.onListeningStart,
+    this.isEnabled = true,
+  });
 
   @override
   ConsumerState<VoiceButton> createState() => _VoiceButtonState();
@@ -17,7 +25,6 @@ class VoiceButton extends ConsumerStatefulWidget {
 class _VoiceButtonState extends ConsumerState<VoiceButton>
     with SingleTickerProviderStateMixin {
   bool _isListening = false;
-  String _status = '';
   String _lastText = '';
   late AnimationController _animationController;
   late Animation<double> _animation;
@@ -37,47 +44,63 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
     );
   }
 
+  @override
+  void didUpdateWidget(VoiceButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.isEnabled && oldWidget.isEnabled) {
+      _cleanupListeners();
+      setState(() => _isListening = false);
+      _animationController.stop();
+      _animationController.reset();
+    }
+  }
+
   void _setupListeners() {
     final appState = ref.read(appStateProvider);
     final voiceService = appState.voiceService;
     if (voiceService == null) return;
 
-    _transcriptionSub?.cancel();
-    _finalTranscriptionSub?.cancel();
-    _statusSub?.cancel();
+    _cleanupListeners();
 
     _transcriptionSub = voiceService.transcriptionStream.listen((text) {
-      if (text.isNotEmpty) {
+      if (text.isNotEmpty && mounted) {
         _lastText = text;
         widget.onPartialTranscription?.call(text);
       }
     });
     _finalTranscriptionSub = voiceService.finalTranscriptionStream.listen((text) {
-      if (text.isNotEmpty) {
-        _lastText = text;
+      if (text.isNotEmpty && mounted) {
+        _lastText = '';
         widget.onTranscription?.call(text);
       }
     });
     _statusSub = voiceService.listeningStream.listen((listening) {
       if (!listening && mounted && _isListening) {
-        // Mic stopped - send whatever text is in the field
         setState(() => _isListening = false);
         _animationController.stop();
         _animationController.reset();
-        // Delay slightly to ensure final text is set
         Future.delayed(const Duration(milliseconds: 300), () {
-          if (widget.onTranscription != null) {
-            final text = _lastText;
-            if (text.isNotEmpty) {
-              widget.onTranscription!(text);
-            }
+          if (_lastText.isNotEmpty && widget.onTranscription != null) {
+            widget.onTranscription!(_lastText);
+            _lastText = '';
           }
         });
       }
     });
   }
 
+  void _cleanupListeners() {
+    _transcriptionSub?.cancel();
+    _finalTranscriptionSub?.cancel();
+    _statusSub?.cancel();
+    _transcriptionSub = null;
+    _finalTranscriptionSub = null;
+    _statusSub = null;
+  }
+
   void _toggleListening() async {
+    if (!widget.isEnabled) return;
+
     final appState = ref.read(appStateProvider);
     final voiceService = appState.voiceService;
 
@@ -94,20 +117,23 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
       }
     }
 
-    _setupListeners();
-
     if (_isListening) {
       setState(() => _isListening = false);
       _animationController.stop();
       _animationController.reset();
+      _cleanupListeners();
       await voiceService.stopListening();
     } else {
+      _setupListeners();
       _lastText = '';
+      voiceService.resetSession();
+      widget.onListeningStart?.call();
       final started = await voiceService.startListening();
       if (started) {
         setState(() => _isListening = true);
         _animationController.repeat(reverse: true);
       } else {
+        _cleanupListeners();
         _showSettingsDialog();
       }
     }
@@ -191,25 +217,39 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
 
   @override
   Widget build(BuildContext context) {
+    final enabled = widget.isEnabled;
+    final bgColor = !enabled
+        ? Colors.grey[800]
+        : _isListening
+            ? const Color(0xFFE53935)
+            : const Color(0xFF1E222A);
+    final borderColor = !enabled
+        ? Colors.grey[700]!
+        : _isListening
+            ? const Color(0xFFE53935)
+            : Theme.of(context).dividerColor;
+
     return ScaleTransition(
       scale: _animation,
       child: Tooltip(
-        message: _isListening ? 'Stop listening' : 'Voice input',
+        message: !enabled
+            ? 'Voice mode active'
+            : _isListening
+                ? 'Stop listening'
+                : 'Voice input',
         child: Container(
           decoration: BoxDecoration(
-            color: _isListening ? const Color(0xFFE53935) : const Color(0xFF1E222A),
+            color: bgColor,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: _isListening ? const Color(0xFFE53935) : Theme.of(context).dividerColor,
-            ),
+            border: Border.all(color: borderColor),
           ),
           child: IconButton(
             icon: Icon(
               _isListening ? Icons.mic : Icons.mic_none,
-              color: Colors.white,
+              color: enabled ? Colors.white : Colors.grey[600],
               size: 20,
             ),
-            onPressed: _toggleListening,
+            onPressed: enabled ? _toggleListening : null,
           ),
         ),
       ),
@@ -218,9 +258,7 @@ class _VoiceButtonState extends ConsumerState<VoiceButton>
 
   @override
   void dispose() {
-    _transcriptionSub?.cancel();
-    _finalTranscriptionSub?.cancel();
-    _statusSub?.cancel();
+    _cleanupListeners();
     _animationController.dispose();
     super.dispose();
   }

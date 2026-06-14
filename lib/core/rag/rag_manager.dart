@@ -7,6 +7,7 @@ class RAGManager {
   final VectorEmbeddingService _embeddingService;
   final VectorStore _vectorStore;
   final MemorySystem _memorySystem;
+  bool _initialized = false;
 
   RAGManager({
     required String apiKey,
@@ -14,8 +15,19 @@ class RAGManager {
   })  : _memorySystem = memorySystem,
         _embeddingService = VectorEmbeddingService(apiKey: apiKey),
         _vectorStore = VectorStore(VectorEmbeddingService(apiKey: apiKey)) {
-    // Use the same embedding service instance for both manager and store
     _vectorStore.setEmbeddingService(_embeddingService);
+  }
+
+  Future<void> initialize() async {
+    if (_initialized) return;
+    _initialized = true;
+    try {
+      await VectorStore.init();
+      await VectorStore.loadFromSQLite(_vectorStore);
+      print('RAGManager initialized with ${_vectorStore.totalCount} vectors loaded');
+    } catch (e) {
+      print('Warning: Failed to initialize RAGManager: $e');
+    }
   }
 
   void setApiKey(String apiKey) {

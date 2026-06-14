@@ -6,6 +6,7 @@ class ChatMessage {
   final String content;
   final DateTime timestamp;
   final List<String>? imageUrls;
+  final List<String>? imagePaths;
   final bool isStopped;
 
   ChatMessage({
@@ -13,6 +14,7 @@ class ChatMessage {
     required this.content,
     required this.timestamp,
     this.imageUrls,
+    this.imagePaths,
     this.isStopped = false,
   });
 
@@ -22,6 +24,7 @@ class ChatMessage {
       'content': content,
       'timestamp': timestamp.toIso8601String(),
       'imageUrls': imageUrls,
+      'imagePaths': imagePaths,
     };
   }
 
@@ -31,15 +34,10 @@ class ChatMessage {
       content: map['content'],
       timestamp: DateTime.parse(map['timestamp']),
       imageUrls: map['imageUrls'] != null ? List<String>.from(map['imageUrls']) : null,
+      imagePaths: map['imagePaths'] != null ? List<String>.from(map['imagePaths']) : null,
     );
   }
 }
-
-final _welcomeMessage = ChatMessage(
-  role: 'assistant',
-  content: 'Hello! I am **Nextron**, your AI desktop assistant.\n\nI can help you with:\n- System control (shutdown, restart, sleep)\n- File management (read, write, search)\n- Web browsing and search\n- Code execution (Python/JS)\n- Image analysis\n- And much more!\n\nHow can I help you today?',
-  timestamp: DateTime(2026, 1, 1),
-);
 
 class ChatState {
   final List<ChatMessage> messages;
@@ -52,7 +50,7 @@ class ChatState {
     this.history = const [],
     this.isLoading = false,
     this.cancelToken,
-  }) : messages = messages ?? [_welcomeMessage];
+  }) : messages = messages ?? [];
 
   ChatState copyWith({
     List<ChatMessage>? messages,
@@ -72,7 +70,7 @@ class ChatState {
 class ChatNotifier extends StateNotifier<ChatState> {
   ChatNotifier() : super(ChatState());
 
-  void addUserMessage(String content) {
+  void addUserMessage(String content, {List<String>? imagePaths}) {
     final token = CancelToken();
     state = state.copyWith(
       messages: [
@@ -81,6 +79,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
           role: 'user',
           content: content,
           timestamp: DateTime.now(),
+          imagePaths: imagePaths,
         ),
       ],
       history: [

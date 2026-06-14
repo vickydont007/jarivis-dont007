@@ -45,58 +45,7 @@ public class MicPermissionHandler: NSObject, FlutterPlugin, SFSpeechRecognizerDe
         else { result("not_determined") }
     }
 
-    private func startListening(result: @escaping FlutterResult) {
-        stopListening(result: { _ in })
-
-        let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
-        guard let recognizer = recognizer, recognizer.isAvailable else {
-            result("error: speech recognizer not available")
-            return
-        }
-
-        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        guard let recognitionRequest = recognitionRequest else {
-            result("error: could not create request")
-            return
-        }
-        recognitionRequest.shouldReportPartialResults = true
-
-        recognitionTask = recognizer.recognitionTask(with: recognitionRequest) { [weak self] (res, error) in
-            guard let self = self else { return }
-            if let res = res {
-                let text = res.bestTranscription.formattedString
-                DispatchQueue.main.async {
-                    self.channel?.invokeMethod("onSpeechResult", arguments: ["text": text, "isFinal": res.isFinal])
-                }
-            }
-            if error != nil || (res?.isFinal ?? false) {
-                self.stopListening(result: { _ in })
-            }
-        }
-
-        audioEngine = AVAudioEngine()
-        guard let audioEngine = audioEngine else {
-            result("error: could not create audio engine")
-            return
-        }
-
-        let inputNode = audioEngine.inputNode
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
-        let inputBus: AVAudioNodeBus = 0
-
-        inputNode.installTap(onBus: inputBus, bufferSize: 1024, format: recordingFormat) { [weak self] (buffer, _) in
-            self?.recognitionRequest?.append(buffer)
-        }
-
-        do {
-            try audioEngine.start()
-            result("started")
-        } catch {
-            result("error: \(error.localizedDescription)")
-        }
-    }
-
-    private func stopListening(result: @escaping FlutterResult) {
+    private func cleanupSession() {
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
         audioEngine = nil
@@ -104,6 +53,72 @@ public class MicPermissionHandler: NSObject, FlutterPlugin, SFSpeechRecognizerDe
         recognitionTask?.cancel()
         recognitionTask = nil
         recognitionRequest = nil
+    }
+
+    private func startListening(result: @escaping FlutterResult) {
+        // Fully stop old session
+        cleanupSession()
+
+        // Delay to let old session fully teardown
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            // Create FRESH recognizer every time
+            let locale = Locale(identifier: "en-US")
+            let recognizer = SFSpeechRecognizer(locale: locale)
+            guard let recognizer = recognizer, recognizer.isAvailable else {
+                result("error: speech recognizer not available")
+                return
+            }
+
+            let request = SFSpeechAudioBufferRecognitionRequest()
+            request.shouldReportPartialResults = true
+            self.recognitionRequest = request
+
+            self.recognitionTask = recognizer.recognitionTask(with: request) { [weak self] (res, error) in
+                guard let self = self else { return }
+                if let res = res {
+                    let text = res.bestTranscription.formattedString
+                    DispatchQueue.main.async {
+                        self.channel?.invokeMethod("onSpeechResult", arguments: [
+                            "text": text,
+                            "isFinal": res.isFinal
+                        ])
+                    }
+                }
+                if error != nil || (res?.isFinal ?? false) {
+                    self.cleanupSession()
+                    DispatchQueue.main.async {
+                        self.channel?.invokeMethod("onSpeechResult", arguments: [
+                            "text": "",
+                            "isFinal": true
+                        ])
+                    }
+                }
+            }
+
+            self.audioEngine = AVAudioEngine()
+            guard let audioEngine = self.audioEngine else {
+                result("error: could not create audio engine")
+                return
+            }
+
+            let inputNode = audioEngine.inputNode
+            let recordingFormat = inputNode.outputFormat(forBus: 0)
+
+            inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] (buffer, _) in
+                self?.recognitionRequest?.append(buffer)
+            }
+
+            do {
+                try audioEngine.start()
+                result("started")
+            } catch {
+                result("error: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func stopListening(result: @escaping FlutterResult) {
+        cleanupSession()
         result("stopped")
     }
 }

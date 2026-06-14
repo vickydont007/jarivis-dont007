@@ -1,9 +1,14 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import '../providers/app_provider.dart';
 import '../core/ai_engine.dart';
+import '../services/voice_service.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -17,6 +22,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String _selectedModel = 'google/gemma-4-26b-a4b-it:free';
   String _apiKey = '';
   bool _useLocalAI = false;
+
+  String _userName = '';
+  String _aiName = 'Nexa';
+  String _ttsVoiceName = 'Samantha';
+  List<Map<String, dynamic>> _availableVoices = [];
 
   bool _voiceEnabled = true;
   String _selectedLanguage = 'both';
@@ -40,9 +50,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String _modelError = '';
 
   bool _isSaving = false;
+  
+  String? _userProfilePhoto;
+  String? _aiProfilePhoto;
+  final ImagePicker _imagePicker = ImagePicker();
 
   final Map<String, List<String>> _modelsByProvider = {
-    'ollama': ['llama3.2', 'llama3.1', 'mistral', 'codellama', 'phi3', 'gemma'],
+    'ollama': ['gemma4:e4b', 'hermes3:latest', 'gemma3:4b', 'qwen2.5-coder:7b'],
     'openai': ['gpt-4', 'gpt-4-turbo', 'gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'],
     'anthropic': ['claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku', 'claude-3.5-sonnet'],
     'gemini': ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
@@ -62,6 +76,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _selectedModel = prefs.getString('ai_model') ?? 'google/gemma-4-26b-a4b-it:free';
       _apiKey = prefs.getString('ai_api_key') ?? '';
       _useLocalAI = prefs.getBool('use_local_ai') ?? false;
+      _userName = prefs.getString('user_name') ?? '';
+      _aiName = prefs.getString('ai_name') ?? 'Nexa';
+      _ttsVoiceName = prefs.getString('tts_voice_name') ?? 'Samantha';
       _voiceEnabled = prefs.getBool('voice_enabled') ?? true;
       _selectedLanguage = prefs.getString('voice_language') ?? 'both';
       _speechRate = prefs.getDouble('speech_rate') ?? 0.5;
@@ -76,7 +93,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _whatsappAccessToken = prefs.getString('whatsapp_access_token') ?? '';
       _whatsappPhoneNumberId = prefs.getString('whatsapp_phone_number_id') ?? '';
       _whatsappBusinessAccountId = prefs.getString('whatsapp_business_account_id') ?? '';
+      _userProfilePhoto = prefs.getString('user_profile_photo');
+      _aiProfilePhoto = prefs.getString('ai_profile_photo');
     });
+    _loadVoices();
+    
+    // Auto-fetch models based on provider
+    if (_selectedAIProvider == 'openrouter') {
+      _fetchOpenRouterModels();
+    } else if (_selectedAIProvider == 'ollama') {
+      _fetchOllamaModels();
+    }
   }
 
   Future<void> _fetchOpenRouterModels() async {
@@ -137,6 +164,68 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<void> _fetchOllamaModels() async {
+    setState(() {
+      _isLoadingModels = true;
+      _modelError = '';
+    });
+
+    try {
+      final dio = Dio();
+      final response = await dio.get(
+        'http://localhost:11434/api/tags',
+        options: Options(
+          headers: {'Content-Type': 'application/json'},
+          validateStatus: (status) => status! < 500,
+          receiveTimeout: const Duration(seconds: 3),
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data['models'] != null) {
+        final models = List<Map<String, dynamic>>.from(response.data['models']);
+        final modelNames = models.map((m) => m['name'] as String).toList();
+        modelNames.sort();
+
+        setState(() {
+          _modelsByProvider['ollama'] = modelNames;
+          _isLoadingModels = false;
+          if (modelNames.isNotEmpty && !modelNames.contains(_selectedModel)) {
+            _selectedModel = modelNames.first;
+          }
+        });
+      } else {
+        setState(() {
+          _modelError = 'Ollama not responding. Is it running?';
+          _isLoadingModels = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _modelError = 'Cannot connect to Ollama at localhost:11434';
+        _isLoadingModels = false;
+      });
+    }
+  }
+
+  Future<void> _loadVoices() async {
+    try {
+      final voices = VoiceService.allVoices;
+      if (mounted) {
+        setState(() => _availableVoices = voices);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _availableVoices = [
+            {'name': 'Samantha', 'locale': 'en-US'},
+            {'name': 'Karen', 'locale': 'en-AU'},
+            {'name': 'Alex', 'locale': 'en-US'},
+          ];
+        });
+      }
+    }
+  }
+
   List<String> get _currentModels {
     if (_selectedAIProvider == 'openrouter') {
       if (_openRouterModels.isNotEmpty) return _openRouterModels;
@@ -168,8 +257,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               _buildLocalAIToggle(),
             ]),
             const SizedBox(height: 20),
+            _buildSection('Personal Info', Icons.person, [
+              _buildProfilePhotoSection(),
+              const SizedBox(height: 16),
+              _buildUserNameField(),
+              const SizedBox(height: 16),
+              _buildAINameField(),
+            ]),
+            const SizedBox(height: 20),
             _buildSection('Voice Settings', Icons.mic, [
               _buildVoiceToggle(),
+              const SizedBox(height: 16),
+              _buildTTSVoiceDropdown(),
               const SizedBox(height: 16),
               _buildLanguageDropdown(),
               const SizedBox(height: 16),
@@ -332,8 +431,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         setState(() {
           _selectedAIProvider = value!;
           if (value == 'openrouter') {
+            _useLocalAI = false;
+            if (_apiKey == 'local') _apiKey = '';
             _fetchOpenRouterModels();
+          } else if (value == 'ollama') {
+            _useLocalAI = true;
+            _apiKey = 'local';
+            _fetchOllamaModels();
           } else {
+            _useLocalAI = false;
+            if (_apiKey == 'local') _apiKey = '';
             _selectedModel = _currentModels.isNotEmpty ? _currentModels.first : '';
           }
         });
@@ -354,7 +461,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SizedBox(width: 10),
           Text(
-            'Fetching models from OpenRouter...',
+            _selectedAIProvider == 'ollama'
+                ? 'Fetching models from Ollama...'
+                : 'Fetching models from OpenRouter...',
             style: TextStyle(color: Colors.grey[500], fontSize: 12),
           ),
         ],
@@ -372,12 +481,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Widget _buildApiKeyField() {
+    final isLocal = _selectedAIProvider == 'ollama' || _useLocalAI;
     return _buildTextField(
-      'OpenRouter API Key',
-      _apiKey,
-      (value) => setState(() => _apiKey = value),
-      isPassword: true,
-      hint: 'sk-or-v1-...',
+      isLocal ? 'API Key (not needed for Ollama)' : 'API Key',
+      isLocal ? '' : _apiKey,
+      isLocal ? null : (value) => setState(() => _apiKey = value),
+      isPassword: false,
+      hint: isLocal ? 'Ollama runs locally - no key needed' : 'sk-or-v1-...',
     );
   }
 
@@ -385,7 +495,183 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return _buildSwitch(
       'Use Local AI (Ollama)',
       _useLocalAI,
-      (value) => setState(() => _useLocalAI = value),
+      (value) {
+        setState(() {
+          _useLocalAI = value;
+          if (value) {
+            // Force Ollama provider when toggling on
+            _selectedAIProvider = 'ollama';
+            _apiKey = 'local';
+            // Set default Ollama model
+            if (!_modelsByProvider['ollama']!.contains(_selectedModel)) {
+              _selectedModel = 'gemma4:e4b';
+            }
+          }
+        });
+      },
+    );
+  }
+
+  Widget _buildProfilePhotoSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Profile Photos',
+          style: TextStyle(
+            color: Theme.of(context).textTheme.bodyLarge?.color,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            // User profile photo
+            Column(
+              children: [
+                GestureDetector(
+                  onTap: () => _pickProfilePhoto(isUser: true),
+                  child: Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 36,
+                        backgroundColor: Colors.blue.withValues(alpha: 0.3),
+                        backgroundImage: _userProfilePhoto != null ? FileImage(File(_userProfilePhoto!)) : null,
+                        child: _userProfilePhoto == null
+                            ? const Icon(Icons.person, color: Colors.white, size: 32)
+                            : null,
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.blue,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 2),
+                          ),
+                          child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text('Your Photo', style: TextStyle(color: Colors.grey[400], fontSize: 11)),
+              ],
+            ),
+            const SizedBox(width: 32),
+            // AI girlfriend profile photo
+            Column(
+              children: [
+                GestureDetector(
+                  onTap: () => _pickProfilePhoto(isUser: false),
+                  child: Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 36,
+                        backgroundColor: Colors.pink.withValues(alpha: 0.3),
+                        backgroundImage: _aiProfilePhoto != null ? FileImage(File(_aiProfilePhoto!)) : null,
+                        child: _aiProfilePhoto == null
+                            ? const Text('💕', style: TextStyle(fontSize: 32))
+                            : null,
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.pink,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 2),
+                          ),
+                          child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text('AI Photo', style: TextStyle(color: Colors.grey[400], fontSize: 11)),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickProfilePhoto({required bool isUser}) async {
+    try {
+      final XFile? pickedFile = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 85,
+      );
+      if (pickedFile != null) {
+        // Copy to app directory
+        final appDir = await getApplicationDocumentsDirectory();
+        final photosDir = Directory(p.join(appDir.path, 'profile_photos'));
+        if (!await photosDir.exists()) {
+          await photosDir.create(recursive: true);
+        }
+        
+        final fileName = isUser ? 'user_profile.jpg' : 'ai_profile.jpg';
+        final savedFile = await File(pickedFile.path).copy(p.join(photosDir.path, fileName));
+        
+        setState(() {
+          if (isUser) {
+            _userProfilePhoto = savedFile.path;
+          } else {
+            _aiProfilePhoto = savedFile.path;
+          }
+        });
+
+        // Save to SharedPreferences
+        final prefs = await SharedPreferences.getInstance();
+        if (isUser) {
+          await prefs.setString('user_profile_photo', savedFile.path);
+        } else {
+          await prefs.setString('ai_profile_photo', savedFile.path);
+        }
+      }
+    } catch (e) {
+      debugPrint('Profile photo picker error: $e');
+    }
+  }
+
+  Widget _buildUserNameField() {
+    return _buildTextField(
+      'Your Name',
+      _userName,
+      (value) => setState(() => _userName = value),
+      hint: 'Enter your name for personalized greetings',
+    );
+  }
+
+  Widget _buildAINameField() {
+    return _buildTextField(
+      'AI Name (What she calls herself)',
+      _aiName,
+      (value) => setState(() => _aiName = value),
+      hint: 'Default: Nexa',
+    );
+  }
+
+  Widget _buildTTSVoiceDropdown() {
+    final voiceNames = _availableVoices.map((v) => v['name'] as String).toList();
+    if (!voiceNames.contains(_ttsVoiceName) && voiceNames.isNotEmpty) {
+      _ttsVoiceName = voiceNames.first;
+    }
+    return _buildDropdown(
+      'TTS Voice (Female)',
+      _ttsVoiceName,
+      voiceNames.isNotEmpty ? voiceNames : ['Samantha', 'Karen', 'Victoria'],
+      (value) => setState(() => _ttsVoiceName = value!),
     );
   }
 
@@ -546,12 +832,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget _buildTextField(
     String label,
     String value,
-    Function(String) onChanged, {
+    Function(String)? onChanged, {
     bool isPassword = false,
     String? hint,
   }) {
+    final controller = TextEditingController(text: value);
     return TextField(
+      controller: controller,
       obscureText: isPassword,
+      enabled: onChanged != null,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         labelText: label,
@@ -713,12 +1002,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void _saveSettings() async {
     setState(() => _isSaving = true);
 
+    try {
     final prefs = await SharedPreferences.getInstance();
 
     await prefs.setString('ai_provider', _selectedAIProvider);
     await prefs.setString('ai_model', _selectedModel);
     await prefs.setString('ai_api_key', _apiKey);
     await prefs.setBool('use_local_ai', _useLocalAI);
+    await prefs.setString('user_name', _userName);
+    await prefs.setString('ai_name', _aiName);
+    await prefs.setString('tts_voice_name', _ttsVoiceName);
+    String voiceLocale = 'en-US';
+    if (_availableVoices.isNotEmpty) {
+      final match = _availableVoices.where((v) => v['name'] == _ttsVoiceName);
+      if (match.isNotEmpty) {
+        voiceLocale = match.first['locale'] ?? 'en-US';
+      }
+    }
+    await prefs.setString('tts_voice_locale', voiceLocale);
     await prefs.setBool('voice_enabled', _voiceEnabled);
     await prefs.setString('voice_language', _selectedLanguage);
     await prefs.setDouble('speech_rate', _speechRate);
@@ -805,6 +1106,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           backgroundColor: appState.isConnected ? const Color(0xFF4CAF50) : const Color(0xFFFF9800),
         ),
       );
+    }
+    } catch (e) {
+      setState(() => _isSaving = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Save failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 

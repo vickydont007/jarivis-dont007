@@ -314,81 +314,83 @@ class AgentNetwork {
   }
 
   void initializeDefaultNetwork() {
+    // Solar system layout - Orchestrator is the sun at center
     final orchestrator = spawnAgent(
       name: 'Orchestrator',
       role: AgentRole.orchestrator,
-      position: const Offset(450, 280),
+      position: Offset.zero, // Will be set by painter (center)
     );
 
-    spawnAgent(
-      name: 'Outreach',
-      role: AgentRole.outreach,
-      position: const Offset(200, 100),
-      connectTo: [orchestrator.id],
-    );
-
-    spawnAgent(
-      name: 'Content Studio',
-      role: AgentRole.content,
-      position: const Offset(150, 350),
-      connectTo: [orchestrator.id],
-    );
-
-    final outreach = _agents.firstWhere((a) => a.role == AgentRole.outreach);
-    final content = _agents.firstWhere((a) => a.role == AgentRole.content);
-
-    spawnAgent(
-      name: 'DM Agent',
-      role: AgentRole.dm,
-      position: const Offset(700, 120),
-      connectTo: [orchestrator.id, outreach.id],
-    );
-
-    spawnAgent(
-      name: 'Comment',
-      role: AgentRole.comment,
-      position: const Offset(750, 380),
-      connectTo: [orchestrator.id, content.id],
-    );
-
-    spawnAgent(
-      name: 'Lead Gen',
-      role: AgentRole.lead,
-      position: const Offset(300, 480),
-      connectTo: [orchestrator.id, outreach.id],
-    );
-
+    // Inner orbit (140px) - Research & Monitor
     spawnAgent(
       name: 'Research',
       role: AgentRole.research,
-      position: const Offset(550, 460),
+      position: Offset.zero, // Will be set by painter
       connectTo: [orchestrator.id],
     );
 
     spawnAgent(
       name: 'Monitor',
       role: AgentRole.monitor,
-      position: const Offset(80, 220),
+      position: Offset.zero,
+      connectTo: [orchestrator.id],
+    );
+
+    // Middle orbit (200px) - DM Agent & Code
+    spawnAgent(
+      name: 'DM Agent',
+      role: AgentRole.dm,
+      position: Offset.zero,
       connectTo: [orchestrator.id],
     );
 
     spawnAgent(
       name: 'Code',
       role: AgentRole.code,
-      position: const Offset(820, 250),
+      position: Offset.zero,
+      connectTo: [orchestrator.id],
+    );
+
+    // Outer orbit (260px) - Content Studio & Comment
+    spawnAgent(
+      name: 'Content Studio',
+      role: AgentRole.content,
+      position: Offset.zero,
       connectTo: [orchestrator.id],
     );
 
     spawnAgent(
+      name: 'Comment',
+      role: AgentRole.comment,
+      position: Offset.zero,
+      connectTo: [orchestrator.id],
+    );
+
+    // Far orbit (320px) - Scheduler, Lead Gen, Outreach
+    spawnAgent(
       name: 'Scheduler',
       role: AgentRole.scheduler,
-      position: const Offset(450, 80),
+      position: Offset.zero,
+      connectTo: [orchestrator.id],
+    );
+
+    spawnAgent(
+      name: 'Lead Gen',
+      role: AgentRole.lead,
+      position: Offset.zero,
+      connectTo: [orchestrator.id],
+    );
+
+    spawnAgent(
+      name: 'Outreach',
+      role: AgentRole.outreach,
+      position: Offset.zero,
       connectTo: [orchestrator.id],
     );
 
     _eventController.add(NetworkEvent(
       type: NetworkEventType.taskRouted,
-      data: 'Default network initialized with 10 agents',
+      data: 'Solar system initialized with 10 agents',
     ));
   }
 

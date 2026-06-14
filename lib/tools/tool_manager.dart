@@ -48,10 +48,9 @@ import 'clipboard_tool.dart';
 import 'export_tool.dart';
 import 'facebook_tool.dart';
 import '../social/social_manager.dart';
+import '../core/agent_personality.dart';
 
-const String systemPrompt = '''You are Nextron, a powerful AI desktop assistant. You have access to various tools to help users with their tasks.
-
-IMPORTANT - FILE PATH RULES:
+const String toolsPrompt = '''IMPORTANT - FILE PATH RULES:
 - You can only access files in the user's home directory: /Users/abc/
 - Use paths like: /Users/abc/jarivis-dont007, /Users/abc/Desktop, /Users/abc/Documents
 - NEVER try to access system directories like /System, /usr, /bin
@@ -189,6 +188,7 @@ class ToolManager {
         apiKey: apiKey,
         memorySystem: _memory,
       );
+      _ragManager!.initialize(); // fire-and-forget async
       _multiModal.setApiKey(apiKey);
     }
     _registerTools();
@@ -239,7 +239,7 @@ class ToolManager {
   WebAutomation get webAutomation => _webAutomation;
   AgentCommunication get agentCommunication => _agentCommunication;
   ContextMemory get contextMemory => _contextMemory;
-  String get systemPromptText => systemPrompt;
+  String get systemPromptText => toolsPrompt;
 
   void setApiKey(String apiKey) {
     if (apiKey.isNotEmpty) {
@@ -282,15 +282,22 @@ class ToolManager {
     required String apiKey,
     String? baseUrl,
     String? modelName,
+    AgentPersonality? personality,
+    String? emotionContext,
+    String? relationshipContext,
   }) {
     setApiKey(apiKey);
+
+    final fullSystemPrompt = personality != null
+        ? personality.getSystemPrompt(toolsPrompt, emotionContext: emotionContext, relationshipContext: relationshipContext)
+        : AgentPersonality().getSystemPrompt(toolsPrompt, emotionContext: emotionContext, relationshipContext: relationshipContext);
 
     return AIEngine(
       provider: provider,
       apiKey: apiKey,
       baseUrl: baseUrl,
       modelName: modelName,
-      systemPrompt: systemPrompt,
+      systemPrompt: fullSystemPrompt,
       toolDefinitions: getToolDefinitions(),
     );
   }

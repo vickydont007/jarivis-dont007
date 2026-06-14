@@ -1,251 +1,165 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'screens/chat_screen.dart';
-import 'screens/dashboard_screen.dart';
+import 'theme/app_theme.dart';
+import 'theme/app_colors.dart';
+import 'widgets/sidebar/floating_sidebar.dart';
+import 'widgets/command/command_palette.dart';
+import 'screens/assistant_screen.dart';
+import 'screens/memory_screen.dart';
+import 'screens/agents_screen.dart';
+import 'screens/automation_screen.dart';
 import 'screens/settings_screen.dart';
-import 'screens/memory_viewer_screen.dart';
-import 'screens/skills_store_screen.dart';
-import 'screens/sessions_screen.dart';
-import 'screens/agent_network_screen.dart';
+import 'screens/developer_screen.dart';
 
 final themeProvider = StateProvider<bool>((ref) => true);
 
-class NextronApp extends ConsumerWidget {
-  const NextronApp({super.key});
+class JarvisApp extends ConsumerWidget {
+  const JarvisApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDarkMode = ref.watch(themeProvider);
-
     return MaterialApp(
-      title: 'Nextron AI',
+      title: 'JARVIS OS',
       debugShowCheckedModeBanner: false,
-      theme: isDarkMode ? _darkTheme : _lightTheme,
-      home: const MainScreen(),
+      theme: AppTheme.dark,
+      home: const JarvisShell(),
     );
   }
-
-  ThemeData get _darkTheme => ThemeData(
-    brightness: Brightness.dark,
-    primarySwatch: Colors.cyan,
-    scaffoldBackgroundColor: const Color(0xFF0D1117),
-    colorScheme: const ColorScheme.dark(
-      primary: Color(0xFF00BCD4),
-      secondary: Color(0xFF0097A7),
-      surface: Color(0xFF161B22),
-      background: Color(0xFF0D1117),
-    ),
-    textTheme: GoogleFonts.interTextTheme(
-      ThemeData(brightness: Brightness.dark).textTheme.apply(
-        bodyColor: Colors.white,
-        displayColor: Colors.white,
-      ),
-    ),
-    appBarTheme: const AppBarTheme(
-      backgroundColor: Color(0xFF161B22),
-      elevation: 0,
-    ),
-    cardTheme: CardThemeData(
-      color: const Color(0xFF161B22),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFF30363D)),
-      ),
-    ),
-    dividerColor: const Color(0xFF30363D),
-  );
-
-  ThemeData get _lightTheme => ThemeData(
-    brightness: Brightness.light,
-    primarySwatch: Colors.cyan,
-    scaffoldBackgroundColor: const Color(0xFFF6F8FA),
-    colorScheme: const ColorScheme.light(
-      primary: Color(0xFF0097A7),
-      secondary: Color(0xFF00BCD4),
-      surface: Colors.white,
-      background: Color(0xFFF6F8FA),
-    ),
-    textTheme: GoogleFonts.interTextTheme(
-      ThemeData(brightness: Brightness.light).textTheme,
-    ),
-    appBarTheme: const AppBarTheme(
-      backgroundColor: Colors.white,
-      elevation: 0,
-    ),
-    cardTheme: CardThemeData(
-      color: Colors.white,
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFE1E4E8)),
-      ),
-    ),
-    dividerColor: const Color(0xFFE1E4E8),
-  );
 }
 
-class MainScreen extends ConsumerStatefulWidget {
-  const MainScreen({super.key});
+class JarvisShell extends ConsumerStatefulWidget {
+  const JarvisShell({super.key});
 
   @override
-  ConsumerState<MainScreen> createState() => _MainScreenState();
+  ConsumerState<JarvisShell> createState() => _JarvisShellState();
 }
 
-class _MainScreenState extends ConsumerState<MainScreen> {
+class _JarvisShellState extends ConsumerState<JarvisShell> {
   int _selectedIndex = 0;
+  bool _isCommandPaletteOpen = false;
+  bool _isSidebarExpanded = false;
 
   final List<Widget> _screens = [
-    const ChatScreen(),
-    const DashboardScreen(),
-    const AgentNetworkScreen(),
-    const MemoryViewerScreen(),
-    const SkillsStoreScreen(),
-    const SessionsScreen(),
+    const AssistantScreen(),
+    const MemoryScreen(),
+    const AgentsScreen(),
+    const AutomationScreen(),
     const SettingsScreen(),
   ];
 
+  final List<Widget> _developerScreens = [
+    const DeveloperScreen(),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _setupKeyboardShortcuts();
+  }
+
+  void _setupKeyboardShortcuts() {
+    HardwareKeyboard.instance.addHandler((event) {
+      if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
+
+      final isCmd = HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaLeft) ||
+          HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaRight);
+
+      if (isCmd) {
+        switch (event.logicalKey) {
+          case LogicalKeyboardKey.keyK:
+            setState(() => _isCommandPaletteOpen = !_isCommandPaletteOpen);
+            return true;
+          case LogicalKeyboardKey.digit1:
+            _navigateTo(0);
+            return true;
+          case LogicalKeyboardKey.digit2:
+            _navigateTo(1);
+            return true;
+          case LogicalKeyboardKey.digit3:
+            _navigateTo(2);
+            return true;
+          case LogicalKeyboardKey.digit4:
+            _navigateTo(3);
+            return true;
+          case LogicalKeyboardKey.digit5:
+            _navigateTo(4);
+            return true;
+        }
+      }
+      return false;
+    });
+  }
+
+  void _navigateTo(int index) {
+    setState(() {
+      _selectedIndex = index;
+      _isCommandPaletteOpen = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = ref.watch(themeProvider);
+    final isDeveloperMode = _selectedIndex == 5;
 
     return Scaffold(
-      body: Row(
+      backgroundColor: AppColors.background,
+      body: Stack(
         children: [
-          _buildNavigationRail(isDarkMode),
-          Expanded(child: _screens[_selectedIndex]),
+          // Main content
+          Row(
+            children: [
+              // Floating sidebar
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: FloatingSidebar(
+                  selectedIndex: _selectedIndex,
+                  onIndexChanged: _navigateTo,
+                  isExpanded: _isSidebarExpanded,
+                ),
+              ),
+              // Screen content
+              Expanded(
+                child: isDeveloperMode
+                    ? _developerScreens.first
+                    : _screens[_selectedIndex],
+              ),
+            ],
+          ),
+
+          // Command palette overlay
+          CommandPalette(
+            isOpen: _isCommandPaletteOpen,
+            onClose: () => setState(() => _isCommandPaletteOpen = false),
+            onCommand: _handleCommand,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildNavigationRail(bool isDarkMode) {
-    return Container(
-      width: 88,
-      color: isDarkMode ? const Color(0xFF0D1117) : Colors.white,
-      child: Column(
-        children: [
-          const SizedBox(height: 20),
-          _buildLogo(),
-          const SizedBox(height: 24),
-          Expanded(
-            child: NavigationRail(
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: (index) {
-                setState(() => _selectedIndex = index);
-              },
-              backgroundColor: isDarkMode ? const Color(0xFF0D1117) : Colors.white,
-              indicatorColor: const Color(0xFF00BCD4).withValues(alpha: 0.15),
-              selectedIconTheme: const IconThemeData(color: Color(0xFF00BCD4), size: 22),
-              unselectedIconTheme: IconThemeData(
-                color: isDarkMode ? Colors.grey[600] : Colors.grey[500],
-                size: 22,
-              ),
-              selectedLabelTextStyle: const TextStyle(
-                color: Color(0xFF00BCD4),
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-              unselectedLabelTextStyle: TextStyle(
-                color: isDarkMode ? Colors.grey[600] : Colors.grey[500],
-                fontSize: 11,
-              ),
-              labelType: NavigationRailLabelType.all,
-              leading: const SizedBox.shrink(),
-              destinations: const [
-                NavigationRailDestination(
-                  icon: Icon(Icons.chat_outlined),
-                  selectedIcon: Icon(Icons.chat),
-                  label: Text('Chat'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.dashboard_outlined),
-                  selectedIcon: Icon(Icons.dashboard),
-                  label: Text('Dashboard'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.hub_outlined),
-                  selectedIcon: Icon(Icons.hub),
-                  label: Text('Network'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.memory_outlined),
-                  selectedIcon: Icon(Icons.memory),
-                  label: Text('Memory'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.store_outlined),
-                  selectedIcon: Icon(Icons.store),
-                  label: Text('Skills'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.list_outlined),
-                  selectedIcon: Icon(Icons.list),
-                  label: Text('Sessions'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.settings_outlined),
-                  selectedIcon: Icon(Icons.settings),
-                  label: Text('Settings'),
-                ),
-              ],
-            ),
-          ),
-          _buildThemeToggle(isDarkMode),
-          const SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLogo() {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF00BCD4), Color(0xFF0097A7)],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF00BCD4).withValues(alpha: 0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: const Icon(Icons.android, color: Colors.white, size: 28),
-    );
-  }
-
-  Widget _buildThemeToggle(bool isDarkMode) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF161B22) : const Color(0xFFF0F0F0),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isDarkMode ? const Color(0xFF30363D) : const Color(0xFFE1E4E8),
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            ref.read(themeProvider.notifier).state = !isDarkMode;
-          },
-          borderRadius: BorderRadius.circular(10),
-          child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Icon(
-              isDarkMode ? Icons.light_mode : Icons.dark_mode,
-              color: isDarkMode ? const Color(0xFFFFC107) : const Color(0xFF607D8B),
-              size: 20,
-            ),
-          ),
-        ),
-      ),
-    );
+  void _handleCommand(String command) {
+    // Handle command palette selections
+    switch (command) {
+      case 'Assistant':
+        _navigateTo(0);
+        break;
+      case 'Memory':
+        _navigateTo(1);
+        break;
+      case 'Agents':
+        _navigateTo(2);
+        break;
+      case 'Automations':
+        _navigateTo(3);
+        break;
+      case 'Settings':
+        _navigateTo(4);
+        break;
+    }
   }
 }
+
+// Keep old name for backward compatibility
+typedef NextronApp = JarvisApp;
+typedef MainScreen = JarvisShell;

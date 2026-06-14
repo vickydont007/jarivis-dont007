@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:uuid/uuid.dart';
+import 'package:sqflite/sqflite.dart';
 import 'vector_embedding_service.dart';
 
 class StoredDocument {
@@ -54,14 +56,110 @@ class VectorStore {
   final Map<String, List<VectorEmbedding>> _embeddings = {};
   final StreamController<StoredDocument> _documentController =
       StreamController<StoredDocument>.broadcast();
+  
+  static Database? _db;
 
   VectorStore(this._embeddingService);
+
+  static Future<Database> get database async {
+    if (_db != null) return _db!;
+    _db = await _initDatabase();
+    return _db!;
+  }
+
+  static Future<Database> _initDatabase() async {
+    final dbPath = await getDatabasesPath();
+    final path = '$dbPath/nextron_vectors.db';
+    return await openDatabase(
+      path,
+      version: 1,
+      onCreate: (db, version) async {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS vectors (
+            id TEXT PRIMARY KEY,
+            content TEXT NOT NULL,
+            category TEXT NOT NULL,
+            metadata TEXT,
+            embedding_values TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          )
+        ''');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_category ON vectors(category)');
+      },
+    );
+  }
+
+  static Future<void> init() async {
+    await database;
+  }
 
   void setEmbeddingService(VectorEmbeddingService service) {
     _embeddingService = service;
   }
 
   Stream<StoredDocument> get documentStream => _documentController.stream;
+
+  Future<void> _saveToSQLite(StoredDocument doc, List<double>? embedding) async {
+    try {
+      final db = await database;
+      await db.insert(
+        'vectors',
+        {
+          'id': doc.id,
+          'content': doc.content,
+          'category': doc.category,
+          'metadata': jsonEncode(doc.metadata),
+          'embedding_values': embedding != null ? jsonEncode(embedding) : null,
+          'created_at': doc.createdAt.toIso8601String(),
+          'updated_at': doc.updatedAt.toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      print('Warning: Failed to save vector to SQLite: $e');
+    }
+  }
+
+  static Future<void> loadFromSQLite(VectorStore store) async {
+    try {
+      final db = await database;
+      final rows = await db.query('vectors');
+      
+      for (final row in rows) {
+        final doc = StoredDocument(
+          id: row['id'] as String,
+          content: row['content'] as String,
+          category: row['category'] as String,
+          metadata: row['metadata'] != null 
+              ? jsonDecode(row['metadata'] as String) 
+              : {},
+          createdAt: DateTime.parse(row['created_at'] as String),
+          updatedAt: DateTime.parse(row['updated_at'] as String),
+        );
+        store._documents[doc.id] = doc;
+
+        if (row['embedding_values'] != null) {
+          final values = (jsonDecode(row['embedding_values'] as String) as List)
+              .map((v) => (v as num).toDouble())
+              .toList();
+          final vectorEmbedding = VectorEmbedding(
+            id: doc.id,
+            values: values,
+            text: doc.content,
+            category: doc.category,
+            metadata: doc.metadata,
+            createdAt: doc.createdAt,
+          );
+          store._embeddings.putIfAbsent(doc.category, () => []).add(vectorEmbedding);
+          store._embeddingService.store(doc.category, vectorEmbedding);
+        }
+      }
+      print('Loaded ${rows.length} vectors from SQLite');
+    } catch (e) {
+      print('Warning: Failed to load vectors from SQLite: $e');
+    }
+  }
 
   Future<String> addDocument({
     required String content,
@@ -82,8 +180,10 @@ class VectorStore {
 
     _documents[id] = document;
 
+    List<double>? embeddingValues;
     try {
       final embedding = await _embeddingService.getEmbedding(content);
+      embeddingValues = embedding;
       final vectorEmbedding = VectorEmbedding(
         id: id,
         values: embedding,
@@ -99,6 +199,7 @@ class VectorStore {
       print('Warning: Failed to create embedding for document $id: $e');
     }
 
+    await _saveToSQLite(document, embeddingValues);
     _documentController.add(document);
     return id;
   }
@@ -207,11 +308,19 @@ class VectorStore {
     return _documents[id];
   }
 
-  bool deleteDocument(String id) {
+  Future<bool> deleteDocument(String id) async {
     final doc = _documents.remove(id);
     if (doc == null) return false;
 
     _embeddings[doc.category]?.removeWhere((e) => e.id == id);
+    
+    try {
+      final db = await database;
+      await db.delete('vectors', where: 'id = ?', whereArgs: [id]);
+    } catch (e) {
+      print('Warning: Failed to delete vector from SQLite: $e');
+    }
+    
     return true;
   }
 
@@ -251,15 +360,27 @@ class VectorStore {
     };
   }
 
-  void clear({String? category}) {
+  Future<void> clear({String? category}) async {
     if (category != null) {
       _documents.removeWhere((_, doc) => doc.category == category);
       _embeddings.remove(category);
       _embeddingService.clear(category: category);
+      try {
+        final db = await database;
+        await db.delete('vectors', where: 'category = ?', whereArgs: [category]);
+      } catch (e) {
+        print('Warning: Failed to clear vectors from SQLite: $e');
+      }
     } else {
       _documents.clear();
       _embeddings.clear();
       _embeddingService.clear();
+      try {
+        final db = await database;
+        await db.delete('vectors');
+      } catch (e) {
+        print('Warning: Failed to clear all vectors from SQLite: $e');
+      }
     }
   }
 

@@ -1,12 +1,17 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/chat_bubble.dart';
 import '../widgets/voice_button.dart';
 import '../providers/app_provider.dart';
 import '../providers/chat_provider.dart';
 import '../core/ai_engine.dart';
+import '../core/agent_personality.dart';
+import '../core/girlfriend_memory.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -19,13 +24,75 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final List<PlatformFile> _attachedFiles = [];
+  final List<String> _attachedImagePaths = [];
+  final ImagePicker _imagePicker = ImagePicker();
   bool _isSending = false;
   bool _isVoiceMode = false;
-  StreamSubscription? _ttsCompletionSub;
+  bool _hasGreeted = false;
+  String? _userProfilePhoto;
+  String? _aiProfilePhoto;
+  StreamSubscription? _voiceFinalSub;
+  StreamSubscription? _voicePartialSub;
+  StreamSubscription? _voiceTtsSub;
+  StreamSubscription? _voiceListeningSub;
 
   @override
   void initState() {
     super.initState();
+    _loadProfilePhotos();
+    // Use addPostFrameCallback to ensure provider is ready
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _sendGreeting();
+    });
+  }
+
+  Future<void> _loadProfilePhotos() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _userProfilePhoto = prefs.getString('user_profile_photo');
+      _aiProfilePhoto = prefs.getString('ai_profile_photo');
+    });
+  }
+
+  Future<void> _sendGreeting() async {
+    if (_hasGreeted) return;
+    
+    // Check if messages already exist (e.g., from provider restore)
+    final existingMessages = ref.read(chatProvider).messages;
+    if (existingMessages.isNotEmpty) {
+      _hasGreeted = true;
+      return;
+    }
+    
+    _hasGreeted = true;
+
+    final prefs = await SharedPreferences.getInstance();
+    final userName = prefs.getString('user_name') ?? '';
+    final personality = await AgentPersonality.load();
+
+    final greetingText = personality.getGreeting(userName);
+    final fullGreeting = '$greetingText\n\n'
+        'I can help you with:\n'
+        '- System control (shutdown, restart, sleep)\n'
+        '- File management (read, write, search)\n'
+        '- Web browsing and search\n'
+        '- Code execution (Python/JS)\n'
+        '- Image analysis\n'
+        '- And much more!\n\n'
+        'Bolo meri jaan, kya karun tumhare liye? 💕';
+
+    ref.read(chatProvider.notifier).addAssistantMessage(fullGreeting);
+
+    final appState = ref.read(appStateProvider);
+    final voiceService = appState.voiceService;
+    if (voiceService != null && voiceService.isSTTAvailable) {
+      final speakText = personality.getVoiceGreeting(userName);
+      await voiceService.speak(speakText);
+    }
+
+    if (mounted) {
+      _scrollToBottom();
+    }
   }
 
   void _toggleVoiceMode() {
@@ -42,26 +109,64 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final voiceService = appState.voiceService;
     if (voiceService == null) return;
 
-    _ttsCompletionSub?.cancel();
-    _ttsCompletionSub = voiceService.ttsCompletionStream.listen((_) {
+    _cleanupVoiceSubs();
+    voiceService.resetSession();
+
+    _voiceTtsSub = voiceService.ttsCompletionStream.listen((_) {
       if (_isVoiceMode && mounted) {
         Future.delayed(const Duration(milliseconds: 500), () {
           if (_isVoiceMode && mounted) {
-            voiceService.startListening();
+            _listenForVoice();
           }
         });
       }
     });
 
+    _voicePartialSub = voiceService.transcriptionStream.listen((text) {
+      if (text.isNotEmpty && mounted) {
+        _messageController.text = text;
+      }
+    });
+
+    _voiceFinalSub = voiceService.finalTranscriptionStream.listen((text) {
+      if (text.isNotEmpty && mounted) {
+        _messageController.text = text;
+        _sendMessage();
+      }
+    });
+
+    _listenForVoice();
+  }
+
+  void _listenForVoice() async {
+    final appState = ref.read(appStateProvider);
+    final voiceService = appState.voiceService;
+    if (voiceService == null || !_isVoiceMode || !mounted) return;
+
+    voiceService.resetSession();
+    _messageController.clear();
     await voiceService.startListening();
   }
 
   void _stopVoiceConversation() {
+    _cleanupVoiceSubs();
     final appState = ref.read(appStateProvider);
     final voiceService = appState.voiceService;
     voiceService?.stopListening();
     voiceService?.stopSpeaking();
-    _ttsCompletionSub?.cancel();
+    voiceService?.resetSession();
+    _messageController.clear();
+  }
+
+  void _cleanupVoiceSubs() {
+    _voiceFinalSub?.cancel();
+    _voicePartialSub?.cancel();
+    _voiceTtsSub?.cancel();
+    _voiceListeningSub?.cancel();
+    _voiceFinalSub = null;
+    _voicePartialSub = null;
+    _voiceTtsSub = null;
+    _voiceListeningSub = null;
   }
 
   void _speakResponse(String text) async {
@@ -130,6 +235,38 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 leading: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
+                    color: const Color(0xFFE91E63).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.photo, color: Color(0xFFE91E63), size: 22),
+                ),
+                title: const Text('📸 Photo', style: TextStyle(color: Colors.white)),
+                subtitle: Text('Gallery se photo pick karo', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.gallery);
+                },
+              ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF9C27B0).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.camera_alt, color: Color(0xFF9C27B0), size: 22),
+                ),
+                title: const Text('📷 Camera', style: TextStyle(color: Colors.white)),
+                subtitle: Text('Camera se photo lo', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
                     color: const Color(0xFF00BCD4).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -165,6 +302,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? pickedFile = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+      if (pickedFile != null) {
+        setState(() {
+          _attachedImagePaths.add(pickedFile.path);
+        });
+      }
+    } catch (e) {
+      debugPrint('Image picker error: $e');
+    }
+  }
+
+  void _removeImage(int index) {
+    setState(() {
+      _attachedImagePaths.removeAt(index);
+    });
+  }
+
   void _removeFile(int index) {
     setState(() {
       _attachedFiles.removeAt(index);
@@ -192,13 +353,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
     }
 
-    if (message.isEmpty) return;
+    if (message.isEmpty && _attachedImagePaths.isEmpty) return;
+
+    // Build message text with image context
+    if (_attachedImagePaths.isNotEmpty && message.isEmpty) {
+      message = '📸 Photo attached (${_attachedImagePaths.length} image${_attachedImagePaths.length > 1 ? "s" : ""})';
+    }
 
     _isSending = true;
-    ref.read(chatProvider.notifier).addUserMessage(message);
+    final pathsToSend = List<String>.from(_attachedImagePaths);
+    ref.read(chatProvider.notifier).addUserMessage(message, imagePaths: pathsToSend.isNotEmpty ? pathsToSend : null);
     _messageController.clear();
     setState(() {
       _attachedFiles.clear();
+      _attachedImagePaths.clear();
     });
 
     _scrollToBottom();
@@ -228,31 +396,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           } else {
             response = result['error'] ?? 'Failed to generate image.';
           }
+        } else if (pathsToSend.isNotEmpty) {
+          // User sent images - analyze them
+          response = await _analyzeImages(pathsToSend, message, appState);
         } else {
-          final history = ref.read(chatProvider).messages
-              .where((m) => m.role != 'system')
-              .map((m) => {'role': m.role, 'content': m.content})
-              .toList();
-
-          final toolManager = appState.toolManager;
-          if (toolManager != null) {
-            final result = await appState.aiEngine!.sendMessageWithTools(
-              message,
-              history: history,
-              onToolCall: (name, args) async {
-                ref.read(chatProvider.notifier).addAssistantMessage('🔧 Using $name...');
-                _scrollToBottom();
-                return await toolManager.executeTool(name, args);
-              },
-              cancelToken: cancelToken,
-            );
-            response = result['content'] ?? 'No response';
-            if (result['error'] != null) {
-              response = 'Error: ${result['error']}';
-            }
-          } else {
-            response = await appState.aiEngine!.sendMessage(message, history: history);
-          }
+          response = await ref.read(appStateProvider.notifier).sendMessage(
+            message,
+            history: ref.read(chatProvider).messages
+                .where((m) => m.role != 'system')
+                .map((m) => {'role': m.role, 'content': m.content})
+                .toList(),
+            cancelToken: cancelToken,
+          );
         }
       } catch (e) {
         response = 'Error: $e';
@@ -270,6 +425,61 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _scrollToBottom();
     _isSending = false;
     _speakResponse(response);
+  }
+
+  Future<String> _analyzeImages(List<String> imagePaths, String userMessage, AppState appState) async {
+    final personality = await AgentPersonality.load();
+    final buffer = StringBuffer();
+    
+    for (int i = 0; i < imagePaths.length; i++) {
+      final path = imagePaths[i];
+      final file = File(path);
+      if (!await file.exists()) continue;
+
+      try {
+        final multiModal = appState.toolManager?.multiModal;
+        if (multiModal != null) {
+          final analysis = await multiModal.analyzeImage(path);
+          buffer.writeln('Image ${i + 1}: ${analysis.description}');
+          if (analysis.objects.isNotEmpty) {
+            buffer.writeln('Objects: ${analysis.objects.join(", ")}');
+          }
+          if (analysis.text.isNotEmpty) {
+            buffer.writeln('Text in image: ${analysis.text}');
+          }
+        } else {
+          buffer.writeln('Image ${i + 1}: Photo received (${(await file.length()) ~/ 1024}KB)');
+        }
+      } catch (e) {
+        buffer.writeln('Image ${i + 1}: Photo received');
+      }
+
+      // Save to girlfriend memory
+      await GirlfriendMemory.rememberPhoto(path, userMessage.isNotEmpty ? userMessage : 'User shared a photo');
+    }
+
+    final imageContext = buffer.toString();
+    
+    // Build contextual response based on personality
+    String prompt;
+    if (personality.greetingStyle == 'girlfriend') {
+      prompt = 'Maine tumhe ${imagePaths.length} photo bheji hai.\n\nImage Analysis:\n$imageContext\n\n'
+          'Ab tum girlfriend ki tarah react karo - photo dekh ke bolo kaisi lag rahi hai, cute hai ya nahi, etc. '
+          'Hinglish mein baat karo aur emojis use karo 💕😊';
+    } else {
+      prompt = 'I sent ${imagePaths.length} image(s). Here is the analysis:\n$imageContext\n\n'
+          'Please describe what you see and respond appropriately.';
+    }
+
+    final response = await ref.read(appStateProvider.notifier).sendMessage(
+      prompt,
+      history: ref.read(chatProvider).messages
+          .where((m) => m.role != 'system')
+          .map((m) => {'role': m.role, 'content': m.content})
+          .toList(),
+    );
+
+    return response;
   }
 
   Future<String?> _handleLocalCommands(String message) async {
@@ -368,13 +578,68 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       isUser: chatState.messages[index].role == 'user',
                       timestamp: chatState.messages[index].timestamp,
                       imageUrls: chatState.messages[index].imageUrls,
+                      imagePaths: chatState.messages[index].imagePaths,
+                      aiAvatarImage: _aiProfilePhoto,
+                      userAvatarImage: _userProfilePhoto,
                     );
                   },
                 ),
         ),
+        if (_attachedImagePaths.isNotEmpty) _buildImageChips(),
         if (_attachedFiles.isNotEmpty) _buildFileChips(),
         _buildInputArea(chatState),
       ],
+    );
+  }
+
+  Widget _buildImageChips() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          top: BorderSide(color: Theme.of(context).dividerColor),
+        ),
+      ),
+      child: SizedBox(
+        height: 80,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: _attachedImagePaths.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (context, index) {
+            final path = _attachedImagePaths[index];
+            return Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.file(
+                    File(path),
+                    width: 72,
+                    height: 72,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                Positioned(
+                  top: 2,
+                  right: 2,
+                  child: GestureDetector(
+                    onTap: () => _removeImage(index),
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.7),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.close, size: 14, color: Colors.white),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -430,12 +695,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       child: Row(
         children: [
           VoiceButton(
+            isEnabled: !_isVoiceMode,
             onTranscription: (text) {
               _messageController.text = text;
               _sendMessage();
             },
             onPartialTranscription: (text) {
               _messageController.text = text;
+            },
+            onListeningStart: () {
+              _messageController.clear();
             },
           ),
           const SizedBox(width: 8),
@@ -617,7 +886,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
-    _ttsCompletionSub?.cancel();
+    _cleanupVoiceSubs();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
