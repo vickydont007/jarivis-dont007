@@ -197,51 +197,60 @@ class _ResearchScreenState extends ConsumerState<ResearchScreen> {
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl),
-      itemCount: _watchlists.length,
-      itemBuilder: (context, index) {
-        final item = _watchlists[index];
-        return Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.md),
-          child: GlassCard(
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.lg, vertical: AppSpacing.sm,
-              ),
-              leading: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.accentGhost,
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl),
+            itemCount: _watchlists.length,
+            itemBuilder: (context, index) {
+              final item = _watchlists[index];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                child: GlassCard(
+                  child: ExpansionTile(
+                    tilePadding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.lg, vertical: AppSpacing.sm,
+                    ),
+                    leading: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppColors.accentGhost,
+                        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                      ),
+                      child: const Center(
+                        child: Text('📌', style: TextStyle(fontSize: 20)),
+                      ),
+                    ),
+                    title: Text(
+                      item.topic,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    subtitle: Text(
+                      '${item.findingCount} findings • Added ${_formatDate(item.addedAt)}',
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.textTertiary),
+                      onPressed: () {
+                        setState(() => _watchlists.removeAt(index));
+                        _saveWatchlists();
+                      },
+                    ),
+                    children: [
+                      _buildFindingsList(item),
+                    ],
+                  ),
                 ),
-                child: const Center(
-                  child: Text('📌', style: TextStyle(fontSize: 20)),
-                ),
-              ),
-              title: Text(
-                item.topic,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              subtitle: Text(
-                '${item.findingCount} findings • Added ${_formatDate(item.addedAt)}',
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-              ),
-              trailing: IconButton(
-                icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.textTertiary),
-                onPressed: () {
-                  setState(() => _watchlists.removeAt(index));
-                  _saveWatchlists();
-                },
-              ),
-            ),
+              );
+            },
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 
@@ -330,6 +339,59 @@ class _ResearchScreenState extends ConsumerState<ResearchScreen> {
       case 'event': return '📅';
       default: return '📝';
     }
+  }
+
+  Widget _buildFindingsList(_WatchlistItem item) {
+    return FutureBuilder<List<MemorySearchResult>>(
+      future: ref.read(memorySearchProvider).search(item.topic, limit: 5),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(child: CircularProgressIndicator(color: AppColors.accent, strokeWidth: 2)),
+          );
+        }
+        final findings = snapshot.data!;
+        if (findings.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text(
+              'No findings yet. JARVIS will scan automatically.',
+              style: TextStyle(color: AppColors.textTertiary, fontSize: 12),
+            ),
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Divider(color: AppColors.glassBorder),
+              const SizedBox(height: 8),
+              ...findings.map((f) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('• ', style: TextStyle(color: AppColors.accent, fontSize: 12)),
+                    Expanded(
+                      child: Text(
+                        f.content.length > 120 ? '${f.content.substring(0, 120)}...' : f.content,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   String _formatDate(DateTime date) {

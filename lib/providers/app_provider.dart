@@ -27,6 +27,8 @@ import '../core/services/persistent_scheduler.dart';
 import '../core/services/daily_briefing_service.dart';
 import '../core/services/agent_collaboration.dart';
 import '../core/services/memory_search.dart';
+import '../core/services/proactive_engine.dart';
+import '../core/services/knowledge_hub.dart';
 import '../core/capabilities/permission_manager.dart';
 import '../core/repositories/timeline_repository.dart';
 import '../core/providers.dart';
@@ -174,6 +176,9 @@ class AppStateNotifier extends StateNotifier<AppState> {
   DailyBriefingService? _dailyBriefingService;
   AgentCollaboration? _agentCollaboration;
   MemorySearch? _memorySearch;
+  
+  // Phase 7 services
+  ProactiveEngine? _proactiveEngine;
 
   AppStateNotifier({OrbStateManager? orb}) : super(AppState()) {
     _memory = MemorySystem();
@@ -228,6 +233,15 @@ class AppStateNotifier extends StateNotifier<AppState> {
     // Phase 5: Initialize autonomous systems
     _permissionManager!.initialize();
     _persistentScheduler!.initialize();
+    
+    // Phase 7: Initialize proactive engine
+    _proactiveEngine = ProactiveEngine(
+      timeline: TimelineService(repository: InMemoryTimelineRepository()),
+      memory: MemoryService(timeline: TimelineService(repository: InMemoryTimelineRepository())),
+      memorySearch: MemorySearch(),
+      orb: OrbStateManager(),
+    );
+    _proactiveEngine!.initialize();
 
     state = state.copyWith(
       memory: _memory,

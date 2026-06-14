@@ -270,6 +270,9 @@ class _BriefingScreenState extends ConsumerState<BriefingScreen> {
             ),
           ],
 
+          // Proactive insights
+          ..._buildProactiveInsights(),
+
           const SizedBox(height: AppSpacing.xxxl),
         ],
       ),
@@ -312,5 +315,68 @@ class _BriefingScreenState extends ConsumerState<BriefingScreen> {
     if (hour < 12) return 'morning';
     if (hour < 17) return 'afternoon';
     return 'evening';
+  }
+
+  List<Widget> _buildProactiveInsights() {
+    try {
+      final engine = ref.read(proactiveEngineProvider);
+      final insights = engine.getTopInsights(limit: 3);
+      if (insights.isEmpty) return [];
+
+      return [
+        const SizedBox(height: AppSpacing.xl),
+        Text(
+          'Proactive Insights',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        ...insights.map((insight) => Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.md),
+          child: GlassCard(
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.lg, vertical: AppSpacing.sm,
+              ),
+              leading: Text(
+                _insightEmoji(insight.type.name),
+                style: const TextStyle(fontSize: 24),
+              ),
+              title: Text(
+                insight.title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textPrimary,
+                  fontSize: 14,
+                ),
+              ),
+              subtitle: Text(
+                insight.body.length > 100
+                    ? '${insight.body.substring(0, 100)}...'
+                    : insight.body,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ),
+        )),
+      ];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  String _insightEmoji(String type) {
+    switch (type) {
+      case 'watchlist': return '🔬';
+      case 'project': return '📁';
+      case 'meeting': return '📅';
+      case 'crossLink': return '🔗';
+      case 'system': return '⚙️';
+      default: return '💡';
+    }
   }
 }

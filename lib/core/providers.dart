@@ -11,6 +11,8 @@ import '../core/services/daily_briefing_service.dart';
 import '../core/services/agent_collaboration.dart';
 import '../core/services/memory_search.dart';
 import '../core/services/memory_search.dart' show MemorySearchResult;
+import '../core/services/proactive_engine.dart';
+import '../core/services/knowledge_hub.dart';
 import '../core/repositories/timeline_repository.dart';
 import '../core/repositories/agent_repository.dart';
 import '../core/repositories/task_repository.dart';
@@ -181,4 +183,54 @@ final activeSchedulesProvider = FutureProvider.autoDispose<List>((ref) async {
 final memorySearchResultsProvider = FutureProvider.autoDispose.family<List<MemorySearchResult>, String>((ref, query) async {
   final search = ref.watch(memorySearchProvider);
   return search.search(query, limit: 10);
+});
+
+// ─── Phase 7: Proactive Engine ───────────────────────────────────
+
+final proactiveEngineProvider = Provider<ProactiveEngine>((ref) {
+  final timeline = ref.watch(timelineServiceProvider);
+  final memory = ref.watch(memoryServiceProvider);
+  final memorySearch = ref.watch(memorySearchProvider);
+  final orb = ref.watch(orbStateManagerProvider);
+  return ProactiveEngine(
+    timeline: timeline,
+    memory: memory,
+    memorySearch: memorySearch,
+    orb: orb,
+  );
+});
+
+// ─── Phase 7: Knowledge Hub ──────────────────────────────────────
+
+final knowledgeHubProvider = Provider<KnowledgeHub>((ref) {
+  final timeline = ref.watch(timelineServiceProvider);
+  final memory = ref.watch(memoryServiceProvider);
+  final memorySearch = ref.watch(memorySearchProvider);
+  return KnowledgeHub(
+    timeline: timeline,
+    memory: memory,
+    memorySearch: memorySearch,
+  );
+});
+
+// ─── Phase 7: Proactive Insights Stream ──────────────────────────
+
+final proactiveInsightsProvider = StreamProvider.autoDispose<Insight>((ref) {
+  final engine = ref.watch(proactiveEngineProvider);
+  return engine.insightStream;
+});
+
+// ─── Phase 7: Top Insights ──────────────────────────────────────
+
+final topInsightsProvider = FutureProvider.autoDispose<List<Insight>>((ref) async {
+  final engine = ref.watch(proactiveEngineProvider);
+  await Future.delayed(const Duration(milliseconds: 100));
+  return engine.getTopInsights(limit: 5);
+});
+
+// ─── Phase 7: Unified Context ───────────────────────────────────
+
+final unifiedContextProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final hub = ref.watch(knowledgeHubProvider);
+  return hub.getUnifiedContext();
 });

@@ -29,7 +29,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    // Load from timeline and memory
+    // Load from timeline and proactive engine
     try {
       final timeline = ref.read(timelineServiceProvider);
       final events = await timeline.getRecent(limit: 20);
@@ -43,10 +43,37 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
           read: false,
         ));
       }
+
+      // Add proactive insights as notifications
+      try {
+        final engine = ref.read(proactiveEngineProvider);
+        final insights = engine.getTopInsights(limit: 5);
+        for (final insight in insights) {
+          _notifications.insert(0, _NotificationItem(
+            title: '💡 ${insight.title}',
+            body: insight.body,
+            time: insight.createdAt,
+            icon: _insightEmoji(insight.type.name),
+            read: insight.isRead,
+          ));
+        }
+      } catch (e) {
+        // Proactive engine not ready yet
+      }
     } catch (e) {
       // Use empty list
     }
     setState(() => _isLoading = false);
+  }
+
+  String _insightEmoji(String type) {
+    switch (type) {
+      case 'watchlist': return '🔬';
+      case 'project': return '📁';
+      case 'meeting': return '📅';
+      case 'crossLink': return '🔗';
+      default: return '💡';
+    }
   }
 
   String _getIconForType(String type) {
