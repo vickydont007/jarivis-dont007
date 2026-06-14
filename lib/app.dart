@@ -12,6 +12,7 @@ import 'screens/automation_screen.dart';
 import 'screens/agent_playground_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/developer_screen.dart';
+import 'screens/runtime_validation_screen.dart';
 
 final themeProvider = StateProvider<bool>((ref) => true);
 
@@ -52,6 +53,7 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
 
   final List<Widget> _developerScreens = [
     const DeveloperScreen(),
+    const RuntimeValidationScreen(),
   ];
 
   @override
@@ -93,6 +95,9 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
           case LogicalKeyboardKey.digit7:
             _navigateTo(6);
             return true;
+          case LogicalKeyboardKey.digit8:
+            _navigateTo(7);
+            return true;
         }
       }
       return false;
@@ -108,7 +113,7 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
 
   @override
   Widget build(BuildContext context) {
-    final isDeveloperMode = _selectedIndex == 6;
+    final isDevScreen = _selectedIndex >= 6;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -128,8 +133,8 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
               ),
               // Screen content
               Expanded(
-                child: isDeveloperMode
-                    ? _developerScreens.first
+                child: isDevScreen
+                    ? _developerScreens[_selectedIndex - 6]
                     : _screens[_selectedIndex],
               ),
             ],

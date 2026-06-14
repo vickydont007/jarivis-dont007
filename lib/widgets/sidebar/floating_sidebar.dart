@@ -116,6 +116,8 @@ class _FloatingSidebarState extends State<FloatingSidebar>
                     const SizedBox(height: AppSpacing.lg),
                     _buildNavItem(6, Icons.code_outlined, 'Dev Mode',
                         isMuted: true),
+                    _buildNavItem(7, Icons.verified_outlined, 'Validate',
+                        isMuted: true),
                     const SizedBox(height: AppSpacing.lg),
                     _buildUserAvatar(),
                     const SizedBox(height: AppSpacing.lg),
