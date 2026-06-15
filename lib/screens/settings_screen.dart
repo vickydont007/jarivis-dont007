@@ -8,7 +8,20 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../providers/app_provider.dart';
 import '../core/ai_engine.dart';
+import '../core/core.dart';
+import '../core/providers.dart';
 import '../services/voice_service.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
+import '../widgets/glass/glass_card.dart';
+import '../widgets/glass/glass_button.dart';
+import '../widgets/glass/glass_text_field.dart';
+import '../widgets/glass/glass_toggle.dart';
+import '../widgets/glass/glass_dropdown.dart';
+import '../widgets/common/status_chip.dart';
+import '../widgets/common/error_state.dart';
+import '../widgets/common/empty_state.dart';
+import 'settings/ai_control_center.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -18,46 +31,670 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  String _selectedAIProvider = 'openrouter';
-  String _selectedModel = 'google/gemma-4-26b-a4b-it:free';
-  String _apiKey = '';
-  bool _useLocalAI = false;
+  int _selectedCategory = 0;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
+  static const _categories = [
+    _CategoryDef(icon: Icons.tune, label: 'General', shortcut: '⌘1'),
+    _CategoryDef(icon: Icons.psychology, label: 'AI Brain', shortcut: '⌘2'),
+    _CategoryDef(icon: Icons.mic, label: 'Voice & Audio', shortcut: '⌘3'),
+    _CategoryDef(icon: Icons.memory, label: 'Memory Core', shortcut: '⌘4'),
+    _CategoryDef(icon: Icons.smart_toy, label: 'Agents', shortcut: '⌘5'),
+    _CategoryDef(icon: Icons.autorenew, label: 'Automation', shortcut: '⌘6'),
+    _CategoryDef(icon: Icons.extension, label: 'Integrations', shortcut: '⌘7'),
+    _CategoryDef(icon: Icons.calendar_month, label: 'Calendar & Email', shortcut: '⌘8'),
+    _CategoryDef(icon: Icons.palette, label: 'Appearance', shortcut: '⌘9'),
+    _CategoryDef(icon: Icons.shield, label: 'Security', shortcut: '⌘0'),
+    _CategoryDef(icon: Icons.code, label: 'Advanced', shortcut: '⌘A'),
+    _CategoryDef(icon: Icons.info_outline, label: 'About', shortcut: '⌘B'),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      setState(() => _searchQuery = _searchController.text.toLowerCase());
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<_CategoryDef> get _filteredCategories {
+    if (_searchQuery.isEmpty) return _categories;
+    return _categories.where((c) =>
+      c.label.toLowerCase().contains(_searchQuery)
+    ).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: Row(
+        children: [
+          _buildSidebar(),
+          Container(width: 1, color: AppColors.glassBorder),
+          Expanded(child: _buildContent()),
+          Container(width: 1, color: AppColors.glassBorder),
+          const SizedBox(width: 340, child: AIControlCenter()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSidebar() {
+    return SizedBox(
+      width: 240,
+      child: Container(
+        color: AppColors.backgroundSecondary,
+        child: Column(
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentGhost,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.settings, color: AppColors.accent, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Settings',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Search
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: SizedBox(
+                height: 36,
+                child: TextField(
+                  controller: _searchController,
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: 'Search settings...',
+                    hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 13),
+                    prefixIcon: const Icon(Icons.search, color: AppColors.textTertiary, size: 16),
+                    prefixIconConstraints: const BoxConstraints(minWidth: 32),
+                    filled: true,
+                    fillColor: AppColors.glassFill,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Categories
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                itemCount: _filteredCategories.length,
+                itemBuilder: (context, index) {
+                  final cat = _filteredCategories[index];
+                  final catIndex = _categories.indexOf(cat);
+                  final isSelected = _selectedCategory == catIndex;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () => setState(() => _selectedCategory = catIndex),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: isSelected ? AppColors.accentGhost : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                            border: isSelected
+                                ? Border.all(color: AppColors.accent.withAlpha(50))
+                                : null,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                cat.icon,
+                                size: 18,
+                                color: isSelected ? AppColors.accent : AppColors.textTertiary,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  cat.label,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                    color: isSelected ? AppColors.textPrimary : AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                cat.shortcut,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: AppColors.textDisabled,
+                                  fontFamily: 'SF Mono',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            // Footer
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.glassFill,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.glassBorder),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.keyboard_command_key, size: 14, color: AppColors.textTertiary),
+                    const SizedBox(width: 8),
+                    Text(
+                      '⌘K for commands',
+                      style: TextStyle(fontSize: 11, color: AppColors.textDisabled),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    return Container(
+      color: AppColors.background,
+      child: IndexedStack(
+        index: _selectedCategory,
+        children: const [
+          _GeneralSection(),
+          _AIBrainSection(),
+          _VoiceSection(),
+          _MemorySection(),
+          _AgentsSection(),
+          _AutomationSection(),
+          _IntegrationsSection(),
+          _CalendarEmailSection(),
+          _AppearanceSection(),
+          _SecuritySection(),
+          _AdvancedSection(),
+          _AboutSection(),
+        ],
+      ),
+    );
+  }
+}
+
+class _CategoryDef {
+  final IconData icon;
+  final String label;
+  final String shortcut;
+  const _CategoryDef({required this.icon, required this.label, required this.shortcut});
+}
+
+// ─── Section wrapper ──────────────────────────────────────────────
+
+class _SectionScaffold extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final List<Widget> children;
+
+  const _SectionScaffold({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.accentGhost,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: AppColors.accent, size: 22),
+              ),
+              const SizedBox(width: 16),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(color: AppColors.textTertiary, fontSize: 13),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 28),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Status Card helper ───────────────────────────────────────────
+
+class _StatusCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color? valueColor;
+
+  const _StatusCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.valueColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.glassFill,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 16, color: AppColors.textSecondary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textTertiary)),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: valueColor ?? AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Toggle Row helper ────────────────────────────────────────────
+
+class _ToggleRow extends StatelessWidget {
+  final String label;
+  final String? subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _ToggleRow({
+    required this.label,
+    this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: const TextStyle(fontSize: 14, color: AppColors.textPrimary)),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(subtitle!, style: const TextStyle(fontSize: 12, color: AppColors.textTertiary)),
+                ],
+              ],
+            ),
+          ),
+          GlassToggle(
+            value: value,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Slider Row helper ────────────────────────────────────────────
+
+class _SliderRow extends StatelessWidget {
+  final String label;
+  final double value;
+  final ValueChanged<double> onChanged;
+  final double min;
+  final double max;
+  final String? suffix;
+
+  const _SliderRow({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.min = 0,
+    this.max = 1,
+    this.suffix,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 14, color: AppColors.textPrimary)),
+              Text(
+                suffix != null ? '${(value * 100).toInt()}$suffix' : '${(value * 100).toInt()}%',
+                style: const TextStyle(fontSize: 13, color: AppColors.accent, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          SliderTheme(
+            data: SliderThemeData(
+              activeTrackColor: AppColors.accent,
+              inactiveTrackColor: AppColors.glassFillActive,
+              thumbColor: AppColors.accent,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+              trackHeight: 3,
+            ),
+            child: Slider(
+              value: value.clamp(min, max),
+              min: min,
+              max: max,
+              onChanged: onChanged,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SECTION 1: GENERAL
+// ═══════════════════════════════════════════════════════════════════
+
+class _GeneralSection extends ConsumerStatefulWidget {
+  const _GeneralSection();
+  @override
+  ConsumerState<_GeneralSection> createState() => _GeneralSectionState();
+}
+
+class _GeneralSectionState extends ConsumerState<_GeneralSection> {
   String _userName = '';
   String _aiName = 'Nexa';
-  String _ttsVoiceName = 'Samantha';
-  List<Map<String, dynamic>> _availableVoices = [];
-
-  bool _voiceEnabled = true;
-  String _selectedLanguage = 'both';
-  double _speechRate = 0.5;
-
-  String _weatherApiKey = '';
-  String _defaultCity = 'New York';
-
-  String _telegramBotToken = '';
-  String _discordBotToken = '';
-  String _facebookAccessToken = '';
-  String _facebookPageId = '';
-  String _instagramAccessToken = '';
-  String _instagramPageId = '';
-  String _whatsappAccessToken = '';
-  String _whatsappPhoneNumberId = '';
-  String _whatsappBusinessAccountId = '';
-
-  List<String> _openRouterModels = [];
-  bool _isLoadingModels = false;
-  String _modelError = '';
-
-  bool _isSaving = false;
-  
   String? _userProfilePhoto;
   String? _aiProfilePhoto;
   final ImagePicker _imagePicker = ImagePicker();
 
-  final Map<String, List<String>> _modelsByProvider = {
-    'ollama': ['gemma4:e4b', 'hermes3:latest', 'gemma3:4b', 'qwen2.5-coder:7b'],
-    'openai': ['gpt-4', 'gpt-4-turbo', 'gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'],
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _userName = prefs.getString('user_name') ?? '';
+      _aiName = prefs.getString('ai_name') ?? 'Nexa';
+      _userProfilePhoto = prefs.getString('user_profile_photo');
+      _aiProfilePhoto = prefs.getString('ai_profile_photo');
+    });
+  }
+
+  Future<void> _pickPhoto({required bool isUser}) async {
+    try {
+      final XFile? picked = await _imagePicker.pickImage(
+        source: ImageSource.gallery, maxWidth: 512, maxHeight: 512, imageQuality: 85,
+      );
+      if (picked != null) {
+        final appDir = await getApplicationDocumentsDirectory();
+        final photosDir = Directory(p.join(appDir.path, 'profile_photos'));
+        if (!await photosDir.exists()) await photosDir.create(recursive: true);
+        final fileName = isUser ? 'user_profile.jpg' : 'ai_profile.jpg';
+        final saved = await File(picked.path).copy(p.join(photosDir.path, fileName));
+        final prefs = await SharedPreferences.getInstance();
+        if (isUser) {
+          await prefs.setString('user_profile_photo', saved.path);
+          setState(() => _userProfilePhoto = saved.path);
+        } else {
+          await prefs.setString('ai_profile_photo', saved.path);
+          setState(() => _aiProfilePhoto = saved.path);
+        }
+      }
+    } catch (e) {
+      debugPrint('Photo picker error: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionScaffold(
+      title: 'General',
+      subtitle: 'Profile and basic preferences',
+      icon: Icons.tune,
+      children: [
+        // Profile photos
+        GlassCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Profile', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  _buildAvatar('You', _userProfilePhoto, AppColors.accent, () => _pickPhoto(isUser: true)),
+                  const SizedBox(width: 24),
+                  _buildAvatar(_aiName, _aiProfilePhoto, AppColors.accent, () => _pickPhoto(isUser: false), isAI: true),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Name fields
+        GlassCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Identity', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Your Name', style: TextStyle(fontSize: 12, color: AppColors.textTertiary)),
+                        const SizedBox(height: 6),
+                        GlassTextField(
+                          hintText: 'Enter your name',
+                          initialValue: _userName,
+                          onChanged: (v) {
+                            _userName = v;
+                            SharedPreferences.getInstance().then((p) => p.setString('user_name', v));
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('AI Name', style: TextStyle(fontSize: 12, color: AppColors.textTertiary)),
+                        const SizedBox(height: 6),
+                        GlassTextField(
+                          hintText: 'Default: Nexa',
+                          initialValue: _aiName,
+                          onChanged: (v) {
+                            _aiName = v;
+                            SharedPreferences.getInstance().then((p) => p.setString('ai_name', v));
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Quick stats
+        Row(
+          children: [
+            Expanded(child: _StatusCard(label: 'App Version', value: '1.0.0', icon: Icons.info_outline)),
+            const SizedBox(width: 12),
+            Expanded(child: _StatusCard(label: 'Platform', value: Platform.operatingSystem, icon: Icons.computer)),
+            const SizedBox(width: 12),
+            Expanded(child: _StatusCard(label: 'Build', value: 'Debug', icon: Icons.build)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAvatar(String label, String? path, Color color, VoidCallback onTap, {bool isAI = false}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Stack(
+            children: [
+              CircleAvatar(
+                radius: 32,
+                backgroundColor: color.withAlpha(30),
+                backgroundImage: path != null ? FileImage(File(path)) : null,
+                child: path == null
+                    ? isAI
+                        ? const Text('💕', style: TextStyle(fontSize: 28))
+                        : Icon(Icons.person, color: color, size: 28)
+                    : null,
+              ),
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.backgroundElevated, width: 2),
+                  ),
+                  child: const Icon(Icons.camera_alt, color: Colors.white, size: 12),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textTertiary)),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SECTION 2: AI BRAIN
+// ═══════════════════════════════════════════════════════════════════
+
+class _AIBrainSection extends ConsumerStatefulWidget {
+  const _AIBrainSection();
+  @override
+  ConsumerState<_AIBrainSection> createState() => _AIBrainSectionState();
+}
+
+class _AIBrainSectionState extends ConsumerState<_AIBrainSection> {
+  String _provider = 'openrouter';
+  String _model = 'google/gemma-4-26b-a4b-it:free';
+  String _apiKey = '';
+  bool _localAI = false;
+  List<String> _openRouterModels = [];
+  List<String> _ollamaModels = [];
+  bool _isLoadingModels = false;
+  String _modelError = '';
+
+  static const _modelsByProvider = {
+    'openai': ['gpt-4', 'gpt-4-turbo', 'gpt-4o', 'gpt-4o-mini'],
     'anthropic': ['claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku', 'claude-3.5-sonnet'],
     'gemini': ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
   };
@@ -65,1114 +702,1262 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadSettings();
-    _fetchOpenRouterModels();
+    _load();
   }
 
-  Future<void> _loadSettings() async {
+  Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _selectedAIProvider = prefs.getString('ai_provider') ?? 'openrouter';
-      _selectedModel = prefs.getString('ai_model') ?? 'google/gemma-4-26b-a4b-it:free';
+      _provider = prefs.getString('ai_provider') ?? 'openrouter';
+      _model = prefs.getString('ai_model') ?? 'google/gemma-4-26b-a4b-it:free';
       _apiKey = prefs.getString('ai_api_key') ?? '';
-      _useLocalAI = prefs.getBool('use_local_ai') ?? false;
-      _userName = prefs.getString('user_name') ?? '';
-      _aiName = prefs.getString('ai_name') ?? 'Nexa';
-      _ttsVoiceName = prefs.getString('tts_voice_name') ?? 'Samantha';
-      _voiceEnabled = prefs.getBool('voice_enabled') ?? true;
-      _selectedLanguage = prefs.getString('voice_language') ?? 'both';
-      _speechRate = prefs.getDouble('speech_rate') ?? 0.5;
-      _weatherApiKey = prefs.getString('weather_api_key') ?? '';
-      _defaultCity = prefs.getString('default_city') ?? 'New York';
-      _telegramBotToken = prefs.getString('telegram_bot_token') ?? '';
-      _discordBotToken = prefs.getString('discord_bot_token') ?? '';
-      _facebookAccessToken = prefs.getString('facebook_access_token') ?? '';
-      _facebookPageId = prefs.getString('facebook_page_id') ?? '';
-      _instagramAccessToken = prefs.getString('instagram_access_token') ?? '';
-      _instagramPageId = prefs.getString('instagram_page_id') ?? '';
-      _whatsappAccessToken = prefs.getString('whatsapp_access_token') ?? '';
-      _whatsappPhoneNumberId = prefs.getString('whatsapp_phone_number_id') ?? '';
-      _whatsappBusinessAccountId = prefs.getString('whatsapp_business_account_id') ?? '';
-      _userProfilePhoto = prefs.getString('user_profile_photo');
-      _aiProfilePhoto = prefs.getString('ai_profile_photo');
+      _localAI = prefs.getBool('use_local_ai') ?? false;
     });
-    _loadVoices();
-    
-    // Auto-fetch models based on provider
-    if (_selectedAIProvider == 'openrouter') {
-      _fetchOpenRouterModels();
-    } else if (_selectedAIProvider == 'ollama') {
-      _fetchOllamaModels();
-    }
-  }
-
-  Future<void> _fetchOpenRouterModels() async {
-    setState(() {
-      _isLoadingModels = true;
-      _modelError = '';
-    });
-
-    try {
-      final dio = Dio();
-      final response = await dio.get(
-        'https://openrouter.ai/api/v1/models',
-        options: Options(
-          headers: {'Content-Type': 'application/json'},
-          validateStatus: (status) => status! < 500,
-        ),
-      );
-
-      if (response.statusCode == 200 && response.data['data'] != null) {
-        final models = List<Map<String, dynamic>>.from(response.data['data']);
-        final freeModels = models.where((m) {
-          final id = m['id'] as String? ?? '';
-          if (id.endsWith(':free')) return true;
-          final pricing = m['pricing'] as Map<String, dynamic>?;
-          if (pricing != null) {
-            final prompt = pricing['prompt'] as String? ?? '0';
-            final completion = pricing['completion'] as String? ?? '0';
-            final request = pricing['request'] as String? ?? '0';
-            if (double.tryParse(prompt) == 0 &&
-                double.tryParse(completion) == 0 &&
-                double.tryParse(request) == 0) {
-              return true;
-            }
-          }
-          return false;
-        }).map((m) => m['id'] as String).toList();
-
-        freeModels.sort();
-
-        setState(() {
-          _openRouterModels = freeModels;
-          _isLoadingModels = false;
-          if (freeModels.isNotEmpty && !freeModels.contains(_selectedModel)) {
-            _selectedModel = freeModels.first;
-          }
-        });
-      } else {
-        setState(() {
-          _modelError = 'Failed to fetch models';
-          _isLoadingModels = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _modelError = 'Network error';
-        _isLoadingModels = false;
-      });
-    }
-  }
-
-  Future<void> _fetchOllamaModels() async {
-    setState(() {
-      _isLoadingModels = true;
-      _modelError = '';
-    });
-
-    try {
-      final dio = Dio();
-      final response = await dio.get(
-        'http://localhost:11434/api/tags',
-        options: Options(
-          headers: {'Content-Type': 'application/json'},
-          validateStatus: (status) => status! < 500,
-          receiveTimeout: const Duration(seconds: 3),
-        ),
-      );
-
-      if (response.statusCode == 200 && response.data['models'] != null) {
-        final models = List<Map<String, dynamic>>.from(response.data['models']);
-        final modelNames = models.map((m) => m['name'] as String).toList();
-        modelNames.sort();
-
-        setState(() {
-          _modelsByProvider['ollama'] = modelNames;
-          _isLoadingModels = false;
-          if (modelNames.isNotEmpty && !modelNames.contains(_selectedModel)) {
-            _selectedModel = modelNames.first;
-          }
-        });
-      } else {
-        setState(() {
-          _modelError = 'Ollama not responding. Is it running?';
-          _isLoadingModels = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _modelError = 'Cannot connect to Ollama at localhost:11434';
-        _isLoadingModels = false;
-      });
-    }
-  }
-
-  Future<void> _loadVoices() async {
-    try {
-      final voices = VoiceService.allVoices;
-      if (mounted) {
-        setState(() => _availableVoices = voices);
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _availableVoices = [
-            {'name': 'Samantha', 'locale': 'en-US'},
-            {'name': 'Karen', 'locale': 'en-AU'},
-            {'name': 'Alex', 'locale': 'en-US'},
-          ];
-        });
-      }
-    }
+    _fetchModels();
   }
 
   List<String> get _currentModels {
-    if (_selectedAIProvider == 'openrouter') {
-      if (_openRouterModels.isNotEmpty) return _openRouterModels;
-      if (_modelError.isNotEmpty) return [];
-      return ['Loading...'];
+    if (_provider == 'openrouter') return _openRouterModels.isNotEmpty ? _openRouterModels : ['Loading...'];
+    if (_provider == 'ollama') return _ollamaModels.isNotEmpty ? _ollamaModels : ['Loading...'];
+    return _modelsByProvider[_provider] ?? [];
+  }
+
+  Future<void> _fetchModels() async {
+    setState(() { _isLoadingModels = true; _modelError = ''; });
+    try {
+      final dio = Dio();
+      if (_provider == 'openrouter') {
+        final resp = await dio.get('https://openrouter.ai/api/v1/models',
+          options: Options(headers: {'Content-Type': 'application/json'}, validateStatus: (s) => s! < 500));
+        if (resp.statusCode == 200 && resp.data['data'] != null) {
+          final models = List<Map<String, dynamic>>.from(resp.data['data']);
+          final free = models.where((m) {
+            final id = m['id'] as String? ?? '';
+            if (id.endsWith(':free')) return true;
+            final pricing = m['pricing'] as Map<String, dynamic>?;
+            if (pricing != null) {
+              final prompt = double.tryParse(pricing['prompt'] as String? ?? '0') ?? 0;
+              final completion = double.tryParse(pricing['completion'] as String? ?? '0') ?? 0;
+              return prompt == 0 && completion == 0;
+            }
+            return false;
+          }).map((m) => m['id'] as String).toList();
+          free.sort();
+          setState(() {
+            _openRouterModels = free;
+            if (free.isNotEmpty && !free.contains(_model)) _model = free.first;
+          });
+        }
+      } else if (_provider == 'ollama') {
+        final resp = await dio.get('http://localhost:11434/api/tags',
+          options: Options(validateStatus: (s) => s! < 500, receiveTimeout: const Duration(seconds: 3)));
+        if (resp.statusCode == 200 && resp.data['models'] != null) {
+          final models = List<Map<String, dynamic>>.from(resp.data['models']);
+          final names = models.map((m) => m['name'] as String).toList()..sort();
+          setState(() {
+            _ollamaModels = names;
+            if (names.isNotEmpty && !names.contains(_model)) _model = names.first;
+          });
+        } else {
+          setState(() => _modelError = 'Ollama not responding');
+        }
+      }
+    } catch (e) {
+      setState(() => _modelError = 'Network error');
     }
-    return _modelsByProvider[_selectedAIProvider] ?? [];
+    setState(() => _isLoadingModels = false);
+  }
+
+  Future<void> _save() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('ai_provider', _provider);
+    await prefs.setString('ai_model', _model);
+    await prefs.setString('ai_api_key', _apiKey);
+    await prefs.setBool('use_local_ai', _localAI);
+
+    AIProvider p;
+    switch (_provider) {
+      case 'ollama': p = AIProvider.ollama; break;
+      case 'openai': p = AIProvider.openai; break;
+      case 'anthropic': p = AIProvider.anthropic; break;
+      case 'gemini': p = AIProvider.gemini; break;
+      default: p = AIProvider.openrouter;
+    }
+    final key = _localAI ? 'local' : _apiKey;
+    if (key.isNotEmpty || _localAI) {
+      await ref.read(appStateProvider.notifier).initializeAI(provider: p, apiKey: key, modelName: _model);
+    }
+    if (mounted) {
+      final connected = ref.read(appStateProvider).isConnected;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(connected ? 'Connected to ${_provider.toUpperCase()}!' : 'Saved. Connection failed.'),
+        backgroundColor: connected ? AppColors.success : AppColors.warning,
+      ));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0D1117),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(),
-            const SizedBox(height: 28),
-            _buildSection('AI Configuration', Icons.psychology, [
-              _buildProviderDropdown(),
-              const SizedBox(height: 16),
-              if (_selectedAIProvider == 'openrouter') _buildModelLoader(),
-              _buildModelDropdown(),
-              const SizedBox(height: 16),
-              _buildApiKeyField(),
-              const SizedBox(height: 16),
-              _buildLocalAIToggle(),
-            ]),
-            const SizedBox(height: 20),
-            _buildSection('Personal Info', Icons.person, [
-              _buildProfilePhotoSection(),
-              const SizedBox(height: 16),
-              _buildUserNameField(),
-              const SizedBox(height: 16),
-              _buildAINameField(),
-            ]),
-            const SizedBox(height: 20),
-            _buildSection('Voice Settings', Icons.mic, [
-              _buildVoiceToggle(),
-              const SizedBox(height: 16),
-              _buildTTSVoiceDropdown(),
-              const SizedBox(height: 16),
-              _buildLanguageDropdown(),
-              const SizedBox(height: 16),
-              _buildSpeechRateSlider(),
-            ]),
-            const SizedBox(height: 20),
-            _buildSection('Weather Settings', Icons.cloud, [
-              _buildWeatherApiKeyField(),
-              const SizedBox(height: 16),
-              _buildDefaultCityField(),
-            ]),
-            const SizedBox(height: 20),
-            _buildSection('Social Media', Icons.share, [
-              _buildTelegramTokenField(),
-              const SizedBox(height: 16),
-              _buildDiscordTokenField(),
-              const SizedBox(height: 16),
-              _buildFacebookFields(),
-              const SizedBox(height: 16),
-              _buildInstagramFields(),
-              const SizedBox(height: 16),
-              _buildWhatsAppFields(),
-            ]),
-            const SizedBox(height: 20),
-            _buildSection('Advanced Features', Icons.auto_awesome, [
-              _buildFeatureInfo('Screen Context', 'Capture and analyze screen content'),
-              const SizedBox(height: 12),
-              _buildFeatureInfo('Cross-App Bridge', 'Interact with other applications'),
-              const SizedBox(height: 12),
-              _buildFeatureInfo('Predictive Automation', 'Learn and automate workflows'),
-              const SizedBox(height: 12),
-              _buildFeatureInfo('Screen Recording', 'Record screen activity'),
-              const SizedBox(height: 12),
-              _buildFeatureInfo('Meeting Assistant', 'Take notes and manage meetings'),
-              const SizedBox(height: 12),
-              _buildFeatureInfo('Notification Intelligence', 'Smart notification management'),
-              const SizedBox(height: 12),
-              _buildFeatureInfo('File Converter', 'Convert files between formats'),
-            ]),
-            const SizedBox(height: 28),
-            _buildSaveButton(),
-            const SizedBox(height: 12),
-            _buildResetButton(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Row(
+    final appState = ref.watch(appStateProvider);
+    return _SectionScaffold(
+      title: 'AI Brain',
+      subtitle: 'Configure your AI backbone',
+      icon: Icons.psychology,
       children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF00BCD4).withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Icon(Icons.settings, color: Color(0xFF00BCD4), size: 28),
-        ),
-        const SizedBox(width: 16),
-        const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        // Status cards
+        Row(
           children: [
-            Text(
-              'Settings',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Text(
-              'Configure your Nextron assistant',
-              style: TextStyle(color: Colors.grey, fontSize: 14),
-            ),
+            Expanded(child: _StatusCard(
+              label: 'Provider',
+              value: _provider.toUpperCase(),
+              icon: Icons.cloud,
+              valueColor: appState.isConnected ? AppColors.success : AppColors.textSecondary,
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: _StatusCard(
+              label: 'Status',
+              value: appState.isConnected ? 'Connected' : 'Disconnected',
+              icon: appState.isConnected ? Icons.check_circle : Icons.error_outline,
+              valueColor: appState.isConnected ? AppColors.success : AppColors.error,
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: _StatusCard(
+              label: 'Model',
+              value: _model.length > 20 ? '${_model.substring(0, 20)}...' : _model,
+              icon: Icons.smart_toy,
+            )),
           ],
+        ),
+        const SizedBox(height: 16),
+
+        // Provider card
+        GlassCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.cloud, size: 16, color: AppColors.accent),
+                  const SizedBox(width: 8),
+                  const Text('Provider', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: GlassDropdown<String>(
+                      value: _provider,
+                      items: ['openrouter', 'ollama', 'openai', 'anthropic', 'gemini']
+                          .map((v) => GlassDropdownItem(value: v, label: v.toUpperCase()))
+                          .toList(),
+                      onChanged: (v) {
+                        setState(() {
+                          _provider = v!;
+                          if (v == 'ollama') { _localAI = true; _apiKey = 'local'; }
+                          else { _localAI = false; if (_apiKey == 'local') _apiKey = ''; }
+                        });
+                        _fetchModels();
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Model (${_currentModels.where((m) => m != 'Loading...').length} available)',
+                          style: const TextStyle(fontSize: 12, color: AppColors.textTertiary),
+                        ),
+                        const SizedBox(height: 6),
+                        if (_isLoadingModels)
+                          const SizedBox(height: 36, child: Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent))))
+                        else
+                          GlassDropdown<String>(
+                            value: _currentModels.contains(_model) ? _model : (_currentModels.isNotEmpty ? _currentModels.first : null),
+                            items: _currentModels
+                                .map((m) => GlassDropdownItem(value: m, label: m))
+                                .toList(),
+                            onChanged: (v) => setState(() => _model = v!),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (_modelError.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(_modelError, style: const TextStyle(fontSize: 12, color: AppColors.error)),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // API Key card
+        GlassCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.key, size: 16, color: AppColors.accent),
+                  const SizedBox(width: 8),
+                  const Text('API Key', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                  const Spacer(),
+                  if (_apiKey.isNotEmpty)
+                    StatusChip(label: 'Set', status: ChipStatus.success),
+                ],
+              ),
+              const SizedBox(height: 16),
+              GlassTextField(
+                hintText: _localAI ? 'Not needed for Ollama' : 'Enter API key...',
+                initialValue: _localAI ? '' : _apiKey,
+                obscureText: true,
+                onChanged: _localAI ? null : (v) => _apiKey = v,
+              ),
+              const SizedBox(height: 12),
+              _ToggleRow(
+                label: 'Use Local AI (Ollama)',
+                subtitle: 'Run AI models on your machine',
+                value: _localAI,
+                onChanged: (v) {
+                  setState(() {
+                    _localAI = v;
+                    if (v) { _provider = 'ollama'; _apiKey = 'local'; _fetchModels(); }
+                  });
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Performance card
+        GlassCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.speed, size: 16, color: AppColors.accent),
+                  const SizedBox(width: 8),
+                  const Text('Performance', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: _StatusCard(label: 'Latency', value: '~200ms', icon: Icons.timer)),
+                  const SizedBox(width: 12),
+                  Expanded(child: _StatusCard(label: 'Tokens/req', value: '~2K', icon: Icons.text_fields)),
+                  const SizedBox(width: 12),
+                  Expanded(child: _StatusCard(label: 'Cost', value: _localAI ? 'Free' : 'Pay-per-use', icon: Icons.attach_money)),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // Save button
+        SizedBox(
+          width: double.infinity,
+          child: GlassButton(
+            onPressed: _save,
+            label: 'Save & Connect',
+            icon: Icons.save,
+          ),
         ),
       ],
     );
   }
+}
 
-  Widget _buildSection(String title, IconData icon, List<Widget> children) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF161B22),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF30363D)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+// ═══════════════════════════════════════════════════════════════════
+// SECTION 3: VOICE & AUDIO
+// ═══════════════════════════════════════════════════════════════════
+
+class _VoiceSection extends ConsumerStatefulWidget {
+  const _VoiceSection();
+  @override
+  ConsumerState<_VoiceSection> createState() => _VoiceSectionState();
+}
+
+class _VoiceSectionState extends ConsumerState<_VoiceSection> {
+  bool _voiceEnabled = true;
+  String _ttsVoiceName = 'Samantha';
+  String _selectedLanguage = 'both';
+  double _speechRate = 0.5;
+  List<Map<String, dynamic>> _voices = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _voiceEnabled = prefs.getBool('voice_enabled') ?? true;
+      _ttsVoiceName = prefs.getString('tts_voice_name') ?? 'Samantha';
+      _selectedLanguage = prefs.getString('voice_language') ?? 'both';
+      _speechRate = prefs.getDouble('speech_rate') ?? 0.5;
+    });
+    try { _voices = VoiceService.allVoices; } catch (e) { _voices = []; }
+  }
+
+  Future<void> _save() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('voice_enabled', _voiceEnabled);
+    await prefs.setString('tts_voice_name', _ttsVoiceName);
+    await prefs.setString('voice_language', _selectedLanguage);
+    await prefs.setDouble('speech_rate', _speechRate);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Voice settings saved'),
+        backgroundColor: AppColors.success,
+      ));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionScaffold(
+      title: 'Voice & Audio',
+      subtitle: 'Speech recognition and text-to-speech',
+      icon: Icons.mic,
+      children: [
+        // Status
+        Row(
+          children: [
+            Expanded(child: _StatusCard(
+              label: 'Voice',
+              value: _voiceEnabled ? 'Enabled' : 'Disabled',
+              icon: Icons.mic,
+              valueColor: _voiceEnabled ? AppColors.success : AppColors.textSecondary,
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: _StatusCard(
+              label: 'Language',
+              value: _selectedLanguage.toUpperCase(),
+              icon: Icons.language,
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: _StatusCard(
+              label: 'Speed',
+              value: '${(_speechRate * 100).toInt()}%',
+              icon: Icons.speed,
+            )),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        GlassCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: const Color(0xFF00BCD4), size: 20),
-              const SizedBox(width: 10),
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+              Row(
+                children: [
+                  const Icon(Icons.record_voice_over, size: 16, color: AppColors.accent),
+                  const SizedBox(width: 8),
+                  const Text('Voice Settings', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _ToggleRow(
+                label: 'Enable Voice',
+                subtitle: 'Turn on speech recognition and TTS',
+                value: _voiceEnabled,
+                onChanged: (v) => setState(() => _voiceEnabled = v),
+              ),
+              const Divider(color: AppColors.glassBorder, height: 24),
+              GlassDropdown<String>(
+                value: _ttsVoiceName,
+                items: (_voices.isNotEmpty
+                    ? _voices.map((v) => v['name'] as String).toList()
+                    : ['Samantha', 'Karen', 'Victoria', 'Alex'])
+                    .map((v) => GlassDropdownItem(value: v, label: v))
+                    .toList(),
+                onChanged: (v) => setState(() => _ttsVoiceName = v!),
+              ),
+              const SizedBox(height: 16),
+              GlassDropdown<String>(
+                value: _selectedLanguage,
+                items: const ['english', 'hindi', 'both']
+                    .map((v) => GlassDropdownItem(value: v, label: v[0].toUpperCase() + v.substring(1)))
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedLanguage = v!),
+              ),
+              const SizedBox(height: 16),
+              _SliderRow(
+                label: 'Speech Rate',
+                value: _speechRate,
+                onChanged: (v) => setState(() => _speechRate = v),
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          ...children,
-        ],
-      ),
+        ),
+        const SizedBox(height: 20),
+        SizedBox(
+          width: double.infinity,
+          child: GlassButton(
+            onPressed: _save,
+            label: 'Save Voice Settings',
+            icon: Icons.save,
+          ),
+        ),
+      ],
     );
   }
+}
 
-  Widget _buildFeatureInfo(String title, String description) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D1117),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF30363D)),
-      ),
+// ═══════════════════════════════════════════════════════════════════
+// SECTION 4: MEMORY CORE
+// ═══════════════════════════════════════════════════════════════════
+
+class _MemorySection extends ConsumerStatefulWidget {
+  const _MemorySection();
+  @override
+  ConsumerState<_MemorySection> createState() => _MemorySectionState();
+}
+
+class _MemorySectionState extends ConsumerState<_MemorySection> {
+  int _totalMemories = 0;
+  int _recentMemories = 0;
+  bool _semanticSearch = true;
+  bool _autoSummarize = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final memory = ref.read(appStateProvider).memory;
+      if (memory != null) {
+        final all = await memory.getAllMemories();
+        setState(() {
+          _totalMemories = all.length;
+          _recentMemories = all.where((m) =>
+            DateTime.now().difference(m.createdAt).inDays < 7
+          ).length;
+        });
+      }
+    } catch (e) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionScaffold(
+      title: 'Memory Core',
+      subtitle: 'Memory storage and retrieval',
+      icon: Icons.memory,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _StatusCard(label: 'Total Memories', value: '$_totalMemories', icon: Icons.storage)),
+            const SizedBox(width: 12),
+            Expanded(child: _StatusCard(label: 'This Week', value: '$_recentMemories', icon: Icons.timeline)),
+            const SizedBox(width: 12),
+            Expanded(child: _StatusCard(label: 'Health', value: 'Good', icon: Icons.favorite, valueColor: AppColors.success)),
+          ],
+        ),
+        const SizedBox(height: 16),
+        GlassCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.tune, size: 16, color: AppColors.accent),
+                  const SizedBox(width: 8),
+                  const Text('Memory Settings', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _ToggleRow(
+                label: 'Semantic Search',
+                subtitle: 'Use AI embeddings for smarter memory retrieval',
+                value: _semanticSearch,
+                onChanged: (v) => setState(() => _semanticSearch = v),
+              ),
+              const Divider(color: AppColors.glassBorder, height: 24),
+              _ToggleRow(
+                label: 'Auto Summarize',
+                subtitle: 'Automatically compress long conversations',
+                value: _autoSummarize,
+                onChanged: (v) => setState(() => _autoSummarize = v),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SECTION 5: AGENTS
+// ═══════════════════════════════════════════════════════════════════
+
+class _AgentsSection extends ConsumerStatefulWidget {
+  const _AgentsSection();
+  @override
+  ConsumerState<_AgentsSection> createState() => _AgentsSectionState();
+}
+
+class _AgentsSectionState extends ConsumerState<_AgentsSection> {
+  @override
+  Widget build(BuildContext context) {
+    final appState = ref.watch(appStateProvider);
+    final agentMgr = ref.watch(agentManagerProvider);
+    final agents = ref.watch(agentsStreamProvider).value ?? [];
+    final scheduler = ref.watch(persistentSchedulerProvider);
+
+    return _SectionScaffold(
+      title: 'Agents',
+      subtitle: 'AI agent orchestration',
+      icon: Icons.smart_toy,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _StatusCard(
+              label: 'Active Agents',
+              value: '${agents.where((a) => a.isActive).length}',
+              icon: Icons.check_circle,
+              valueColor: AppColors.success,
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: _StatusCard(
+              label: 'Total Agents',
+              value: '${agents.length}',
+              icon: Icons.smart_toy,
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: _StatusCard(
+              label: 'Tasks Completed',
+              value: '${agents.fold(0, (sum, a) => sum + a.completedTasks)}',
+              icon: Icons.task_alt,
+            )),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (agents.isEmpty)
+          const EmptyState(
+            icon: Icons.smart_toy_outlined,
+            title: 'No agents configured',
+            subtitle: 'Agents are created automatically when you start using JARVIS',
+          )
+        else
+          ...agents.map((agent) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: GlassCard(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: agent.isActive ? AppColors.successGhost : AppColors.glassFill,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.smart_toy,
+                      size: 18,
+                      color: agent.isActive ? AppColors.success : AppColors.textTertiary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(agent.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.textPrimary)),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${agent.completedTasks} completed • ${agent.failedTasks} failed',
+                          style: const TextStyle(fontSize: 12, color: AppColors.textTertiary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  StatusChip(
+                    label: agent.isActive ? 'Active' : 'Idle',
+                    status: agent.isActive ? ChipStatus.active : ChipStatus.idle,
+                  ),
+                ],
+              ),
+            ),
+          )),
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SECTION 6: AUTOMATION
+// ═══════════════════════════════════════════════════════════════════
+
+class _AutomationSection extends ConsumerStatefulWidget {
+  const _AutomationSection();
+  @override
+  ConsumerState<_AutomationSection> createState() => _AutomationSectionState();
+}
+
+class _AutomationSectionState extends ConsumerState<_AutomationSection> {
+  @override
+  Widget build(BuildContext context) {
+    final appState = ref.watch(appStateProvider);
+    final scheduler = ref.watch(persistentSchedulerProvider);
+
+    return _SectionScaffold(
+      title: 'Automation',
+      subtitle: 'Scheduled tasks and automations',
+      icon: Icons.autorenew,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _StatusCard(label: 'Scheduler', value: 'Active', icon: Icons.schedule, valueColor: AppColors.success)),
+            const SizedBox(width: 12),
+            Expanded(child: _StatusCard(label: 'System', value: appState.persistentScheduler != null ? 'Running' : 'Off', icon: Icons.play_circle)),
+            const SizedBox(width: 12),
+            Expanded(child: _StatusCard(label: 'Status', value: 'Ready', icon: Icons.check_circle, valueColor: AppColors.success)),
+          ],
+        ),
+        const SizedBox(height: 16),
+        GlassCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.autorenew, size: 16, color: AppColors.accent),
+                  const SizedBox(width: 8),
+                  const Text('Scheduler Status', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'The persistent scheduler manages all scheduled tasks, reminders, and automations. Tasks survive app restarts and are executed automatically.',
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.5),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SECTION 7: INTEGRATIONS
+// ═══════════════════════════════════════════════════════════════════
+
+class _IntegrationsSection extends ConsumerStatefulWidget {
+  const _IntegrationsSection();
+  @override
+  ConsumerState<_IntegrationsSection> createState() => _IntegrationsSectionState();
+}
+
+class _IntegrationsSectionState extends ConsumerState<_IntegrationsSection> {
+  String _telegramToken = '';
+  String _discordToken = '';
+  String _facebookToken = '';
+  String _facebookPageId = '';
+  String _instagramToken = '';
+  String _instagramPageId = '';
+  String _whatsappToken = '';
+  String _whatsappPhoneId = '';
+  String _whatsappBusinessId = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _telegramToken = prefs.getString('telegram_bot_token') ?? '';
+      _discordToken = prefs.getString('discord_bot_token') ?? '';
+      _facebookToken = prefs.getString('facebook_access_token') ?? '';
+      _facebookPageId = prefs.getString('facebook_page_id') ?? '';
+      _instagramToken = prefs.getString('instagram_access_token') ?? '';
+      _instagramPageId = prefs.getString('instagram_page_id') ?? '';
+      _whatsappToken = prefs.getString('whatsapp_access_token') ?? '';
+      _whatsappPhoneId = prefs.getString('whatsapp_phone_number_id') ?? '';
+      _whatsappBusinessId = prefs.getString('whatsapp_business_account_id') ?? '';
+    });
+  }
+
+  Future<void> _save() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('telegram_bot_token', _telegramToken);
+    await prefs.setString('discord_bot_token', _discordToken);
+    await prefs.setString('facebook_access_token', _facebookToken);
+    await prefs.setString('facebook_page_id', _facebookPageId);
+    await prefs.setString('instagram_access_token', _instagramToken);
+    await prefs.setString('instagram_page_id', _instagramPageId);
+    await prefs.setString('whatsapp_access_token', _whatsappToken);
+    await prefs.setString('whatsapp_phone_number_id', _whatsappPhoneId);
+    await prefs.setString('whatsapp_business_account_id', _whatsappBusinessId);
+
+    final sm = ref.read(appStateProvider).socialManager;
+    if (sm != null) {
+      if (_facebookToken.isNotEmpty && _facebookPageId.isNotEmpty) sm.setupFacebook(accessToken: _facebookToken, pageId: _facebookPageId);
+      if (_instagramToken.isNotEmpty && _instagramPageId.isNotEmpty) sm.setupInstagram(accessToken: _instagramToken, pageId: _instagramPageId);
+      if (_whatsappToken.isNotEmpty && _whatsappPhoneId.isNotEmpty) sm.setupWhatsApp(accessToken: _whatsappToken, phoneNumberId: _whatsappPhoneId, businessAccountId: _whatsappBusinessId);
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Integrations saved'),
+        backgroundColor: AppColors.success,
+      ));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionScaffold(
+      title: 'Integrations',
+      subtitle: 'Connect external services',
+      icon: Icons.extension,
+      children: [
+        // Grid of integration cards
+        GridView.count(
+          crossAxisCount: 3,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 2.2,
+          children: [
+            _IntegrationCard(name: 'Telegram', icon: Icons.telegram, color: const Color(0xFF0088CC), connected: _telegramToken.isNotEmpty),
+            _IntegrationCard(name: 'Discord', icon: Icons.gamepad, color: const Color(0xFF5865F2), connected: _discordToken.isNotEmpty),
+            _IntegrationCard(name: 'Facebook', icon: Icons.facebook, color: const Color(0xFF1877F2), connected: _facebookToken.isNotEmpty),
+            _IntegrationCard(name: 'Instagram', icon: Icons.camera_alt, color: const Color(0xFFE4405F), connected: _instagramToken.isNotEmpty),
+            _IntegrationCard(name: 'WhatsApp', icon: Icons.chat, color: const Color(0xFF25D366), connected: _whatsappToken.isNotEmpty),
+            _IntegrationCard(name: 'OpenRouter', icon: Icons.cloud, color: AppColors.accent, connected: ref.watch(appStateProvider).isConnected),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Telegram & Discord
+        GlassCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Messaging', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+              const SizedBox(height: 16),
+              GlassTextField(
+                hintText: 'Telegram Bot Token',
+                initialValue: _telegramToken,
+                obscureText: true,
+                onChanged: (v) => _telegramToken = v,
+              ),
+              const SizedBox(height: 12),
+              GlassTextField(
+                hintText: 'Discord Bot Token',
+                initialValue: _discordToken,
+                obscureText: true,
+                onChanged: (v) => _discordToken = v,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Social media
+        GlassCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Social Media', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: GlassTextField(hintText: 'Facebook Page Token', initialValue: _facebookToken, obscureText: true, onChanged: (v) => _facebookToken = v)),
+                  const SizedBox(width: 12),
+                  Expanded(child: GlassTextField(hintText: 'Page ID', initialValue: _facebookPageId, onChanged: (v) => _facebookPageId = v)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: GlassTextField(hintText: 'Instagram Token', initialValue: _instagramToken, obscureText: true, onChanged: (v) => _instagramToken = v)),
+                  const SizedBox(width: 12),
+                  Expanded(child: GlassTextField(hintText: 'Page ID', initialValue: _instagramPageId, onChanged: (v) => _instagramPageId = v)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: GlassTextField(hintText: 'WhatsApp Token', initialValue: _whatsappToken, obscureText: true, onChanged: (v) => _whatsappToken = v)),
+                  const SizedBox(width: 12),
+                  Expanded(child: GlassTextField(hintText: 'Phone ID', initialValue: _whatsappPhoneId, onChanged: (v) => _whatsappPhoneId = v)),
+                  const SizedBox(width: 12),
+                  Expanded(child: GlassTextField(hintText: 'Business ID', initialValue: _whatsappBusinessId, onChanged: (v) => _whatsappBusinessId = v)),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        SizedBox(
+          width: double.infinity,
+          child: GlassButton(onPressed: _save, label: 'Save Integrations', icon: Icons.save),
+        ),
+      ],
+    );
+  }
+}
+
+class _IntegrationCard extends StatelessWidget {
+  final String name;
+  final IconData icon;
+  final Color color;
+  final bool connected;
+
+  const _IntegrationCard({required this.name, required this.icon, required this.color, required this.connected});
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
       child: Row(
         children: [
-          Icon(Icons.check_circle, color: const Color(0xFF4CAF50), size: 20),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: color.withAlpha(30), borderRadius: BorderRadius.circular(8)),
+            child: Icon(icon, size: 18, color: color),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  description,
-                  style: TextStyle(
-                    color: Colors.grey[500],
-                    fontSize: 12,
-                  ),
-                ),
+                Text(name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.textPrimary)),
+                const SizedBox(height: 2),
+                Text(connected ? 'Connected' : 'Not connected',
+                  style: TextStyle(fontSize: 11, color: connected ? AppColors.success : AppColors.textTertiary)),
               ],
             ),
           ),
+          Icon(connected ? Icons.check_circle : Icons.radio_button_unchecked,
+            size: 16, color: connected ? AppColors.success : AppColors.textDisabled),
         ],
       ),
     );
   }
+}
 
-  Widget _buildProviderDropdown() {
-    return _buildDropdown(
-      'AI Provider',
-      _selectedAIProvider,
-      ['openrouter', 'ollama', 'openai', 'anthropic', 'gemini'],
-      (value) {
-        setState(() {
-          _selectedAIProvider = value!;
-          if (value == 'openrouter') {
-            _useLocalAI = false;
-            if (_apiKey == 'local') _apiKey = '';
-            _fetchOpenRouterModels();
-          } else if (value == 'ollama') {
-            _useLocalAI = true;
-            _apiKey = 'local';
-            _fetchOllamaModels();
-          } else {
-            _useLocalAI = false;
-            if (_apiKey == 'local') _apiKey = '';
-            _selectedModel = _currentModels.isNotEmpty ? _currentModels.first : '';
-          }
-        });
-      },
+// ═══════════════════════════════════════════════════════════════════
+// SECTION 8: CALENDAR & EMAIL
+// ═══════════════════════════════════════════════════════════════════
+
+class _CalendarEmailSection extends ConsumerStatefulWidget {
+  const _CalendarEmailSection();
+  @override
+  ConsumerState<_CalendarEmailSection> createState() => _CalendarEmailSectionState();
+}
+
+class _CalendarEmailSectionState extends ConsumerState<_CalendarEmailSection> {
+  @override
+  Widget build(BuildContext context) {
+    return _SectionScaffold(
+      title: 'Calendar & Email',
+      subtitle: 'Schedule and email management',
+      icon: Icons.calendar_month,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _StatusCard(label: 'Calendar Events', value: 'Manage in Calendar tab', icon: Icons.event)),
+            const SizedBox(width: 12),
+            Expanded(child: _StatusCard(label: 'Email', value: 'IMAP Configured', icon: Icons.email, valueColor: AppColors.success)),
+          ],
+        ),
+        const SizedBox(height: 16),
+        GlassCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.email, size: 16, color: AppColors.accent),
+                  const SizedBox(width: 8),
+                  const Text('Email Configuration', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: GlassTextField(hintText: 'IMAP Server', initialValue: 'imap.gmail.com')),
+                  const SizedBox(width: 12),
+                  Expanded(child: GlassTextField(hintText: 'Port', initialValue: '993')),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: GlassTextField(hintText: 'Email', initialValue: '')),
+                  const SizedBox(width: 12),
+                  Expanded(child: GlassTextField(hintText: 'Password', initialValue: '', obscureText: true)),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SECTION 9: APPEARANCE
+// ═══════════════════════════════════════════════════════════════════
+
+class _AppearanceSection extends ConsumerStatefulWidget {
+  const _AppearanceSection();
+  @override
+  ConsumerState<_AppearanceSection> createState() => _AppearanceSectionState();
+}
+
+class _AppearanceSectionState extends ConsumerState<_AppearanceSection> {
+  double _orbIntensity = 0.8;
+  double _glassBlur = 10.0;
+  double _animationIntensity = 1.0;
+  bool _compactMode = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionScaffold(
+      title: 'Appearance',
+      subtitle: 'Visual customization',
+      icon: Icons.palette,
+      children: [
+        GlassCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.palette, size: 16, color: AppColors.accent),
+                  const SizedBox(width: 8),
+                  const Text('Theme', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _SliderRow(label: 'Orb Intensity', value: _orbIntensity, onChanged: (v) => setState(() => _orbIntensity = v)),
+              _SliderRow(label: 'Glass Blur', value: _glassBlur / 30, onChanged: (v) => setState(() => _glassBlur = v * 30), suffix: 'px'),
+              _SliderRow(label: 'Animation Speed', value: _animationIntensity, onChanged: (v) => setState(() => _animationIntensity = v)),
+              const Divider(color: AppColors.glassBorder, height: 24),
+              _ToggleRow(
+                label: 'Compact Mode',
+                subtitle: 'Reduce spacing and padding',
+                value: _compactMode,
+                onChanged: (v) => setState(() => _compactMode = v),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Live preview
+        GlassCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Preview', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.glassFill,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.glassBorder),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        gradient: RadialGradient(colors: [
+                          AppColors.accent.withAlpha((_orbIntensity * 255).toInt()),
+                          AppColors.accentGhost,
+                        ]),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Glass Card', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.textPrimary)),
+                          Text('Preview of your theme settings', style: TextStyle(fontSize: 12, color: AppColors.textTertiary)),
+                        ],
+                      ),
+                    ),
+                    StatusChip(label: 'Active', status: ChipStatus.active),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SECTION 10: SECURITY
+// ═══════════════════════════════════════════════════════════════════
+
+class _SecuritySection extends ConsumerStatefulWidget {
+  const _SecuritySection();
+  @override
+  ConsumerState<_SecuritySection> createState() => _SecuritySectionState();
+}
+
+class _SecuritySectionState extends ConsumerState<_SecuritySection> {
+  @override
+  Widget build(BuildContext context) {
+    final appState = ref.watch(appStateProvider);
+    final permMgr = appState.permissionManager;
+
+    return _SectionScaffold(
+      title: 'Security',
+      subtitle: 'Permissions and access control',
+      icon: Icons.shield,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _StatusCard(label: 'Permissions', value: 'Managed', icon: Icons.security, valueColor: AppColors.success)),
+            const SizedBox(width: 12),
+            Expanded(child: _StatusCard(label: 'Tool Policies', value: 'Default', icon: Icons.policy)),
+            const SizedBox(width: 12),
+            Expanded(child: _StatusCard(label: 'Audit Log', value: 'Active', icon: Icons.fact_check, valueColor: AppColors.success)),
+          ],
+        ),
+        const SizedBox(height: 16),
+        GlassCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.security, size: 16, color: AppColors.accent),
+                  const SizedBox(width: 8),
+                  const Text('Permission Policies', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Tool access is managed automatically. When a tool requests elevated permissions, you\'ll be prompted to allow or deny.',
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.5),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: _StatusCard(label: 'File Access', value: 'Read/Write', icon: Icons.folder)),
+                  const SizedBox(width: 12),
+                  Expanded(child: _StatusCard(label: 'Network', value: 'Allowed', icon: Icons.wifi)),
+                  const SizedBox(width: 12),
+                  Expanded(child: _StatusCard(label: 'Shell', value: 'Sandboxed', icon: Icons.terminal)),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SECTION 11: ADVANCED
+// ═══════════════════════════════════════════════════════════════════
+
+class _AdvancedSection extends ConsumerStatefulWidget {
+  const _AdvancedSection();
+  @override
+  ConsumerState<_AdvancedSection> createState() => _AdvancedSectionState();
+}
+
+class _AdvancedSectionState extends ConsumerState<_AdvancedSection> {
+  @override
+  Widget build(BuildContext context) {
+    return _SectionScaffold(
+      title: 'Advanced',
+      subtitle: 'Developer tools and diagnostics',
+      icon: Icons.code,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _StatusCard(label: 'Databases', value: '18 active', icon: Icons.storage)),
+            const SizedBox(width: 12),
+            Expanded(child: _StatusCard(label: 'Timeline Events', value: 'Active', icon: Icons.timeline, valueColor: AppColors.success)),
+            const SizedBox(width: 12),
+            Expanded(child: _StatusCard(label: 'Memory Usage', value: 'Normal', icon: Icons.memory, valueColor: AppColors.success)),
+          ],
+        ),
+        const SizedBox(height: 16),
+        GlassCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.build, size: 16, color: AppColors.accent),
+                  const SizedBox(width: 8),
+                  const Text('Developer Tools', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _buildToolRow(Icons.storage, 'Database Health', 'All databases operational'),
+              _buildToolRow(Icons.file_download, 'Export Logs', 'Download application logs'),
+              _buildToolRow(Icons.backup, 'Backup Database', 'Create a backup of all data'),
+              _buildToolRow(Icons.restore, 'Restore Database', 'Restore from a backup'),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildModelLoader() {
-    if (!_isLoadingModels) return const SizedBox.shrink();
+  Widget _buildToolRow(IconData icon, String title, String subtitle) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          const SizedBox(
-            width: 14,
-            height: 14,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00BCD4)),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            _selectedAIProvider == 'ollama'
-                ? 'Fetching models from Ollama...'
-                : 'Fetching models from OpenRouter...',
-            style: TextStyle(color: Colors.grey[500], fontSize: 12),
-          ),
-        ],
+      child: GlassCard(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: AppColors.textSecondary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.textPrimary)),
+                  Text(subtitle, style: const TextStyle(fontSize: 11, color: AppColors.textTertiary)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 16, color: AppColors.textDisabled),
+          ],
+        ),
       ),
     );
   }
+}
 
-  Widget _buildModelDropdown() {
-    return _buildDropdown(
-      'Model (${_currentModels.length} available)',
-      _selectedModel,
-      _currentModels,
-      (value) => setState(() => _selectedModel = value!),
-    );
-  }
+// ═══════════════════════════════════════════════════════════════════
+// SECTION 12: ABOUT
+// ═══════════════════════════════════════════════════════════════════
 
-  Widget _buildApiKeyField() {
-    final isLocal = _selectedAIProvider == 'ollama' || _useLocalAI;
-    return _buildTextField(
-      isLocal ? 'API Key (not needed for Ollama)' : 'API Key',
-      isLocal ? '' : _apiKey,
-      isLocal ? null : (value) => setState(() => _apiKey = value),
-      isPassword: false,
-      hint: isLocal ? 'Ollama runs locally - no key needed' : 'sk-or-v1-...',
-    );
-  }
+class _AboutSection extends StatelessWidget {
+  const _AboutSection();
 
-  Widget _buildLocalAIToggle() {
-    return _buildSwitch(
-      'Use Local AI (Ollama)',
-      _useLocalAI,
-      (value) {
-        setState(() {
-          _useLocalAI = value;
-          if (value) {
-            // Force Ollama provider when toggling on
-            _selectedAIProvider = 'ollama';
-            _apiKey = 'local';
-            // Set default Ollama model
-            if (!_modelsByProvider['ollama']!.contains(_selectedModel)) {
-              _selectedModel = 'gemma4:e4b';
-            }
-          }
-        });
-      },
-    );
-  }
-
-  Widget _buildProfilePhotoSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  @override
+  Widget build(BuildContext context) {
+    return _SectionScaffold(
+      title: 'About',
+      subtitle: 'JARVIS OS information',
+      icon: Icons.info_outline,
       children: [
-        Text(
-          'Profile Photos',
-          style: TextStyle(
-            color: Theme.of(context).textTheme.bodyLarge?.color,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            // User profile photo
-            Column(
-              children: [
-                GestureDetector(
-                  onTap: () => _pickProfilePhoto(isUser: true),
-                  child: Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: 36,
-                        backgroundColor: Colors.blue.withValues(alpha: 0.3),
-                        backgroundImage: _userProfilePhoto != null ? FileImage(File(_userProfilePhoto!)) : null,
-                        child: _userProfilePhoto == null
-                            ? const Icon(Icons.person, color: Colors.white, size: 32)
-                            : null,
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Colors.blue,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 2),
-                          ),
-                          child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
-                        ),
-                      ),
-                    ],
-                  ),
+        GlassCard(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(colors: [
+                    AppColors.accent.withAlpha(60),
+                    AppColors.accentGhost,
+                  ]),
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(height: 4),
-                Text('Your Photo', style: TextStyle(color: Colors.grey[400], fontSize: 11)),
-              ],
-            ),
-            const SizedBox(width: 32),
-            // AI girlfriend profile photo
-            Column(
-              children: [
-                GestureDetector(
-                  onTap: () => _pickProfilePhoto(isUser: false),
-                  child: Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: 36,
-                        backgroundColor: Colors.pink.withValues(alpha: 0.3),
-                        backgroundImage: _aiProfilePhoto != null ? FileImage(File(_aiProfilePhoto!)) : null,
-                        child: _aiProfilePhoto == null
-                            ? const Text('💕', style: TextStyle(fontSize: 32))
-                            : null,
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Colors.pink,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 2),
-                          ),
-                          child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
-                        ),
-                      ),
-                    ],
-                  ),
+                child: const Center(
+                  child: Text('J', style: TextStyle(fontSize: 36, fontWeight: FontWeight.w700, color: AppColors.accent)),
                 ),
-                const SizedBox(height: 4),
-                Text('AI Photo', style: TextStyle(color: Colors.grey[400], fontSize: 11)),
-              ],
-            ),
-          ],
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'JARVIS OS',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Your Personal AI Operating System',
+                style: TextStyle(fontSize: 14, color: AppColors.textTertiary),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _AboutStat(label: 'Version', value: '1.0.0'),
+                  const SizedBox(width: 32),
+                  _AboutStat(label: 'Build', value: '2024.1'),
+                  const SizedBox(width: 32),
+                  _AboutStat(label: 'Engine', value: 'Flutter'),
+                ],
+              ),
+              const SizedBox(height: 24),
+              const Divider(color: AppColors.glassBorder),
+              const SizedBox(height: 16),
+              const Text(
+                'Built with Flutter • Powered by OpenRouter & Ollama',
+                style: TextStyle(fontSize: 12, color: AppColors.textTertiary),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '80+ tools • Memory system • Agent orchestration • Voice AI',
+                style: TextStyle(fontSize: 12, color: AppColors.textDisabled),
+              ),
+            ],
+          ),
         ),
       ],
     );
   }
+}
 
-  Future<void> _pickProfilePhoto({required bool isUser}) async {
-    try {
-      final XFile? pickedFile = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 512,
-        maxHeight: 512,
-        imageQuality: 85,
-      );
-      if (pickedFile != null) {
-        // Copy to app directory
-        final appDir = await getApplicationDocumentsDirectory();
-        final photosDir = Directory(p.join(appDir.path, 'profile_photos'));
-        if (!await photosDir.exists()) {
-          await photosDir.create(recursive: true);
-        }
-        
-        final fileName = isUser ? 'user_profile.jpg' : 'ai_profile.jpg';
-        final savedFile = await File(pickedFile.path).copy(p.join(photosDir.path, fileName));
-        
-        setState(() {
-          if (isUser) {
-            _userProfilePhoto = savedFile.path;
-          } else {
-            _aiProfilePhoto = savedFile.path;
-          }
-        });
+class _AboutStat extends StatelessWidget {
+  final String label;
+  final String value;
+  const _AboutStat({required this.label, required this.value});
 
-        // Save to SharedPreferences
-        final prefs = await SharedPreferences.getInstance();
-        if (isUser) {
-          await prefs.setString('user_profile_photo', savedFile.path);
-        } else {
-          await prefs.setString('ai_profile_photo', savedFile.path);
-        }
-      }
-    } catch (e) {
-      debugPrint('Profile photo picker error: $e');
-    }
-  }
-
-  Widget _buildUserNameField() {
-    return _buildTextField(
-      'Your Name',
-      _userName,
-      (value) => setState(() => _userName = value),
-      hint: 'Enter your name for personalized greetings',
-    );
-  }
-
-  Widget _buildAINameField() {
-    return _buildTextField(
-      'AI Name (What she calls herself)',
-      _aiName,
-      (value) => setState(() => _aiName = value),
-      hint: 'Default: Nexa',
-    );
-  }
-
-  Widget _buildTTSVoiceDropdown() {
-    final voiceNames = _availableVoices.map((v) => v['name'] as String).toList();
-    if (!voiceNames.contains(_ttsVoiceName) && voiceNames.isNotEmpty) {
-      _ttsVoiceName = voiceNames.first;
-    }
-    return _buildDropdown(
-      'TTS Voice (Female)',
-      _ttsVoiceName,
-      voiceNames.isNotEmpty ? voiceNames : ['Samantha', 'Karen', 'Victoria'],
-      (value) => setState(() => _ttsVoiceName = value!),
-    );
-  }
-
-  Widget _buildVoiceToggle() {
-    return _buildSwitch(
-      'Enable Voice',
-      _voiceEnabled,
-      (value) => setState(() => _voiceEnabled = value),
-    );
-  }
-
-  Widget _buildLanguageDropdown() {
-    return _buildDropdown(
-      'Language',
-      _selectedLanguage,
-      ['english', 'hindi', 'both'],
-      (value) => setState(() => _selectedLanguage = value!),
-    );
-  }
-
-  Widget _buildSpeechRateSlider() {
-    return _buildSlider(
-      'Speech Rate',
-      _speechRate,
-      (value) => setState(() => _speechRate = value),
-    );
-  }
-
-  Widget _buildWeatherApiKeyField() {
-    return _buildTextField(
-      'OpenWeatherMap API Key',
-      _weatherApiKey,
-      (value) => setState(() => _weatherApiKey = value),
-      isPassword: true,
-    );
-  }
-
-  Widget _buildDefaultCityField() {
-    return _buildTextField(
-      'Default City',
-      _defaultCity,
-      (value) => setState(() => _defaultCity = value),
-    );
-  }
-
-  Widget _buildTelegramTokenField() {
-    return _buildTextField(
-      'Telegram Bot Token',
-      _telegramBotToken,
-      (value) => setState(() => _telegramBotToken = value),
-      isPassword: true,
-    );
-  }
-
-  Widget _buildDiscordTokenField() {
-    return _buildTextField(
-      'Discord Bot Token',
-      _discordBotToken,
-      (value) => setState(() => _discordBotToken = value),
-      isPassword: true,
-    );
-  }
-
-  Widget _buildFacebookFields() {
+  @override
+  Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            const Icon(Icons.facebook, color: Color(0xFF1877F2), size: 20),
-            const SizedBox(width: 8),
-            Text('Facebook', style: TextStyle(color: Colors.grey[300], fontSize: 14, fontWeight: FontWeight.w500)),
-          ],
-        ),
-        const SizedBox(height: 8),
-        _buildTextField(
-          'Page Access Token',
-          _facebookAccessToken,
-          (value) => setState(() => _facebookAccessToken = value),
-          isPassword: true,
-          hint: 'EAAxxx...',
-        ),
-        const SizedBox(height: 8),
-        _buildTextField(
-          'Page ID',
-          _facebookPageId,
-          (value) => setState(() => _facebookPageId = value),
-          hint: '123456789',
-        ),
+        Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+        const SizedBox(height: 4),
+        Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textTertiary)),
       ],
     );
-  }
-
-  Widget _buildInstagramFields() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.camera_alt, color: Color(0xFFE4405F), size: 20),
-            const SizedBox(width: 8),
-            Text('Instagram', style: TextStyle(color: Colors.grey[300], fontSize: 14, fontWeight: FontWeight.w500)),
-          ],
-        ),
-        const SizedBox(height: 8),
-        _buildTextField(
-          'Access Token',
-          _instagramAccessToken,
-          (value) => setState(() => _instagramAccessToken = value),
-          isPassword: true,
-        ),
-        const SizedBox(height: 8),
-        _buildTextField(
-          'Page ID',
-          _instagramPageId,
-          (value) => setState(() => _instagramPageId = value),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildWhatsAppFields() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.chat, color: Color(0xFF25D366), size: 20),
-            const SizedBox(width: 8),
-            Text('WhatsApp Business', style: TextStyle(color: Colors.grey[300], fontSize: 14, fontWeight: FontWeight.w500)),
-          ],
-        ),
-        const SizedBox(height: 8),
-        _buildTextField(
-          'Access Token',
-          _whatsappAccessToken,
-          (value) => setState(() => _whatsappAccessToken = value),
-          isPassword: true,
-        ),
-        const SizedBox(height: 8),
-        _buildTextField(
-          'Phone Number ID',
-          _whatsappPhoneNumberId,
-          (value) => setState(() => _whatsappPhoneNumberId = value),
-          hint: '1234567890',
-        ),
-        const SizedBox(height: 8),
-        _buildTextField(
-          'Business Account ID',
-          _whatsappBusinessAccountId,
-          (value) => setState(() => _whatsappBusinessAccountId = value),
-          hint: '123456789',
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTextField(
-    String label,
-    String value,
-    Function(String)? onChanged, {
-    bool isPassword = false,
-    String? hint,
-  }) {
-    final controller = TextEditingController(text: value);
-    return TextField(
-      controller: controller,
-      obscureText: isPassword,
-      enabled: onChanged != null,
-      style: const TextStyle(color: Colors.white),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(color: Colors.grey[400]),
-        hintText: hint,
-        hintStyle: TextStyle(color: Colors.grey[600]),
-        filled: true,
-        fillColor: const Color(0xFF0D1117),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF30363D)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF30363D)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF00BCD4)),
-        ),
-      ),
-      onChanged: onChanged,
-    );
-  }
-
-  Widget _buildDropdown(
-    String label,
-    String value,
-    List<String> items,
-    Function(String?) onChanged,
-  ) {
-    return DropdownButtonFormField<String>(
-      value: items.contains(value) ? value : (items.isNotEmpty ? items.first : null),
-      style: const TextStyle(color: Colors.white),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(color: Colors.grey[400]),
-        filled: true,
-        fillColor: const Color(0xFF0D1117),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF30363D)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF30363D)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF00BCD4)),
-        ),
-      ),
-      items: items.map((item) {
-        return DropdownMenuItem(
-          value: item,
-          child: Text(item.toUpperCase()),
-        );
-      }).toList(),
-      onChanged: items.isNotEmpty ? onChanged : null,
-    );
-  }
-
-  Widget _buildSwitch(String label, bool value, Function(bool) onChanged) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: TextStyle(color: Colors.grey[400])),
-        Switch(
-          value: value,
-          onChanged: onChanged,
-          activeThumbColor: const Color(0xFF00BCD4),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSlider(String label, double value, Function(double) onChanged) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: TextStyle(color: Colors.grey[400])),
-            Text(
-              '${(value * 100).toInt()}%',
-              style: const TextStyle(color: Color(0xFF00BCD4)),
-            ),
-          ],
-        ),
-        Slider(
-          value: value,
-          onChanged: onChanged,
-          activeColor: const Color(0xFF00BCD4),
-          inactiveColor: const Color(0xFF30363D),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSaveButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        child: ElevatedButton(
-          onPressed: _isSaving ? null : _saveSettings,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF00BCD4),
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            elevation: 4,
-            shadowColor: const Color(0xFF00BCD4).withValues(alpha: 0.3),
-          ),
-          child: _isSaving
-              ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : const Text(
-                  'Save Settings',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildResetButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton(
-        onPressed: _resetSettings,
-        style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: Color(0xFF30363D)),
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        child: Text(
-          'Reset to Defaults',
-          style: TextStyle(color: Colors.grey[500], fontSize: 16),
-        ),
-      ),
-    );
-  }
-
-  void _saveSettings() async {
-    setState(() => _isSaving = true);
-
-    try {
-    final prefs = await SharedPreferences.getInstance();
-
-    await prefs.setString('ai_provider', _selectedAIProvider);
-    await prefs.setString('ai_model', _selectedModel);
-    await prefs.setString('ai_api_key', _apiKey);
-    await prefs.setBool('use_local_ai', _useLocalAI);
-    await prefs.setString('user_name', _userName);
-    await prefs.setString('ai_name', _aiName);
-    await prefs.setString('tts_voice_name', _ttsVoiceName);
-    String voiceLocale = 'en-US';
-    if (_availableVoices.isNotEmpty) {
-      final match = _availableVoices.where((v) => v['name'] == _ttsVoiceName);
-      if (match.isNotEmpty) {
-        voiceLocale = match.first['locale'] ?? 'en-US';
-      }
-    }
-    await prefs.setString('tts_voice_locale', voiceLocale);
-    await prefs.setBool('voice_enabled', _voiceEnabled);
-    await prefs.setString('voice_language', _selectedLanguage);
-    await prefs.setDouble('speech_rate', _speechRate);
-    await prefs.setString('weather_api_key', _weatherApiKey);
-    await prefs.setString('default_city', _defaultCity);
-    await prefs.setString('telegram_bot_token', _telegramBotToken);
-    await prefs.setString('discord_bot_token', _discordBotToken);
-    await prefs.setString('facebook_access_token', _facebookAccessToken);
-    await prefs.setString('facebook_page_id', _facebookPageId);
-    await prefs.setString('instagram_access_token', _instagramAccessToken);
-    await prefs.setString('instagram_page_id', _instagramPageId);
-    await prefs.setString('whatsapp_access_token', _whatsappAccessToken);
-    await prefs.setString('whatsapp_phone_number_id', _whatsappPhoneNumberId);
-    await prefs.setString('whatsapp_business_account_id', _whatsappBusinessAccountId);
-
-    AIProvider provider;
-    switch (_selectedAIProvider) {
-      case 'openrouter':
-        provider = AIProvider.openrouter;
-        break;
-      case 'ollama':
-        provider = AIProvider.ollama;
-        break;
-      case 'openai':
-        provider = AIProvider.openai;
-        break;
-      case 'anthropic':
-        provider = AIProvider.anthropic;
-        break;
-      case 'gemini':
-        provider = AIProvider.gemini;
-        break;
-      default:
-        provider = AIProvider.openrouter;
-    }
-
-    final apiKey = _useLocalAI ? 'local' : _apiKey;
-
-    if (apiKey.isEmpty && !_useLocalAI) {
-      setState(() => _isSaving = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please enter an API key'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      return;
-    }
-
-    await ref.read(appStateProvider.notifier).initializeAI(
-      provider: provider,
-      apiKey: apiKey,
-      modelName: _selectedModel,
-    );
-
-    // Setup social media platforms
-    final socialManager = ref.read(appStateProvider).socialManager;
-    if (socialManager != null) {
-      if (_facebookAccessToken.isNotEmpty && _facebookPageId.isNotEmpty) {
-        socialManager.setupFacebook(accessToken: _facebookAccessToken, pageId: _facebookPageId);
-      }
-      if (_instagramAccessToken.isNotEmpty && _instagramPageId.isNotEmpty) {
-        socialManager.setupInstagram(accessToken: _instagramAccessToken, pageId: _instagramPageId);
-      }
-      if (_whatsappAccessToken.isNotEmpty && _whatsappPhoneNumberId.isNotEmpty && _whatsappBusinessAccountId.isNotEmpty) {
-        socialManager.setupWhatsApp(accessToken: _whatsappAccessToken, phoneNumberId: _whatsappPhoneNumberId, businessAccountId: _whatsappBusinessAccountId);
-      }
-    }
-
-    setState(() => _isSaving = false);
-
-    final appState = ref.read(appStateProvider);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            appState.isConnected
-                ? 'Settings saved! Connected to ${_selectedAIProvider.toUpperCase()}!'
-                : 'Settings saved. Failed to connect. Using offline mode.',
-          ),
-          backgroundColor: appState.isConnected ? const Color(0xFF4CAF50) : const Color(0xFFFF9800),
-        ),
-      );
-    }
-    } catch (e) {
-      setState(() => _isSaving = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Save failed: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  void _resetSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    await Future.wait([
-      prefs.remove('ai_provider'),
-      prefs.remove('ai_model'),
-      prefs.remove('ai_api_key'),
-      prefs.remove('use_local_ai'),
-      prefs.remove('voice_enabled'),
-      prefs.remove('voice_language'),
-      prefs.remove('speech_rate'),
-      prefs.remove('weather_api_key'),
-      prefs.remove('default_city'),
-      prefs.remove('telegram_bot_token'),
-      prefs.remove('discord_bot_token'),
-      prefs.remove('facebook_access_token'),
-      prefs.remove('facebook_page_id'),
-      prefs.remove('instagram_access_token'),
-      prefs.remove('instagram_page_id'),
-      prefs.remove('whatsapp_access_token'),
-      prefs.remove('whatsapp_phone_number_id'),
-      prefs.remove('whatsapp_business_account_id'),
-    ]);
-
-    setState(() {
-      _selectedAIProvider = 'openrouter';
-      _selectedModel = 'google/gemma-4-26b-a4b-it:free';
-      _apiKey = '';
-      _useLocalAI = false;
-      _voiceEnabled = true;
-      _selectedLanguage = 'both';
-      _speechRate = 0.5;
-      _weatherApiKey = '';
-      _defaultCity = 'New York';
-      _telegramBotToken = '';
-      _discordBotToken = '';
-      _facebookAccessToken = '';
-      _facebookPageId = '';
-      _instagramAccessToken = '';
-      _instagramPageId = '';
-      _whatsappAccessToken = '';
-      _whatsappPhoneNumberId = '';
-      _whatsappBusinessAccountId = '';
-    });
-
-    _fetchOpenRouterModels();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Settings reset to defaults'),
-          backgroundColor: Color(0xFFFF9800),
-        ),
-      );
-    }
   }
 }

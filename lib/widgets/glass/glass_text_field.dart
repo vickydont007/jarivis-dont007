@@ -4,6 +4,7 @@ import '../../theme/app_spacing.dart';
 
 class GlassTextField extends StatefulWidget {
   final String? hintText;
+  final String? initialValue;
   final IconData? prefixIcon;
   final IconData? suffixIcon;
   final TextEditingController? controller;
@@ -19,6 +20,7 @@ class GlassTextField extends StatefulWidget {
   const GlassTextField({
     super.key,
     this.hintText,
+    this.initialValue,
     this.prefixIcon,
     this.suffixIcon,
     this.controller,
@@ -38,6 +40,7 @@ class GlassTextField extends StatefulWidget {
 
 class _GlassTextFieldState extends State<GlassTextField> {
   late FocusNode _focusNode;
+  late TextEditingController _controller;
   bool _isFocused = false;
 
   @override
@@ -45,12 +48,14 @@ class _GlassTextFieldState extends State<GlassTextField> {
     super.initState();
     _focusNode = widget.focusNode ?? FocusNode();
     _focusNode.addListener(_onFocusChange);
+    _controller = widget.controller ?? TextEditingController(text: widget.initialValue ?? '');
   }
 
   @override
   void dispose() {
     _focusNode.removeListener(_onFocusChange);
     if (widget.focusNode == null) _focusNode.dispose();
+    if (widget.controller == null) _controller.dispose();
     super.dispose();
   }
 
@@ -87,7 +92,7 @@ class _GlassTextFieldState extends State<GlassTextField> {
             : null,
       ),
       child: TextField(
-        controller: widget.controller,
+        controller: _controller,
         focusNode: _focusNode,
         obscureText: widget.obscureText,
         keyboardType: widget.keyboardType,
