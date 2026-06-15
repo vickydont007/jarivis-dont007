@@ -27,16 +27,7 @@ import '../core/services/persistent_scheduler.dart';
 import '../core/services/daily_briefing_service.dart';
 import '../core/services/agent_collaboration.dart';
 import '../core/services/memory_search.dart';
-import '../core/services/proactive_engine.dart';
-import '../core/services/knowledge_hub.dart';
-import '../core/services/watchlist_monitor.dart';
-import '../core/services/project_analyzer.dart';
-import '../core/services/email_service.dart';
-import '../core/services/calendar_intel.dart';
-import '../core/services/external_knowledge.dart';
 import '../core/capabilities/permission_manager.dart';
-import '../core/repositories/timeline_repository.dart';
-import '../core/providers.dart';
 import '../services/scheduler_service.dart';
 import '../services/voice_service.dart';
 import '../social/social_manager.dart';
@@ -68,6 +59,9 @@ class AppState {
   final DailyBriefingService? dailyBriefingService;
   final AgentCollaboration? agentCollaboration;
   final MemorySearch? memorySearch;
+  final TimelineService? timelineService;
+  final AgentManager? agentManager;
+  final MemoryService? memoryService;
 
   AppState({
     this.aiEngine,
@@ -95,6 +89,9 @@ class AppState {
     this.dailyBriefingService,
     this.agentCollaboration,
     this.memorySearch,
+    this.timelineService,
+    this.agentManager,
+    this.memoryService,
   });
 
   AppState copyWith({
@@ -123,6 +120,9 @@ class AppState {
     DailyBriefingService? dailyBriefingService,
     AgentCollaboration? agentCollaboration,
     MemorySearch? memorySearch,
+    TimelineService? timelineService,
+    AgentManager? agentManager,
+    MemoryService? memoryService,
   }) {
     return AppState(
       aiEngine: aiEngine ?? this.aiEngine,
@@ -150,6 +150,9 @@ class AppState {
       dailyBriefingService: dailyBriefingService ?? this.dailyBriefingService,
       agentCollaboration: agentCollaboration ?? this.agentCollaboration,
       memorySearch: memorySearch ?? this.memorySearch,
+      timelineService: timelineService ?? this.timelineService,
+      agentManager: agentManager ?? this.agentManager,
+      memoryService: memoryService ?? this.memoryService,
     );
   }
 }
@@ -178,18 +181,18 @@ class AppStateNotifier extends StateNotifier<AppState> {
   // Phase 5 services
   PermissionManager? _permissionManager;
   PersistentScheduler? _persistentScheduler;
-  DailyBriefingService? _dailyBriefingService;
-  AgentCollaboration? _agentCollaboration;
   MemorySearch? _memorySearch;
   
-  // Phase 7 services
-  ProactiveEngine? _proactiveEngine;
+  // Core services wired to AppState
+  TimelineService? _timelineService;
+  AgentManager? _agentManager;
+  MemoryService? _memoryService;
 
-  AppStateNotifier({OrbStateManager? orb}) : super(AppState()) {
+  AppStateNotifier() : super(AppState()) {
     _memory = MemorySystem();
     _agentNetwork = AgentNetwork();
     _scheduler = SchedulerService();
-    _voiceService = VoiceService(orb: orb);
+    _voiceService = VoiceService();
     _socialManager = SocialManager();
     _contextMemory = ContextMemory();
     _persistence = AppStatePersistence();
@@ -208,6 +211,20 @@ class AppStateNotifier extends StateNotifier<AppState> {
     _permissionManager = PermissionManager();
     _persistentScheduler = PersistentScheduler();
     _memorySearch = MemorySearch();
+
+    // Core services wired to AppState (single source of truth)
+    final orb = OrbStateManager();
+    _timelineService = TimelineService();
+    _agentManager = AgentManager(
+      agentRepository: AgentRepositoryAdapter(_agentNetwork!),
+      taskRepository: TaskRepositoryEmpty(),
+      timeline: _timelineService!,
+      orb: orb,
+    );
+    _memoryService = MemoryService(
+      repository: MemoryRepositoryAdapter(_memory!),
+      timeline: _timelineService!,
+    );
 
     _toolManager = ToolManager(
       memory: _memory!,
@@ -238,28 +255,6 @@ class AppStateNotifier extends StateNotifier<AppState> {
     // Phase 5: Initialize autonomous systems
     _permissionManager!.initialize();
     _persistentScheduler!.initialize();
-    
-    // Phase 7: Initialize proactive engine
-    _proactiveEngine = ProactiveEngine(
-      timeline: TimelineService(repository: InMemoryTimelineRepository()),
-      memory: MemoryService(timeline: TimelineService(repository: InMemoryTimelineRepository())),
-      memorySearch: MemorySearch(),
-      orb: OrbStateManager(),
-      watchlistMonitor: WatchlistMonitor(),
-      projectAnalyzer: ProjectAnalyzer(),
-      emailService: EmailService(),
-      calendarIntel: CalendarIntel(
-        memory: MemoryService(timeline: TimelineService(repository: InMemoryTimelineRepository())),
-        memorySearch: MemorySearch(),
-        knowledgeHub: KnowledgeHub(
-          timeline: TimelineService(repository: InMemoryTimelineRepository()),
-          memory: MemoryService(timeline: TimelineService(repository: InMemoryTimelineRepository())),
-          memorySearch: MemorySearch(),
-        ),
-      ),
-      externalKnowledge: ExternalKnowledge(),
-    );
-    _proactiveEngine!.initialize();
 
     state = state.copyWith(
       memory: _memory,
@@ -280,9 +275,10 @@ class AppStateNotifier extends StateNotifier<AppState> {
       agentOrchestrator: _agentOrchestrator,
       permissionManager: _permissionManager,
       persistentScheduler: _persistentScheduler,
-      dailyBriefingService: _dailyBriefingService,
-      agentCollaboration: _agentCollaboration,
       memorySearch: _memorySearch,
+      timelineService: _timelineService,
+      agentManager: _agentManager,
+      memoryService: _memoryService,
     );
 
     _loadSavedState();
@@ -314,27 +310,6 @@ class AppStateNotifier extends StateNotifier<AppState> {
     } catch (e) {
       print('Failed to load saved state: $e');
     }
-  }
-
-  Future<void> initializePhase5Services({
-    required TimelineService timeline,
-    required AgentManager agents,
-    required MemoryService memory,
-  }) async {
-    _dailyBriefingService = DailyBriefingService(
-      timeline: timeline,
-      agents: agents,
-      memory: memory,
-    );
-    _agentCollaboration = AgentCollaboration(
-      agentManager: agents,
-      timeline: timeline,
-      orb: OrbStateManager(),
-    );
-    state = state.copyWith(
-      dailyBriefingService: _dailyBriefingService,
-      agentCollaboration: _agentCollaboration,
-    );
   }
 
   Future<void> _restoreSocialConnections() async {
@@ -630,11 +605,13 @@ class AppStateNotifier extends StateNotifier<AppState> {
     _screenRecording?.dispose();
     _meetingAssistant?.dispose();
     _notificationIntelligence?.dispose();
+    _timelineService?.dispose();
+    _agentManager?.dispose();
+    _memoryService?.dispose();
     super.dispose();
   }
 }
 
 final appStateProvider = StateNotifierProvider<AppStateNotifier, AppState>((ref) {
-  final orb = ref.watch(orbStateManagerProvider);
-  return AppStateNotifier(orb: orb);
+  return AppStateNotifier();
 });

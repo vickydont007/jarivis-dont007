@@ -18,52 +18,33 @@ import '../core/services/project_analyzer.dart';
 import '../core/services/email_service.dart';
 import '../core/services/calendar_intel.dart';
 import '../core/services/external_knowledge.dart';
-import '../core/repositories/timeline_repository.dart';
-import '../core/repositories/agent_repository.dart';
-import '../core/repositories/task_repository.dart';
-import '../core/repositories/memory_repository.dart';
+import '../providers/app_provider.dart';
 
-// ─── Repository Providers ──────────────────────────────────────────
-
-final timelineRepositoryProvider = Provider<TimelineRepository>((ref) {
-  return InMemoryTimelineRepository();
-});
-
-final agentRepositoryProvider = Provider<AgentRepository>((ref) {
-  return InMemoryAgentRepository();
-});
-
-final taskRepositoryProvider = Provider<TaskRepository>((ref) {
-  return InMemoryTaskRepository();
-});
-
-final memoryRepositoryProvider = Provider<MemoryRepository>((ref) {
-  return InMemoryMemoryRepository();
-});
-
-// ─── Core Service Providers ────────────────────────────────────────
-
-final timelineServiceProvider = Provider<TimelineService>((ref) {
-  final repo = ref.watch(timelineRepositoryProvider);
-  return TimelineService(repository: repo);
-});
+// ─── Core Service Providers (read from AppState) ─────────────────
 
 final orbStateManagerProvider = Provider<OrbStateManager>((ref) {
   return OrbStateManager();
 });
 
+final timelineServiceProvider = Provider<TimelineService>((ref) {
+  final appState = ref.watch(appStateProvider);
+  return appState.timelineService ?? TimelineService();
+});
+
 final agentManagerProvider = Provider<AgentManager>((ref) {
+  final appState = ref.watch(appStateProvider);
   final timeline = ref.watch(timelineServiceProvider);
   final orb = ref.watch(orbStateManagerProvider);
-  return AgentManager(
+  return appState.agentManager ?? AgentManager(
     timeline: timeline,
     orb: orb,
   );
 });
 
 final memoryServiceProvider = Provider<MemoryService>((ref) {
+  final appState = ref.watch(appStateProvider);
   final timeline = ref.watch(timelineServiceProvider);
-  return MemoryService(timeline: timeline);
+  return appState.memoryService ?? MemoryService(timeline: timeline);
 });
 
 final briefingServiceProvider = Provider<BriefingService>((ref) {

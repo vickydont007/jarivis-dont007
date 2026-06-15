@@ -60,6 +60,9 @@ class DynamicAgent {
   int tasksFailed;
   DateTime? lastActive;
   String? lastTaskResult;
+  String? currentTask;
+  String description;
+  double progress;
   List<String> connectedAgentIds;
   Map<String, dynamic> metadata;
 
@@ -77,6 +80,9 @@ class DynamicAgent {
     this.tasksFailed = 0,
     this.lastActive,
     this.lastTaskResult,
+    this.currentTask,
+    this.description = '',
+    this.progress = 0.0,
     List<String>? connectedAgentIds,
     Map<String, dynamic>? metadata,
   })  : color = color ?? _getColorForRole(role),
@@ -205,6 +211,9 @@ class DynamicAgent {
         'spawnTime': spawnTime.toIso8601String(),
         'lastActive': lastActive?.toIso8601String(),
         'connections': connectedAgentIds,
+        'currentTask': currentTask,
+        'description': description,
+        'progress': progress,
       };
 
   static int _idCounter = 0;

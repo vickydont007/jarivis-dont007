@@ -2,6 +2,7 @@ import 'dart:async';
 import '../models/memory_record.dart';
 import '../models/activity_event.dart';
 import '../repositories/memory_repository.dart';
+import '../memory_system.dart';
 import 'timeline_service.dart';
 
 class MemoryService {
@@ -105,5 +106,97 @@ class MemoryService {
 
   void dispose() {
     _memoryUpdateController.close();
+  }
+}
+
+class MemoryRepositoryAdapter implements MemoryRepository {
+  final MemorySystem _system;
+  final _controller = StreamController<List<MemoryRecord>>.broadcast();
+
+  MemoryRepositoryAdapter(this._system) {
+    _system.memoryStream.listen((_) => _notifyListeners());
+    _notifyListeners();
+  }
+
+  MemoryRecord _adapt(MemoryEntry e) {
+    final type = MemoryType.values.firstWhere(
+      (t) => t.name == e.category,
+      orElse: () => MemoryType.fact,
+    );
+    return MemoryRecord(
+      id: e.id,
+      type: type,
+      content: e.content,
+      tags: [],
+      createdAt: e.createdAt,
+      updatedAt: e.updatedAt,
+      source: 'memory',
+      importance: e.metadata['importance'] as int? ?? 5,
+      metadata: e.metadata,
+    );
+  }
+
+  @override
+  Future<void> save(MemoryRecord record) async {}
+
+  @override
+  Future<void> saveAll(List<MemoryRecord> records) async {}
+
+  @override
+  Future<MemoryRecord?> getById(String id) async {
+    final all = await _system.getAllMemories();
+    try {
+      return _adapt(all.firstWhere((e) => e.id == id));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<List<MemoryRecord>> getAll() async {
+    final entries = await _system.getAllMemories();
+    return entries.map(_adapt).toList();
+  }
+
+  @override
+  Future<List<MemoryRecord>> getByType(MemoryType type) async {
+    final entries = await _system.getAllMemories();
+    return entries.where((e) => e.category == type.name).map(_adapt).toList();
+  }
+
+  @override
+  Future<List<MemoryRecord>> search(String query) async {
+    final entries = await _system.searchMemory(query);
+    return entries.map(_adapt).toList();
+  }
+
+  @override
+  Future<List<MemoryRecord>> getRecent({int limit = 50}) async {
+    final entries = await _system.getAllMemories();
+    return entries.take(limit).map(_adapt).toList();
+  }
+
+  @override
+  Future<int> count() async {
+    final entries = await _system.getAllMemories();
+    return entries.length;
+  }
+
+  @override
+  Future<void> delete(String id) async {}
+
+  @override
+  Future<void> clear() async {}
+
+  @override
+  Stream<List<MemoryRecord>> watchAll() => _controller.stream;
+
+  void _notifyListeners() async {
+    final all = await getAll();
+    _controller.add(all);
+  }
+
+  void dispose() {
+    _controller.close();
   }
 }
