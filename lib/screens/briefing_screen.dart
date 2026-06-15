@@ -7,6 +7,7 @@ import '../core/services/daily_briefing_service.dart';
 import '../widgets/glass/glass_card.dart';
 import '../widgets/glass/glass_button.dart';
 import '../widgets/orb/animated_orb.dart';
+import '../widgets/common/error_state.dart';
 
 class BriefingScreen extends ConsumerStatefulWidget {
   const BriefingScreen({super.key});
@@ -19,6 +20,7 @@ class _BriefingScreenState extends ConsumerState<BriefingScreen> {
   DailyBriefingReport? _report;
   bool _isLoading = true;
   bool _isEvening = false;
+  String? _error;
 
   @override
   void initState() {
@@ -35,9 +37,13 @@ class _BriefingScreenState extends ConsumerState<BriefingScreen> {
       setState(() {
         _report = report;
         _isLoading = false;
+        _error = null;
       });
     } catch (e) {
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _error = 'Failed to load briefing: ${e.toString()}';
+      });
     }
   }
 
@@ -100,10 +106,16 @@ class _BriefingScreenState extends ConsumerState<BriefingScreen> {
             // Content
             Expanded(
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
-                  : _report == null
-                      ? _buildEmptyState()
-                      : _buildBriefingContent(),
+                  ? const LoadingState(message: 'Generating briefing...')
+                  : _error != null
+                      ? ErrorState(
+                          message: _error!,
+                          onRetry: _loadBriefing,
+                          retryLabel: 'Retry',
+                        )
+                      : _report == null
+                          ? _buildEmptyState()
+                          : _buildBriefingContent(),
             ),
           ],
         ),

@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
+import '../glass/glass_button.dart';
 
 class EmptyState extends StatelessWidget {
   final IconData icon;
   final String title;
   final String? subtitle;
   final Widget? action;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  final Color? iconColor;
 
   const EmptyState({
     super.key,
@@ -14,6 +18,9 @@ class EmptyState extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.action,
+    this.actionLabel,
+    this.onAction,
+    this.iconColor,
   });
 
   @override
@@ -35,7 +42,7 @@ class EmptyState extends StatelessWidget {
               child: Icon(
                 icon,
                 size: 28,
-                color: AppColors.textDisabled,
+                color: iconColor ?? AppColors.textDisabled,
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
@@ -60,7 +67,14 @@ class EmptyState extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
             ],
-            if (action != null) ...[
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: AppSpacing.xl),
+              GlassButton(
+                onPressed: onAction,
+                label: actionLabel!,
+                icon: Icons.add,
+              ),
+            ] else if (action != null) ...[
               const SizedBox(height: AppSpacing.xl),
               action!,
             ],

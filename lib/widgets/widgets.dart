@@ -14,3 +14,4 @@ export 'common/empty_state.dart';
 export 'common/loading_overlay.dart';
 export 'common/gradient_icon.dart';
 export 'common/profile_avatar.dart';
+export 'common/error_state.dart';

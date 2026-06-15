@@ -10,6 +10,8 @@ import '../widgets/glass/glass_card.dart';
 import '../widgets/glass/glass_button.dart';
 import '../widgets/glass/glass_text_field.dart';
 import '../widgets/glass/glass_tab_bar.dart';
+import '../widgets/common/error_state.dart';
+import '../widgets/common/empty_state.dart';
 
 class ResearchScreen extends ConsumerStatefulWidget {
   const ResearchScreen({super.key});
@@ -23,6 +25,7 @@ class _ResearchScreenState extends ConsumerState<ResearchScreen> {
   final List<_WatchlistItem> _watchlists = [];
   final TextEditingController _topicController = TextEditingController();
   bool _isLoading = false;
+  String? _error;
 
   @override
   void initState() {
@@ -31,7 +34,7 @@ class _ResearchScreenState extends ConsumerState<ResearchScreen> {
   }
 
   Future<void> _loadWatchlists() async {
-    setState(() => _isLoading = true);
+    setState(() { _isLoading = true; _error = null; });
     try {
       final prefs = await SharedPreferences.getInstance();
       final data = prefs.getString('research_watchlists');
@@ -50,7 +53,7 @@ class _ResearchScreenState extends ConsumerState<ResearchScreen> {
         }
       }
     } catch (e) {
-      // Use empty list
+      _error = 'Failed to load watchlists: $e';
     }
     setState(() => _isLoading = false);
   }
@@ -159,10 +162,16 @@ class _ResearchScreenState extends ConsumerState<ResearchScreen> {
 
             Expanded(
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
-                  : _selectedTab == 0
-                      ? _buildWatchlists()
-                      : _buildKnowledgeBase(),
+                  ? const LoadingState(message: 'Loading research...')
+                  : _error != null
+                      ? ErrorState(
+                          message: _error!,
+                          onRetry: _loadWatchlists,
+                          retryLabel: 'Retry',
+                        )
+                      : _selectedTab == 0
+                          ? _buildWatchlists()
+                          : _buildKnowledgeBase(),
             ),
           ],
         ),
@@ -172,28 +181,10 @@ class _ResearchScreenState extends ConsumerState<ResearchScreen> {
 
   Widget _buildWatchlists() {
     if (_watchlists.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('🔍', style: TextStyle(fontSize: 48)),
-            const SizedBox(height: AppSpacing.lg),
-            Text(
-              'Start tracking topics',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: AppColors.textSecondary,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              'Add topics above and JARVIS will monitor\nyour memory for relevant findings',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppColors.textTertiary,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+      return const EmptyState(
+        icon: Icons.search,
+        title: 'Start tracking topics',
+        subtitle: 'Add topics above and JARVIS will monitor\nyour memory for relevant findings',
       );
     }
 
@@ -258,33 +249,23 @@ class _ResearchScreenState extends ConsumerState<ResearchScreen> {
     return FutureBuilder<List<MemorySearchResult>>(
       future: ref.read(memorySearchProvider).getRecentMemories(limit: 30),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator(color: AppColors.accent));
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const LoadingState(message: 'Loading knowledge base...');
+        }
+        if (snapshot.hasError) {
+          return ErrorState(
+            message: 'Failed to load knowledge base',
+            onRetry: () => setState(() {}),
+            retryLabel: 'Retry',
+          );
         }
 
-        final memories = snapshot.data!;
+        final memories = snapshot.data ?? [];
         if (memories.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('📚', style: TextStyle(fontSize: 48)),
-                const SizedBox(height: AppSpacing.lg),
-                Text(
-                  'Your knowledge base is empty',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  'Memories from conversations will appear here',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textTertiary,
-                  ),
-                ),
-              ],
-            ),
+          return const EmptyState(
+            icon: Icons.library_books_outlined,
+            title: 'Your knowledge base is empty',
+            subtitle: 'Memories from conversations will appear here',
           );
         }
 
@@ -345,13 +326,13 @@ class _ResearchScreenState extends ConsumerState<ResearchScreen> {
     return FutureBuilder<List<MemorySearchResult>>(
       future: ref.read(memorySearchProvider).search(item.topic, limit: 5),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Padding(
             padding: EdgeInsets.all(16),
-            child: Center(child: CircularProgressIndicator(color: AppColors.accent, strokeWidth: 2)),
+            child: LoadingState(message: 'Searching...', compact: true),
           );
         }
-        final findings = snapshot.data!;
+        final findings = snapshot.data ?? [];
         if (findings.isEmpty) {
           return const Padding(
             padding: EdgeInsets.all(16),

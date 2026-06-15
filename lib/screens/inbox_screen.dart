@@ -7,6 +7,8 @@ import '../widgets/glass/glass_card.dart';
 import '../widgets/glass/glass_button.dart';
 import '../widgets/glass/glass_text_field.dart';
 import '../widgets/glass/glass_tab_bar.dart';
+import '../widgets/common/error_state.dart';
+import '../widgets/common/empty_state.dart';
 
 class InboxScreen extends ConsumerStatefulWidget {
   const InboxScreen({super.key});
@@ -20,6 +22,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
   final List<_NotificationItem> _notifications = [];
   final List<_EmailItem> _emails = [];
   bool _isLoading = false;
+  String? _error;
 
   @override
   void initState() {
@@ -28,8 +31,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
   }
 
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
-    // Load from timeline and proactive engine
+    setState(() { _isLoading = true; _error = null; });
     try {
       final timeline = ref.read(timelineServiceProvider);
       final events = await timeline.getRecent(limit: 20);
@@ -44,7 +46,6 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
         ));
       }
 
-      // Add proactive insights as notifications
       try {
         final engine = ref.read(proactiveEngineProvider);
         final insights = engine.getTopInsights(limit: 5);
@@ -61,7 +62,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
         // Proactive engine not ready yet
       }
     } catch (e) {
-      // Use empty list
+      _error = 'Failed to load inbox: $e';
     }
     setState(() => _isLoading = false);
   }
@@ -141,10 +142,16 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
 
             Expanded(
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
-                  : _selectedTab == 0
-                      ? _buildNotifications()
-                      : _buildEmail(),
+                  ? const LoadingState(message: 'Loading inbox...')
+                  : _error != null
+                      ? ErrorState(
+                          message: _error!,
+                          onRetry: _loadData,
+                          retryLabel: 'Retry',
+                        )
+                      : _selectedTab == 0
+                          ? _buildNotifications()
+                          : _buildEmail(),
             ),
           ],
         ),
@@ -154,27 +161,10 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
 
   Widget _buildNotifications() {
     if (_notifications.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('🔔', style: TextStyle(fontSize: 48)),
-            const SizedBox(height: AppSpacing.lg),
-            Text(
-              'All caught up!',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: AppColors.textSecondary,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              'No new notifications',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppColors.textTertiary,
-              ),
-            ),
-          ],
-        ),
+      return const EmptyState(
+        icon: Icons.notifications_none,
+        title: 'All caught up!',
+        subtitle: 'No new notifications',
       );
     }
 
@@ -220,34 +210,12 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
 
   Widget _buildEmail() {
     if (_emails.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('📧', style: TextStyle(fontSize: 48)),
-            const SizedBox(height: AppSpacing.lg),
-            Text(
-              'Connect your email',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: AppColors.textSecondary,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              'Add IMAP credentials in Settings to see emails here',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppColors.textTertiary,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            GlassButton(
-              onPressed: () {},
-              label: 'Coming Soon',
-              icon: Icons.email_outlined,
-            ),
-          ],
-        ),
+      return EmptyState(
+        icon: Icons.email_outlined,
+        title: 'Connect your email',
+        subtitle: 'Add IMAP credentials in Settings to see emails here',
+        actionLabel: 'Coming Soon',
+        onAction: () {},
       );
     }
 

@@ -10,6 +10,8 @@ import '../widgets/glass/glass_card.dart';
 import '../widgets/glass/glass_button.dart';
 import '../widgets/glass/glass_text_field.dart';
 import '../widgets/common/status_chip.dart';
+import '../widgets/common/error_state.dart';
+import '../widgets/common/empty_state.dart';
 
 class ProjectsScreen extends ConsumerStatefulWidget {
   const ProjectsScreen({super.key});
@@ -21,6 +23,7 @@ class ProjectsScreen extends ConsumerStatefulWidget {
 class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   final List<_ProjectItem> _projects = [];
   bool _isLoading = false;
+  String? _error;
 
   @override
   void initState() {
@@ -29,7 +32,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   }
 
   Future<void> _loadProjects() async {
-    setState(() => _isLoading = true);
+    setState(() { _isLoading = true; _error = null; });
     try {
       final prefs = await SharedPreferences.getInstance();
       final data = prefs.getString('user_projects');
@@ -49,7 +52,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
         }
       }
     } catch (e) {
-      // Use empty list
+      _error = 'Failed to load projects: $e';
     }
     setState(() => _isLoading = false);
   }
@@ -169,44 +172,25 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
 
             Expanded(
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
-                  : _projects.isEmpty
-                      ? _buildEmptyState()
-                      : _buildProjectList(),
+                  ? const LoadingState(message: 'Loading projects...')
+                  : _error != null
+                      ? ErrorState(
+                          message: _error!,
+                          onRetry: _loadProjects,
+                          retryLabel: 'Retry',
+                        )
+                      : _projects.isEmpty
+                          ? EmptyState(
+                              icon: Icons.folder_outlined,
+                              title: 'No projects tracked yet',
+                              subtitle: 'Add projects to track their progress',
+                              actionLabel: 'Add First Project',
+                              onAction: _addProject,
+                            )
+                          : _buildProjectList(),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text('📁', style: TextStyle(fontSize: 48)),
-          const SizedBox(height: AppSpacing.lg),
-          Text(
-            'No projects tracked yet',
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: AppColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            'Add projects to track their progress',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppColors.textTertiary,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          GlassButton(
-            onPressed: _addProject,
-            label: 'Add First Project',
-            icon: Icons.add,
-          ),
-        ],
       ),
     );
   }

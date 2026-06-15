@@ -10,6 +10,8 @@ import '../widgets/glass/glass_card.dart';
 import '../widgets/glass/glass_button.dart';
 import '../widgets/glass/glass_text_field.dart';
 import '../widgets/common/status_chip.dart';
+import '../widgets/common/error_state.dart';
+import '../widgets/common/empty_state.dart';
 
 class CalendarScreen extends ConsumerStatefulWidget {
   const CalendarScreen({super.key});
@@ -21,6 +23,7 @@ class CalendarScreen extends ConsumerStatefulWidget {
 class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   final List<_CalendarEvent> _events = [];
   bool _isLoading = false;
+  String? _error;
   DateTime _selectedDate = DateTime.now();
 
   @override
@@ -30,7 +33,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   }
 
   Future<void> _loadEvents() async {
-    setState(() => _isLoading = true);
+    setState(() { _isLoading = true; _error = null; });
     try {
       final prefs = await SharedPreferences.getInstance();
       final data = prefs.getString('calendar_events');
@@ -48,7 +51,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         }
       }
     } catch (e) {
-      // Use empty list
+      _error = 'Failed to load events: $e';
     }
     setState(() => _isLoading = false);
   }
@@ -203,10 +206,20 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             // Events list
             Expanded(
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
-                  : upcomingEvents.isEmpty
-                      ? _buildEmptyState()
-                      : _buildEventsList(upcomingEvents),
+                  ? const LoadingState(message: 'Loading events...')
+                  : _error != null
+                      ? ErrorState(
+                          message: _error!,
+                          onRetry: _loadEvents,
+                          retryLabel: 'Retry',
+                        )
+                      : upcomingEvents.isEmpty
+                          ? const EmptyState(
+                              icon: Icons.event_outlined,
+                              title: 'No upcoming events',
+                              subtitle: 'Add events to keep track of your schedule',
+                            )
+                          : _buildEventsList(upcomingEvents),
             ),
           ],
         ),
@@ -280,31 +293,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text('📅', style: TextStyle(fontSize: 48)),
-          const SizedBox(height: AppSpacing.lg),
-          Text(
-            'No upcoming events',
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: AppColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            'Add events to keep track of your schedule',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppColors.textTertiary,
-            ),
-          ),
-        ],
       ),
     );
   }
