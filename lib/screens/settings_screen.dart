@@ -690,6 +690,7 @@ class _AIBrainSectionState extends ConsumerState<_AIBrainSection> {
   bool _localAI = false;
   List<String> _openRouterModels = [];
   List<String> _ollamaModels = [];
+  Set<String> _ollamaToolModels = {};
   bool _isLoadingModels = false;
   String _modelError = '';
 
@@ -753,9 +754,17 @@ class _AIBrainSectionState extends ConsumerState<_AIBrainSection> {
           options: Options(validateStatus: (s) => s! < 500, receiveTimeout: const Duration(seconds: 3)));
         if (resp.statusCode == 200 && resp.data['models'] != null) {
           final models = List<Map<String, dynamic>>.from(resp.data['models']);
+          final toolModels = <String>{};
+          for (final m in models) {
+            final caps = List<String>.from(m['capabilities'] ?? []);
+            if (caps.contains('tools')) {
+              toolModels.add(m['name'] as String);
+            }
+          }
           final names = models.map((m) => m['name'] as String).toList()..sort();
           setState(() {
             _ollamaModels = names;
+            _ollamaToolModels = toolModels;
             if (names.isNotEmpty && !names.contains(_model)) _model = names.first;
           });
         } else {
@@ -878,7 +887,11 @@ class _AIBrainSectionState extends ConsumerState<_AIBrainSection> {
                           GlassDropdown<String>(
                             value: _currentModels.contains(_model) ? _model : (_currentModels.isNotEmpty ? _currentModels.first : null),
                             items: _currentModels
-                                .map((m) => GlassDropdownItem(value: m, label: m))
+                                .where((m) => m != 'Loading...')
+                                .map((m) => GlassDropdownItem(
+                                      value: m,
+                                      label: _ollamaToolModels.contains(m) ? '$m ⚡' : m,
+                                    ))
                                 .toList(),
                             onChanged: (v) => setState(() => _model = v!),
                           ),
@@ -890,6 +903,10 @@ class _AIBrainSectionState extends ConsumerState<_AIBrainSection> {
               if (_modelError.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Text(_modelError, style: const TextStyle(fontSize: 12, color: AppColors.error)),
+              ],
+              if (_provider == 'ollama' && _ollamaModels.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text('⚡ = supports function calling', style: const TextStyle(fontSize: 11, color: AppColors.textTertiary)),
               ],
             ],
           ),
