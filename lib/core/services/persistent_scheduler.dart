@@ -196,45 +196,30 @@ class PersistentScheduler {
 
   Future<Database> _initDatabase() async {
     final path = join(await getDatabasesPath(), _dbName);
-    return await openDatabase(
-      path,
-      version: 2,
-      onCreate: (db, version) async {
-        await db.execute('''
-          CREATE TABLE schedules(
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            description TEXT NOT NULL,
-            type TEXT NOT NULL,
-            status TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            scheduled_at TEXT,
-            completed_at TEXT,
-            cron_expression TEXT,
-            payload TEXT DEFAULT '{}',
-            repeat_count INTEGER DEFAULT 1,
-            current_repeat INTEGER DEFAULT 0,
-            last_error TEXT
-          )
-        ''');
-        await db.execute('''
-          CREATE TABLE execution_history(
-            id TEXT PRIMARY KEY,
-            schedule_id TEXT NOT NULL,
-            schedule_name TEXT NOT NULL,
-            status TEXT NOT NULL,
-            executed_at TEXT NOT NULL,
-            completed_at TEXT,
-            result TEXT,
-            error TEXT,
-            duration_ms INTEGER
-          )
-        ''');
-      },
-      onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 2) {
+    try {
+      return await openDatabase(
+        path,
+        version: 2,
+        onCreate: (db, version) async {
           await db.execute('''
-            CREATE TABLE IF NOT EXISTS execution_history(
+            CREATE TABLE schedules(
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              description TEXT NOT NULL,
+              type TEXT NOT NULL,
+              status TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              scheduled_at TEXT,
+              completed_at TEXT,
+              cron_expression TEXT,
+              payload TEXT DEFAULT '{}',
+              repeat_count INTEGER DEFAULT 1,
+              current_repeat INTEGER DEFAULT 0,
+              last_error TEXT
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE execution_history(
               id TEXT PRIMARY KEY,
               schedule_id TEXT NOT NULL,
               schedule_name TEXT NOT NULL,
@@ -246,9 +231,67 @@ class PersistentScheduler {
               duration_ms INTEGER
             )
           ''');
-        }
-      },
-    );
+        },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS execution_history(
+                id TEXT PRIMARY KEY,
+                schedule_id TEXT NOT NULL,
+                schedule_name TEXT NOT NULL,
+                status TEXT NOT NULL,
+                executed_at TEXT NOT NULL,
+                completed_at TEXT,
+                result TEXT,
+                error TEXT,
+                duration_ms INTEGER
+              )
+            ''');
+          }
+        },
+      );
+    } catch (e) {
+      try {
+        await deleteDatabase(path);
+      } catch (_) {}
+      _database = null;
+      return await openDatabase(
+        path,
+        version: 2,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE schedules(
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              description TEXT NOT NULL,
+              type TEXT NOT NULL,
+              status TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              scheduled_at TEXT,
+              completed_at TEXT,
+              cron_expression TEXT,
+              payload TEXT DEFAULT '{}',
+              repeat_count INTEGER DEFAULT 1,
+              current_repeat INTEGER DEFAULT 0,
+              last_error TEXT
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE execution_history(
+              id TEXT PRIMARY KEY,
+              schedule_id TEXT NOT NULL,
+              schedule_name TEXT NOT NULL,
+              status TEXT NOT NULL,
+              executed_at TEXT NOT NULL,
+              completed_at TEXT,
+              result TEXT,
+              error TEXT,
+              duration_ms INTEGER
+            )
+          ''');
+        },
+      );
+    }
   }
 
   Future<void> initialize() async {

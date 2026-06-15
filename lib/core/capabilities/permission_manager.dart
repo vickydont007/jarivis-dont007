@@ -79,41 +79,79 @@ class PermissionManager {
 
   Future<Database> _initDatabase() async {
     final path = join(await getDatabasesPath(), _dbName);
-    return await openDatabase(
-      path,
-      version: 1,
-      onCreate: (db, version) async {
-        await db.execute('''
-          CREATE TABLE tool_policies (
-            tool_name TEXT PRIMARY KEY,
-            policy TEXT NOT NULL,
-            permission_level TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-          )
-        ''');
-
-        await db.execute('''
-          CREATE TABLE permission_rules (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            pattern TEXT NOT NULL,
-            level TEXT NOT NULL,
-            auto_grant INTEGER DEFAULT 0,
-            created_at TEXT NOT NULL
-          )
-        ''');
-
-        await db.execute('''
-          CREATE TABLE permission_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tool_name TEXT NOT NULL,
-            action TEXT NOT NULL,
-            policy TEXT NOT NULL,
-            timestamp TEXT NOT NULL
-          )
-        ''');
-      },
-    );
+    try {
+      return await openDatabase(
+        path,
+        version: 1,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE tool_policies (
+              tool_name TEXT PRIMARY KEY,
+              policy TEXT NOT NULL,
+              permission_level TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE permission_rules (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              pattern TEXT NOT NULL,
+              level TEXT NOT NULL,
+              auto_grant INTEGER DEFAULT 0,
+              created_at TEXT NOT NULL
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE permission_log (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              tool_name TEXT NOT NULL,
+              action TEXT NOT NULL,
+              policy TEXT NOT NULL,
+              timestamp TEXT NOT NULL
+            )
+          ''');
+        },
+      );
+    } catch (e) {
+      try {
+        await deleteDatabase(path);
+      } catch (_) {}
+      _database = null;
+      return await openDatabase(
+        path,
+        version: 1,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE tool_policies (
+              tool_name TEXT PRIMARY KEY,
+              policy TEXT NOT NULL,
+              permission_level TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE permission_rules (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              pattern TEXT NOT NULL,
+              level TEXT NOT NULL,
+              auto_grant INTEGER DEFAULT 0,
+              created_at TEXT NOT NULL
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE permission_log (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              tool_name TEXT NOT NULL,
+              action TEXT NOT NULL,
+              policy TEXT NOT NULL,
+              timestamp TEXT NOT NULL
+            )
+          ''');
+        },
+      );
+    }
   }
 
   Future<void> _loadPolicies() async {

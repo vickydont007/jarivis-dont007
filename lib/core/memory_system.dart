@@ -78,125 +78,206 @@ class MemorySystem {
     final directory = await getApplicationDocumentsDirectory();
     final path = join(directory.path, 'nextron_memory.db');
 
-    return await openDatabase(
-      path,
-      version: 1,
-      onCreate: (db, version) async {
-        // Create memories table
-        await db.execute('''
-          CREATE TABLE memories(
-            id TEXT PRIMARY KEY,
-            content TEXT NOT NULL,
-            category TEXT DEFAULT 'general',
-            metadata TEXT DEFAULT '{}',
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-          )
-        ''');
+    try {
+      return await openDatabase(
+        path,
+        version: 1,
+        onCreate: (db, version) async {
+          // Create memories table
+          await db.execute('''
+            CREATE TABLE memories(
+              id TEXT PRIMARY KEY,
+              content TEXT NOT NULL,
+              category TEXT DEFAULT 'general',
+              metadata TEXT DEFAULT '{}',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            )
+          ''');
 
-        // Create FTS5 virtual table for full-text search
-        await db.execute('''
-          CREATE VIRTUAL TABLE memories_fts USING fts5(
-            content,
-            category,
-            content='memories',
-            content_rowid='rowid'
-          )
-        ''');
+          // Create FTS5 virtual table for full-text search
+          await db.execute('''
+            CREATE VIRTUAL TABLE memories_fts USING fts5(
+              content,
+              category,
+              content='memories',
+              content_rowid='rowid'
+            )
+          ''');
 
-        // Create triggers to keep FTS in sync
-        await db.execute('''
-          CREATE TRIGGER memories_ai AFTER INSERT ON memories BEGIN
-            INSERT INTO memories_fts(rowid, content, category)
-            VALUES (new.rowid, new.content, new.category);
-          END
-        ''');
+          // Create triggers to keep FTS in sync
+          await db.execute('''
+            CREATE TRIGGER memories_ai AFTER INSERT ON memories BEGIN
+              INSERT INTO memories_fts(rowid, content, category)
+              VALUES (new.rowid, new.content, new.category);
+            END
+          ''');
 
-        await db.execute('''
-          CREATE TRIGGER memories_ad AFTER DELETE ON memories BEGIN
-            INSERT INTO memories_fts(memories_fts, rowid, content, category)
-            VALUES('delete', old.rowid, old.content, old.category);
-          END
-        ''');
+          await db.execute('''
+            CREATE TRIGGER memories_ad AFTER DELETE ON memories BEGIN
+              INSERT INTO memories_fts(memories_fts, rowid, content, category)
+              VALUES('delete', old.rowid, old.content, old.category);
+            END
+          ''');
 
-        await db.execute('''
-          CREATE TRIGGER memories_au AFTER UPDATE ON memories BEGIN
-            INSERT INTO memories_fts(memories_fts, rowid, content, category)
-            VALUES('delete', old.rowid, old.content, old.category);
-            INSERT INTO memories_fts(rowid, content, category)
-            VALUES (new.rowid, new.content, new.category);
-          END
-        ''');
-      },
-    );
+          await db.execute('''
+            CREATE TRIGGER memories_au AFTER UPDATE ON memories BEGIN
+              INSERT INTO memories_fts(memories_fts, rowid, content, category)
+              VALUES('delete', old.rowid, old.content, old.category);
+              INSERT INTO memories_fts(rowid, content, category)
+              VALUES (new.rowid, new.content, new.category);
+            END
+          ''');
+        },
+      );
+    } catch (e) {
+      // Database corrupted — delete and recreate
+      try {
+        final dbFile = await getApplicationDocumentsDirectory();
+        final dbPath = join(dbFile.path, 'nextron_memory.db');
+        await deleteDatabase(dbPath);
+      } catch (_) {}
+      _database = null;
+      return await openDatabase(
+        path,
+        version: 1,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE memories(
+              id TEXT PRIMARY KEY,
+              content TEXT NOT NULL,
+              category TEXT DEFAULT 'general',
+              metadata TEXT DEFAULT '{}',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            )
+          ''');
+          await db.execute('''
+            CREATE VIRTUAL TABLE memories_fts USING fts5(
+              content,
+              category,
+              content='memories',
+              content_rowid='rowid'
+            )
+          ''');
+          await db.execute('''
+            CREATE TRIGGER memories_ai AFTER INSERT ON memories BEGIN
+              INSERT INTO memories_fts(rowid, content, category)
+              VALUES (new.rowid, new.content, new.category);
+            END
+          ''');
+          await db.execute('''
+            CREATE TRIGGER memories_ad AFTER DELETE ON memories BEGIN
+              INSERT INTO memories_fts(memories_fts, rowid, content, category)
+              VALUES('delete', old.rowid, old.content, old.category);
+            END
+          ''');
+          await db.execute('''
+            CREATE TRIGGER memories_au AFTER UPDATE ON memories BEGIN
+              INSERT INTO memories_fts(memories_fts, rowid, content, category)
+              VALUES('delete', old.rowid, old.content, old.category);
+              INSERT INTO memories_fts(rowid, content, category)
+              VALUES (new.rowid, new.content, new.category);
+            END
+          ''');
+        },
+      );
+    }
   }
 
   Future<void> addMemory(MemoryEntry memory) async {
-    final db = await database;
-    await db.insert('memories', memory.toMap());
-    _memoryController.add(memory);
+    try {
+      final db = await database;
+      await db.insert('memories', memory.toMap());
+      _memoryController.add(memory);
+    } catch (_) {
+      _database = null;
+      try {
+        final db = await database;
+        await db.insert('memories', memory.toMap());
+        _memoryController.add(memory);
+      } catch (_) {}
+    }
   }
 
   Future<List<MemoryEntry>> searchMemory(String query) async {
-    final db = await database;
-    final results = await db.rawQuery('''
-      SELECT m.* FROM memories m
-      JOIN memories_fts fts ON m.rowid = fts.rowid
-      WHERE memories_fts MATCH ?
-      ORDER BY rank
-      LIMIT 10
-    ''', [query]);
-
-    return results.map((map) => MemoryEntry.fromMap(map)).toList();
+    try {
+      final db = await database;
+      final results = await db.rawQuery('''
+        SELECT m.* FROM memories m
+        JOIN memories_fts fts ON m.rowid = fts.rowid
+        WHERE memories_fts MATCH ?
+        ORDER BY rank
+        LIMIT 10
+      ''', [query]);
+      return results.map((map) => MemoryEntry.fromMap(map)).toList();
+    } catch (_) {
+      _database = null;
+      return [];
+    }
   }
 
   Future<List<MemoryEntry>> getMemoriesByCategory(String category) async {
-    final db = await database;
-    final results = await db.query(
-      'memories',
-      where: 'category = ?',
-      whereArgs: [category],
-      orderBy: 'updated_at DESC',
-    );
-
-    return results.map((map) => MemoryEntry.fromMap(map)).toList();
+    try {
+      final db = await database;
+      final results = await db.query(
+        'memories',
+        where: 'category = ?',
+        whereArgs: [category],
+        orderBy: 'updated_at DESC',
+      );
+      return results.map((map) => MemoryEntry.fromMap(map)).toList();
+    } catch (_) {
+      _database = null;
+      return [];
+    }
   }
 
   Future<List<MemoryEntry>> getAllMemories() async {
-    final db = await database;
-    final results = await db.query(
-      'memories',
-      orderBy: 'updated_at DESC',
-    );
-
-    return results.map((map) => MemoryEntry.fromMap(map)).toList();
+    try {
+      final db = await database;
+      final results = await db.query(
+        'memories',
+        orderBy: 'updated_at DESC',
+      );
+      return results.map((map) => MemoryEntry.fromMap(map)).toList();
+    } catch (_) {
+      _database = null;
+      return [];
+    }
   }
 
   Future<void> updateMemory(MemoryEntry memory) async {
-    final db = await database;
-    await db.update(
-      'memories',
-      {
-        ...memory.toMap(),
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-      where: 'id = ?',
-      whereArgs: [memory.id],
-    );
+    try {
+      final db = await database;
+      await db.update(
+        'memories',
+        {
+          ...memory.toMap(),
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [memory.id],
+      );
+    } catch (_) {}
   }
 
   Future<void> deleteMemory(String id) async {
-    final db = await database;
-    await db.delete(
-      'memories',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    try {
+      final db = await database;
+      await db.delete(
+        'memories',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    } catch (_) {}
   }
 
   Future<void> clearAllMemories() async {
-    final db = await database;
-    await db.delete('memories');
+    try {
+      final db = await database;
+      await db.delete('memories');
+    } catch (_) {}
   }
 
   void dispose() {

@@ -32,7 +32,7 @@ class VoiceService {
   String _micPermission = 'not_determined';
   VoiceLanguage _currentLanguage = VoiceLanguage.both;
   String _lastFinalText = '';
-  String _currentSessionPrefix = '';
+  int _lastFinalWordCount = 0;
 
   VoiceService({OrbStateManager? orb}) : _orb = orb;
 
@@ -78,19 +78,23 @@ class VoiceService {
           final isFinal = args['isFinal'] as bool? ?? false;
           if (rawText.isNotEmpty) {
             String cleanText = rawText;
-            if (_currentSessionPrefix.isNotEmpty && rawText.startsWith(_currentSessionPrefix)) {
-              cleanText = rawText.substring(_currentSessionPrefix.length).trimLeft();
+            if (_lastFinalWordCount > 0) {
+              final words = rawText.split(RegExp(r'\s+'));
+              if (words.length > _lastFinalWordCount) {
+                cleanText = words.sublist(_lastFinalWordCount).join(' ');
+              }
             }
             if (cleanText.isEmpty) cleanText = rawText;
             if (isFinal) {
               _lastFinalText = cleanText;
+              _lastFinalWordCount = cleanText.split(RegExp(r'\s+')).length;
               _finalTranscriptionController.add(cleanText);
             } else {
               _transcriptionController.add(cleanText);
             }
           }
           if (isFinal) {
-            _currentSessionPrefix = '';
+            _lastFinalWordCount = 0;
             _isListening = false;
             _listeningController.add(false);
             _statusController.add('Stopped');
@@ -163,7 +167,6 @@ class VoiceService {
     if (_isListening) return true;
 
     try {
-      _currentSessionPrefix = _lastFinalText;
       final result = await _channel.invokeMethod('startListening');
       if (result == 'started') {
         _isListening = true;
@@ -198,7 +201,7 @@ class VoiceService {
 
   void resetSession() {
     _lastFinalText = '';
-    _currentSessionPrefix = '';
+    _lastFinalWordCount = 0;
   }
 
   static const List<Map<String, String>> femaleVoices = [

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'theme/app_theme.dart';
 import 'theme/app_colors.dart';
 import 'widgets/sidebar/floating_sidebar.dart';
@@ -42,6 +43,8 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
   bool _isCommandPaletteOpen = false;
   bool _isSidebarExpanded = false;
 
+  static const _navKey = 'jarvis_selected_nav';
+
   final List<Widget> _screens = [
     const BriefingScreen(),
     const InboxScreen(),
@@ -59,7 +62,16 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
   @override
   void initState() {
     super.initState();
+    _loadNavigationState();
     _setupKeyboardShortcuts();
+  }
+
+  Future<void> _loadNavigationState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getInt(_navKey);
+    if (saved != null && saved >= 0 && saved < 6) {
+      setState(() => _selectedIndex = saved);
+    }
   }
 
   void _setupKeyboardShortcuts() {
@@ -109,6 +121,7 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
       _selectedIndex = index;
       _isCommandPaletteOpen = false;
     });
+    SharedPreferences.getInstance().then((p) => p.setInt(_navKey, index));
   }
 
   @override
