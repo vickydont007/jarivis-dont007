@@ -19,6 +19,7 @@ import '../core/services/email_service.dart';
 import '../core/services/calendar_intel.dart';
 import '../core/services/external_knowledge.dart';
 import '../core/services/memory_consolidation.dart';
+import '../core/services/calendar_service.dart';
 import '../providers/app_provider.dart';
 
 // ─── Core Service Providers (read from AppState) ─────────────────
@@ -46,6 +47,11 @@ final memoryServiceProvider = Provider<MemoryService>((ref) {
   final appState = ref.watch(appStateProvider);
   final timeline = ref.watch(timelineServiceProvider);
   return appState.memoryService ?? MemoryService(timeline: timeline);
+});
+
+final calendarServiceProvider = Provider<CalendarService>((ref) {
+  final appState = ref.watch(appStateProvider);
+  return appState.calendarService ?? CalendarService();
 });
 
 final briefingServiceProvider = Provider<BriefingService>((ref) {
@@ -118,10 +124,12 @@ final dailyBriefingServiceProvider = Provider<DailyBriefingService>((ref) {
   final timeline = ref.watch(timelineServiceProvider);
   final agents = ref.watch(agentManagerProvider);
   final memory = ref.watch(memoryServiceProvider);
+  final calendarService = ref.watch(calendarServiceProvider);
   return DailyBriefingService(
     timeline: timeline,
     agents: agents,
     memory: memory,
+    calendarService: calendarService,
   );
 });
 
@@ -267,4 +275,21 @@ final unifiedContextProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
 
 final memoryConsolidationProvider = Provider<MemoryConsolidationService?>((ref) {
   return ref.watch(appStateProvider.notifier).memoryConsolidation;
+});
+
+// ─── Calendar Providers ─────────────────────────────────────────
+
+final calendarEventsProvider = FutureProvider.autoDispose<List>((ref) async {
+  final calendarService = ref.watch(calendarServiceProvider);
+  return calendarService.getAllEvents();
+});
+
+final todayEventsProvider = FutureProvider.autoDispose<List>((ref) async {
+  final calendarService = ref.watch(calendarServiceProvider);
+  return calendarService.getTodayEvents();
+});
+
+final upcomingEventsProvider = FutureProvider.autoDispose<List>((ref) async {
+  final calendarService = ref.watch(calendarServiceProvider);
+  return calendarService.getUpcomingEvents(limit: 10);
 });

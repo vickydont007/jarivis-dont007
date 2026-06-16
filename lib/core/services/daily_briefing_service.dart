@@ -8,6 +8,8 @@ import '../models/memory_record.dart';
 import 'timeline_service.dart';
 import 'agent_manager.dart';
 import 'memory_service.dart';
+import 'calendar_service.dart';
+import '../calendar_event.dart';
 
 enum BriefingType { morning, evening }
 
@@ -80,14 +82,17 @@ class DailyBriefingService {
   final TimelineService _timeline;
   final AgentManager _agents;
   final MemoryService _memory;
+  final CalendarService? _calendarService;
 
   DailyBriefingService({
     required TimelineService timeline,
     required AgentManager agents,
     required MemoryService memory,
+    CalendarService? calendarService,
   })  : _timeline = timeline,
         _agents = agents,
-        _memory = memory;
+        _memory = memory,
+        _calendarService = calendarService;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -198,6 +203,50 @@ class DailyBriefingService {
         description: 'Some operations failed during execution',
         category: 'errors',
       ));
+    }
+
+    // Calendar events in briefing
+    if (_calendarService != null) {
+      try {
+        final todayCalendarEvents = await _calendarService!.getTodayEvents();
+        final upcomingEvents = await _calendarService!.getUpcomingEvents(limit: 5);
+
+        if (todayCalendarEvents.isNotEmpty) {
+          items.add(DailyBriefingItem(
+            icon: '📅',
+            title: '${todayCalendarEvents.length} event${todayCalendarEvents.length > 1 ? 's' : ''} today',
+            description: todayCalendarEvents.map((e) => e.isAllDay ? e.title : '${e.title} at ${e.startTimeStr}').join('; '),
+            category: 'calendar',
+          ));
+        }
+
+        final tomorrowEvents = await _calendarService!.getTomorrowEvents();
+        if (tomorrowEvents.isNotEmpty) {
+          items.add(DailyBriefingItem(
+            icon: '📆',
+            title: '${tomorrowEvents.length} event${tomorrowEvents.length > 1 ? 's' : ''} tomorrow',
+            description: tomorrowEvents.map((e) => e.isAllDay ? e.title : '${e.title} at ${e.startTimeStr}').join('; '),
+            category: 'calendar',
+          ));
+        }
+
+        // Reminders for upcoming events within 2 hours
+        final now = DateTime.now();
+        final soonEvents = todayCalendarEvents.where((e) {
+          final diff = e.startTime.difference(now);
+          return diff.inMinutes > 0 && diff.inMinutes <= 120;
+        }).toList();
+
+        for (final event in soonEvents) {
+          final mins = event.startTime.difference(now).inMinutes;
+          items.add(DailyBriefingItem(
+            icon: '⏰',
+            title: '${event.title} in $mins minutes',
+            description: 'Upcoming at ${event.startTimeStr}${event.location.isNotEmpty ? " at ${event.location}" : ""}',
+            category: 'calendar',
+          ));
+        }
+      } catch (_) {}
     }
 
     if (items.isEmpty) {

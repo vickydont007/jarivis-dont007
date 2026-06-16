@@ -28,6 +28,8 @@ import '../core/services/persistent_scheduler.dart';
 import '../core/services/daily_briefing_service.dart';
 import '../core/services/agent_collaboration.dart';
 import '../core/services/memory_search.dart';
+import '../core/services/calendar_service.dart';
+import '../core/services/reminder_service.dart';
 import '../core/capabilities/permission_manager.dart';
 import '../services/scheduler_service.dart';
 import '../services/voice_service.dart';
@@ -63,6 +65,8 @@ class AppState {
   final TimelineService? timelineService;
   final AgentManager? agentManager;
   final MemoryService? memoryService;
+  final CalendarService? calendarService;
+  final ReminderService? reminderService;
 
   AppState({
     this.aiEngine,
@@ -93,6 +97,8 @@ class AppState {
     this.timelineService,
     this.agentManager,
     this.memoryService,
+    this.calendarService,
+    this.reminderService,
   });
 
   AppState copyWith({
@@ -124,6 +130,8 @@ class AppState {
     TimelineService? timelineService,
     AgentManager? agentManager,
     MemoryService? memoryService,
+    CalendarService? calendarService,
+    ReminderService? reminderService,
   }) {
     return AppState(
       aiEngine: aiEngine ?? this.aiEngine,
@@ -154,6 +162,8 @@ class AppState {
       timelineService: timelineService ?? this.timelineService,
       agentManager: agentManager ?? this.agentManager,
       memoryService: memoryService ?? this.memoryService,
+      calendarService: calendarService ?? this.calendarService,
+      reminderService: reminderService ?? this.reminderService,
     );
   }
 }
@@ -189,6 +199,8 @@ class AppStateNotifier extends StateNotifier<AppState> {
   TimelineService? _timelineService;
   AgentManager? _agentManager;
   MemoryService? _memoryService;
+  CalendarService? _calendarService;
+  ReminderService? _reminderService;
 
   AppStateNotifier() : super(AppState()) {
     _memory = MemorySystem();
@@ -232,6 +244,8 @@ class AppStateNotifier extends StateNotifier<AppState> {
       timeline: _timelineService!,
     );
 
+    _calendarService = CalendarService();
+
     _toolManager = ToolManager(
       memory: _memory!,
       network: _agentNetwork!,
@@ -244,6 +258,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
       meetingAssistant: _meetingAssistant!,
       notificationIntelligence: _notificationIntelligence!,
       fileConverter: _fileConverter!,
+      calendarService: _calendarService!,
     );
     _toolManager!.initialize();
     _toolManager!.setSocialManager(_socialManager!);
@@ -261,6 +276,10 @@ class AppStateNotifier extends StateNotifier<AppState> {
     // Phase 5: Initialize autonomous systems
     _permissionManager!.initialize();
     _persistentScheduler!.initialize();
+
+    // Calendar & Reminder services
+    _reminderService = ReminderService(calendarService: _calendarService!);
+    _reminderService!.initialize();
 
     state = state.copyWith(
       memory: _memory,
@@ -285,6 +304,8 @@ class AppStateNotifier extends StateNotifier<AppState> {
       timelineService: _timelineService,
       agentManager: _agentManager,
       memoryService: _memoryService,
+      calendarService: _calendarService,
+      reminderService: _reminderService,
     );
 
     _loadSavedState();

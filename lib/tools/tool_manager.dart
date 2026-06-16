@@ -48,8 +48,10 @@ import 'clipboard_tool.dart';
 import 'export_tool.dart';
 import 'facebook_tool.dart';
 import 'file_manager_tool.dart';
+import 'calendar_ai_tools.dart';
 import '../social/social_manager.dart';
 import '../core/agent_personality.dart';
+import '../core/services/calendar_service.dart';
 
 const String toolsPrompt = '''IMPORTANT - FILE PATH RULES:
 - You can only access files in the user's home directory: /Users/abc/
@@ -79,7 +81,14 @@ AVAILABLE TOOLS:
 - convert_file, get_supported_formats, check_format_supported: File conversion
 - git_status, git_add, git_commit, git_push, git_pull, git_diff, git_log, git_branch, git_checkout, git_merge: Git operations
 - email_send, email_list, email_read: Email via macOS Mail app
-- calendar_events, calendar_create, calendar_delete: Calendar via macOS Calendar app
+- calendar_create_event: Create a new calendar event with date, time, location, category
+- calendar_update_event: Update an existing calendar event by ID or title
+- calendar_delete_event: Delete a calendar event by ID or title
+- calendar_list_events: List events for today, tomorrow, week, or a specific date
+- calendar_find_free_time: Find free time slots on a given date
+- calendar_get_today: Get today's full agenda
+- calendar_get_week: Get this week's calendar events
+- calendar_search_events: Search events by keyword in title, description, or location
 - db_connect, db_query, db_list_tables, db_disconnect, db_info: SQLite database operations
 - clipboard_get, clipboard_set, clipboard_history, clipboard_clear: Clipboard operations
 - export_chat_md, export_chat_json: Export chat history
@@ -93,20 +102,19 @@ CRITICAL TOOL RULES:
 CALENDAR DATE FORMAT:
 - Date MUST be YYYY-MM-DD format (e.g., "2026-06-20" for 20 June 2026)
 - Time MUST be HH:MM in 24-hour format (e.g., "10:00" for 10 AM, "14:30" for 2:30 PM)
-- Example: calendar_create(title: "Team Meeting", date: "2026-06-20", time: "10:00")
+- Example: calendar_create_event(title: "Team Meeting", date: "2026-06-20", time: "10:00")
 
-EMAIL & CALENDAR CAPABILITIES:
-- You CAN read emails using: email_list, email_read
-- You CAN send emails using: email_send
-- You CAN list calendar events using: calendar_events
-- You CAN create calendar events using: calendar_create
-- You CAN delete calendar events using: calendar_delete
-- When creating a calendar event, ALWAYS call calendar_create directly - it will launch Calendar.app automatically
-- When asked about emails, use email_list to show recent emails, or email_read to read a specific email
-
-TOOL EXECUTION ORDER:
-- For calendar: Just call calendar_create directly with the correct date format. Do NOT call system_open_app first.
-- For email: Just call email_list or email_read directly. Do NOT say you cannot access emails.
+CALENDAR CAPABILITIES:
+- You CAN list calendar events using: calendar_list_events
+- You CAN create calendar events using: calendar_create_event
+- You CAN update calendar events using: calendar_update_event
+- You CAN delete calendar events using: calendar_delete_event
+- You CAN find free time using: calendar_find_free_time
+- You CAN get today's agenda using: calendar_get_today
+- You CAN get this week's events using: calendar_get_week
+- You CAN search events using: calendar_search_events
+- When creating a calendar event, call calendar_create_event with date in YYYY-MM-DD format
+- When asked about schedule, use calendar_get_today or calendar_list_events
 
 RULES:
 1. Always use tools when the user asks you to perform actions
@@ -151,6 +159,7 @@ class ToolManager {
   final AgentCommunication _agentCommunication;
   RAGManager? _ragManager;
   SocialManager? _socialManager;
+  CalendarService? _calendarService;
 
   ToolManager({
     required MemorySystem memory,
@@ -164,6 +173,7 @@ class ToolManager {
     required MeetingAssistant meetingAssistant,
     required NotificationIntelligence notificationIntelligence,
     required FileConverter fileConverter,
+    CalendarService? calendarService,
   })  : _memory = memory,
         _network = network,
         _scheduler = scheduler,
@@ -175,6 +185,7 @@ class ToolManager {
         _meetingAssistant = meetingAssistant,
         _notificationIntelligence = notificationIntelligence,
         _fileConverter = fileConverter,
+        _calendarService = calendarService,
         _codeSandbox = CodeExecutionSandbox(),
         _agentLearning = AgentLearning(),
         _monitor = RealTimeMonitor(),
@@ -229,6 +240,10 @@ class ToolManager {
     _registry.registerAll(getAllDatabaseTools());
     _registry.registerAll(getAllClipboardTools());
     _registry.registerAll(getAllExportTools());
+    // New calendar AI tools
+    if (_calendarService != null) {
+      _registry.registerAll(getAllCalendarAITools(_calendarService!));
+    }
   }
 
   ToolRegistry get registry => _registry;
