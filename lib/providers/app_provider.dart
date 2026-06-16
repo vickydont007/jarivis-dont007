@@ -205,7 +205,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
     _fileConverter = FileConverter();
     _agentOrchestrator = AgentOrchestrator();
     _memoryEvolution = MemoryEvolution();
-    _conversationManager = ConversationManager(_engine);
+    _conversationManager = ConversationManager(_engine, _memory);
     
     // Phase 5: Initialize autonomous systems
     _permissionManager = PermissionManager();
@@ -378,7 +378,8 @@ class AppStateNotifier extends StateNotifier<AppState> {
       personality: personality,
     );
 
-    _conversationManager = ConversationManager(_engine);
+    _conversationManager = ConversationManager(_engine, _memory);
+    await _conversationManager!.restoreSession();
 
     try {
       await _engine!.connect();
@@ -432,9 +433,11 @@ class AppStateNotifier extends StateNotifier<AppState> {
 
     // Recreate engine with updated emotion context
     final personality = await AgentPersonality.load();
+    final savedModel = await _persistence!.loadSetting<String>('selectedModel');
     _engine = _toolManager!.createAIEngine(
       provider: state.provider,
       apiKey: state.apiKey,
+      modelName: savedModel,
       personality: personality,
       emotionContext: emotionContext,
       relationshipContext: relationshipContext,

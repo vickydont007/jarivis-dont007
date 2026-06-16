@@ -30,7 +30,6 @@ class GlassSlider extends StatelessWidget {
         trackHeight: 4,
         thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
         overlayShape: const RoundSliderOverlayShape(overlayRadius: 18),
-        overlayBorderRadius: BorderRadius.circular(18),
       ),
       child: Slider(
         value: value.clamp(min, max),

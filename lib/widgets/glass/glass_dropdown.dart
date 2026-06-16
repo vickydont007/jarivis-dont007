@@ -148,10 +148,14 @@ class _GlassDropdownState<T> extends State<GlassDropdown<T>> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedItem = widget.items.firstWhere(
-      (item) => item.value == widget.value,
-      orElse: () => widget.items.first,
-    );
+    // Handle empty items list gracefully
+    GlassDropdownItem<T>? selectedItem;
+    if (widget.items.isNotEmpty) {
+      selectedItem = widget.items.firstWhere(
+        (item) => item.value == widget.value,
+        orElse: () => widget.items.first,
+      );
+    }
 
     return CompositedTransformTarget(
       link: _layerLink,
@@ -189,7 +193,7 @@ class _GlassDropdownState<T> extends State<GlassDropdown<T>> {
                 ],
                 Expanded(
                   child: Text(
-                    selectedItem.label,
+                    selectedItem?.label ?? widget.hintText ?? '',
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w400,

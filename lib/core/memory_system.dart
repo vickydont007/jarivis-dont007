@@ -81,7 +81,7 @@ class MemorySystem {
     try {
       return await openDatabase(
         path,
-        version: 1,
+        version: 2,
         onCreate: (db, version) async {
           // Create memories table
           await db.execute('''
@@ -128,6 +128,34 @@ class MemorySystem {
               VALUES (new.rowid, new.content, new.category);
             END
           ''');
+
+          // Create conversation_sessions table
+          await db.execute('''
+            CREATE TABLE conversation_sessions(
+              session_id TEXT PRIMARY KEY,
+              messages_json TEXT NOT NULL,
+              summaries_json TEXT NOT NULL,
+              current_summary TEXT,
+              message_count INTEGER DEFAULT 0,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            )
+          ''');
+        },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            await db.execute('''
+              CREATE TABLE conversation_sessions(
+                session_id TEXT PRIMARY KEY,
+                messages_json TEXT NOT NULL,
+                summaries_json TEXT NOT NULL,
+                current_summary TEXT,
+                message_count INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+              )
+            ''');
+          }
         },
       );
     } catch (e) {
@@ -140,7 +168,7 @@ class MemorySystem {
       _database = null;
       return await openDatabase(
         path,
-        version: 1,
+        version: 2,
         onCreate: (db, version) async {
           await db.execute('''
             CREATE TABLE memories(
@@ -152,6 +180,7 @@ class MemorySystem {
               updated_at TEXT NOT NULL
             )
           ''');
+
           await db.execute('''
             CREATE VIRTUAL TABLE memories_fts USING fts5(
               content,
@@ -160,18 +189,21 @@ class MemorySystem {
               content_rowid='rowid'
             )
           ''');
+
           await db.execute('''
             CREATE TRIGGER memories_ai AFTER INSERT ON memories BEGIN
               INSERT INTO memories_fts(rowid, content, category)
               VALUES (new.rowid, new.content, new.category);
             END
           ''');
+
           await db.execute('''
             CREATE TRIGGER memories_ad AFTER DELETE ON memories BEGIN
               INSERT INTO memories_fts(memories_fts, rowid, content, category)
               VALUES('delete', old.rowid, old.content, old.category);
             END
           ''');
+
           await db.execute('''
             CREATE TRIGGER memories_au AFTER UPDATE ON memories BEGIN
               INSERT INTO memories_fts(memories_fts, rowid, content, category)
@@ -179,6 +211,18 @@ class MemorySystem {
               INSERT INTO memories_fts(rowid, content, category)
               VALUES (new.rowid, new.content, new.category);
             END
+          ''');
+
+          await db.execute('''
+            CREATE TABLE conversation_sessions(
+              session_id TEXT PRIMARY KEY,
+              messages_json TEXT NOT NULL,
+              summaries_json TEXT NOT NULL,
+              current_summary TEXT,
+              message_count INTEGER DEFAULT 0,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            )
           ''');
         },
       );
@@ -282,5 +326,109 @@ class MemorySystem {
 
   void dispose() {
     _memoryController.close();
+  }
+
+  // ─── Conversation Session Persistence ──────────────────────────
+
+  /// Save the current conversation state to a session
+  Future<void> saveConversationSession({
+    required String sessionId,
+    required List<Map<String, String>> messages,
+    required List<Map<String, String>> summaries,
+    String? currentSummary,
+    required int messageCount,
+  }) async {
+    try {
+      final db = await database;
+      final now = DateTime.now().toIso8601String();
+      
+      await db.insert(
+        'conversation_sessions',
+        {
+          'session_id': sessionId,
+          'messages_json': jsonEncode(messages),
+          'summaries_json': jsonEncode(summaries),
+          'current_summary': currentSummary,
+          'message_count': messageCount,
+          'created_at': now,
+          'updated_at': now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      // Silently fail - don't crash on persistence issues
+    }
+  }
+
+  /// Load the most recent conversation session
+  Future<Map<String, dynamic>?> loadLatestConversationSession() async {
+    try {
+      final db = await database;
+      final results = await db.query(
+        'conversation_sessions',
+        orderBy: 'updated_at DESC',
+        limit: 1,
+      );
+      
+      if (results.isEmpty) return null;
+      
+      final row = results.first;
+      return {
+        'session_id': row['session_id'],
+        'messages': jsonDecode(row['messages_json'] as String) as List<dynamic>,
+        'summaries': jsonDecode(row['summaries_json'] as String) as List<dynamic>,
+        'current_summary': row['current_summary'],
+        'message_count': row['message_count'] as int,
+        'created_at': row['created_at'],
+        'updated_at': row['updated_at'],
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Get all conversation sessions (for UI)
+  Future<List<Map<String, dynamic>>> getAllConversationSessions({int limit = 20}) async {
+    try {
+      final db = await database;
+      final results = await db.query(
+        'conversation_sessions',
+        orderBy: 'updated_at DESC',
+        limit: limit,
+      );
+      
+      return results.map((row) => {
+        'session_id': row['session_id'],
+        'message_count': row['message_count'] as int,
+        'created_at': row['created_at'],
+        'updated_at': row['updated_at'],
+      }).toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Delete a conversation session
+  Future<void> deleteConversationSession(String sessionId) async {
+    try {
+      final db = await database;
+      await db.delete(
+        'conversation_sessions',
+        where: 'session_id = ?',
+        whereArgs: [sessionId],
+      );
+    } catch (e) {
+      // Silently fail
+    }
+  }
+
+  /// Clear all conversation sessions
+  Future<void> clearAllConversationSessions() async {
+    try {
+      final db = await database;
+      await db.delete('conversation_sessions');
+    } catch (e) {
+      // Silently fail
+    }
   }
 }

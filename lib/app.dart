@@ -6,6 +6,7 @@ import 'theme/app_theme.dart';
 import 'theme/app_colors.dart';
 import 'widgets/sidebar/floating_sidebar.dart';
 import 'widgets/command/command_palette.dart';
+import 'screens/assistant_screen.dart';
 import 'screens/briefing_screen.dart';
 import 'screens/inbox_screen.dart';
 import 'screens/research_screen.dart';
@@ -43,9 +44,11 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
   bool _isCommandPaletteOpen = false;
   bool _isSidebarExpanded = false;
 
-  static const _navKey = 'jarvis_selected_nav';
+  static const _navKey = 'jarvis_selected_nav_v2';
+  static const _navKeyLegacy = 'jarvis_selected_nav';
 
   final List<Widget> _screens = [
+    const AssistantScreen(),
     const BriefingScreen(),
     const InboxScreen(),
     const ResearchScreen(),
@@ -68,9 +71,17 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
 
   Future<void> _loadNavigationState() async {
     final prefs = await SharedPreferences.getInstance();
+
+    // Clear legacy key — old index mapping doesn't match current nav
+    if (prefs.containsKey(_navKeyLegacy)) {
+      await prefs.remove(_navKeyLegacy);
+    }
+
     final saved = prefs.getInt(_navKey);
-    if (saved != null && saved >= 0 && saved < 6) {
-      setState(() => _selectedIndex = saved);
+    if (saved != null && saved >= 0 && saved <= 8) {
+      setState(() {
+        _selectedIndex = saved;
+      });
     }
   }
 
@@ -110,6 +121,9 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
           case LogicalKeyboardKey.digit8:
             _navigateTo(7);
             return true;
+          case LogicalKeyboardKey.digit9:
+            _navigateTo(8);
+            return true;
         }
       }
       return false;
@@ -126,7 +140,15 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
 
   @override
   Widget build(BuildContext context) {
-    final isDevScreen = _selectedIndex >= 6;
+    final isDevScreen = _selectedIndex >= 7 && _selectedIndex <= 8;
+
+    Widget currentScreen;
+    if (isDevScreen) {
+      final devIndex = _selectedIndex - 7;
+      currentScreen = _developerScreens[devIndex];
+    } else {
+      currentScreen = _screens[_selectedIndex];
+    }
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -146,9 +168,7 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
               ),
               // Screen content
               Expanded(
-                child: isDevScreen
-                    ? _developerScreens[_selectedIndex - 6]
-                    : _screens[_selectedIndex],
+                child: currentScreen,
               ),
             ],
           ),
@@ -166,23 +186,26 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
 
   void _handleCommand(String command) {
     switch (command) {
-      case 'Briefing':
+      case 'Assistant':
         _navigateTo(0);
         break;
-      case 'Inbox':
+      case 'Briefing':
         _navigateTo(1);
         break;
-      case 'Research':
+      case 'Inbox':
         _navigateTo(2);
         break;
-      case 'Projects':
+      case 'Research':
         _navigateTo(3);
         break;
-      case 'Calendar':
+      case 'Projects':
         _navigateTo(4);
         break;
-      case 'Settings':
+      case 'Calendar':
         _navigateTo(5);
+        break;
+      case 'Settings':
+        _navigateTo(6);
         break;
     }
   }

@@ -1,17 +1,54 @@
 import 'package:nextron_ai/core/ai_engine.dart';
+import 'package:nextron_ai/core/memory_system.dart';
 
 class ConversationManager {
   static const int _maxMessages = 20;
   static const int _summarizeThreshold = 40;
+  static const String _defaultSessionId = 'jarvis_current_session';
   
   final AIEngine? _aiEngine;
+  final MemorySystem? _memorySystem;
   int _messageCount = 0;
+  bool _restored = false;
   
-  ConversationManager(this._aiEngine);
+  ConversationManager(this._aiEngine, [this._memorySystem]);
 
-  static List<Map<String, String>> _fullMessages = [];
-  static List<Map<String, String>> _summaries = [];
-  static String? _currentSummary;
+  final List<Map<String, String>> _fullMessages = [];
+  final List<Map<String, String>> _summaries = [];
+  String? _currentSummary;
+
+  /// Restore previous conversation session from SQLite on startup
+  Future<void> restoreSession() async {
+    if (_memorySystem == null || _restored) return;
+    _restored = true;
+
+    try {
+      final session = await _memorySystem!.loadLatestConversationSession();
+      if (session == null) return;
+
+      final messages = session['messages'] as List<dynamic>;
+      final summaries = session['summaries'] as List<dynamic>;
+
+      _fullMessages.clear();
+      for (final m in messages) {
+        _fullMessages.add({
+          'role': m['role'] as String,
+          'content': m['content'] as String,
+        });
+      }
+
+      _summaries.clear();
+      for (final s in summaries) {
+        _summaries.add({
+          'role': s['role'] as String,
+          'content': s['content'] as String,
+        });
+      }
+
+      _currentSummary = session['current_summary'] as String?;
+      _messageCount = session['message_count'] as int;
+    } catch (_) {}
+  }
 
   Future<void> addMessage(String role, String content) async {
     _fullMessages.add({
@@ -29,6 +66,22 @@ class ConversationManager {
     if (_messageCount % _summarizeThreshold == 0 && _fullMessages.length >= _maxMessages) {
       await _summarizeOldMessages();
     }
+
+    // Persist to SQLite after every message
+    await _persistSession();
+  }
+
+  Future<void> _persistSession() async {
+    if (_memorySystem == null) return;
+    try {
+      await _memorySystem!.saveConversationSession(
+        sessionId: _defaultSessionId,
+        messages: _fullMessages,
+        summaries: _summaries,
+        currentSummary: _currentSummary,
+        messageCount: _messageCount,
+      );
+    } catch (_) {}
   }
 
   Future<void> _summarizeOldMessages() async {
@@ -46,7 +99,7 @@ class ConversationManager {
         .join('\n');
 
     try {
-      final summary = await _aiEngine.sendMessage(
+      final summary = await _aiEngine!.sendMessage(
         'Summarize this conversation in 2-3 sentences, keeping key facts and emotional context:\n$conversationText',
       );
 
@@ -54,13 +107,15 @@ class ConversationManager {
         _summaries.add({
           'role': 'assistant',
           'content': summary,
-          'timestamp': DateTime.now().toIso8601String(),
         });
         _currentSummary = summary;
         
         if (_summaries.length > 5) {
           _summaries.removeAt(0);
         }
+
+        // Persist after summarization
+        await _persistSession();
       }
     } catch (e) {}
   }
@@ -104,11 +159,16 @@ class ConversationManager {
     return buffer.toString();
   }
 
-  void clear() {
+  Future<void> clear() async {
     _fullMessages.clear();
     _summaries.clear();
     _currentSummary = null;
     _messageCount = 0;
+    if (_memorySystem != null) {
+      try {
+        await _memorySystem!.clearAllConversationSessions();
+      } catch (_) {}
+    }
   }
 
   int get messageCount => _messageCount;
@@ -116,4 +176,8 @@ class ConversationManager {
   int get currentWindowSize => _fullMessages.length;
   
   bool get needsSummarization => _messageCount % _summarizeThreshold == 0 && _messageCount > 0;
+
+  List<Map<String, String>> get recentMessages => List.unmodifiable(_fullMessages);
+  
+  String? get currentSummary => _currentSummary;
 }
