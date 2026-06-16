@@ -18,6 +18,7 @@ import '../core/agent_orchestrator.dart';
 import '../core/memory_evolution.dart';
 import '../core/emotion_detector.dart';
 import '../core/girlfriend_memory.dart';
+import '../core/services/memory_consolidation.dart';
 import '../core/conversation_manager.dart';
 import '../core/services/orb_state_manager.dart';
 import '../core/services/timeline_service.dart';
@@ -177,6 +178,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
   AgentOrchestrator? _agentOrchestrator;
   MemoryEvolution? _memoryEvolution;
   ConversationManager? _conversationManager;
+  MemoryConsolidationService? _memoryConsolidation;
   
   // Phase 5 services
   PermissionManager? _permissionManager;
@@ -206,6 +208,10 @@ class AppStateNotifier extends StateNotifier<AppState> {
     _agentOrchestrator = AgentOrchestrator();
     _memoryEvolution = MemoryEvolution();
     _conversationManager = ConversationManager(_engine, _memory);
+    _memoryConsolidation = MemoryConsolidationService(
+      memoryEvolution: _memoryEvolution!,
+    );
+    _memoryConsolidation!.startAutoConsolidation();
     
     // Phase 5: Initialize autonomous systems
     _permissionManager = PermissionManager();
@@ -430,6 +436,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
     // Get emotion and relationship context for AI
     final emotionContext = await _memoryEvolution!.getCurrentMoodContext();
     final relationshipContext = GirlfriendMemory.getRelationshipContext();
+    final memoryContext = await _memoryConsolidation?.getMemoryContext() ?? '';
 
     // Recreate engine with updated emotion context
     final personality = await AgentPersonality.load();
@@ -441,6 +448,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
       personality: personality,
       emotionContext: emotionContext,
       relationshipContext: relationshipContext,
+      memoryContext: memoryContext,
     );
 
     // Check if orchestrator should handle this as a delegated task
@@ -554,6 +562,9 @@ class AppStateNotifier extends StateNotifier<AppState> {
       await _conversationManager!.addMessage('user', message);
       await _conversationManager!.addMessage('assistant', response);
 
+      // Consolidate into long-term memory
+      _memoryConsolidation?.processMessage(message, response);
+
       return response;
     } catch (e) {
       return 'Error: $e';
@@ -592,6 +603,8 @@ class AppStateNotifier extends StateNotifier<AppState> {
     _engine?.disconnect();
     state = state.copyWith(isConnected: false);
   }
+
+  MemoryConsolidationService? get memoryConsolidation => _memoryConsolidation;
 
   @override
   void dispose() {

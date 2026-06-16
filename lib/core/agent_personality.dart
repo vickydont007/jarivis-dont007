@@ -156,7 +156,7 @@ class AgentPersonality {
     return '$timeGreeting! I am ${name}, your AI assistant. How can I help you today?';
   }
 
-  String getSystemPrompt(String toolsPrompt, {String? emotionContext, String? relationshipContext}) {
+  String getSystemPrompt(String toolsPrompt, {String? emotionContext, String? relationshipContext, String? memoryContext}) {
     final buffer = StringBuffer();
 
     if (greetingStyle == 'girlfriend') {
@@ -194,6 +194,15 @@ class AgentPersonality {
         buffer.writeln('- Promises yaad rakho aur nibhao');
       }
       
+      if (memoryContext != null && memoryContext.isNotEmpty) {
+        buffer.writeln('');
+        buffer.writeln('CONSOLIDATED LONG-TERM MEMORY:');
+        buffer.writeln(memoryContext);
+        buffer.writeln('- User ki important information yaad rakho');
+        buffer.writeln('- Purani memories se context use karo');
+        buffer.writeln('- User profile ke hisaab se respond karo');
+      }
+      
       buffer.writeln('');
       buffer.writeln('IMPORTANT RULES:');
       buffer.writeln('- Hamesha girlfriend ki tarah baat karo, assistant ki tarah nahi');
@@ -217,6 +226,12 @@ class AgentPersonality {
         buffer.writeln('');
         buffer.writeln('USER EMOTION:');
         buffer.writeln(emotionContext);
+      }
+
+      if (memoryContext != null && memoryContext.isNotEmpty) {
+        buffer.writeln('');
+        buffer.writeln('CONSOLIDATED LONG-TERM MEMORY:');
+        buffer.writeln(memoryContext);
       }
     }
 

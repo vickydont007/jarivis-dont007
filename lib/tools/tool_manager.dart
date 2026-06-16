@@ -285,12 +285,13 @@ class ToolManager {
     AgentPersonality? personality,
     String? emotionContext,
     String? relationshipContext,
+    String? memoryContext,
   }) {
     setApiKey(apiKey);
 
     final fullSystemPrompt = personality != null
-        ? personality.getSystemPrompt(toolsPrompt, emotionContext: emotionContext, relationshipContext: relationshipContext)
-        : AgentPersonality().getSystemPrompt(toolsPrompt, emotionContext: emotionContext, relationshipContext: relationshipContext);
+        ? personality.getSystemPrompt(toolsPrompt, emotionContext: emotionContext, relationshipContext: relationshipContext, memoryContext: memoryContext)
+        : AgentPersonality().getSystemPrompt(toolsPrompt, emotionContext: emotionContext, relationshipContext: relationshipContext, memoryContext: memoryContext);
 
     return AIEngine(
       provider: provider,

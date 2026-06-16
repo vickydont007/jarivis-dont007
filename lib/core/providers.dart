@@ -18,6 +18,7 @@ import '../core/services/project_analyzer.dart';
 import '../core/services/email_service.dart';
 import '../core/services/calendar_intel.dart';
 import '../core/services/external_knowledge.dart';
+import '../core/services/memory_consolidation.dart';
 import '../providers/app_provider.dart';
 
 // ─── Core Service Providers (read from AppState) ─────────────────
@@ -260,4 +261,10 @@ final topInsightsProvider = FutureProvider.autoDispose<List<Insight>>((ref) asyn
 final unifiedContextProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   final hub = ref.watch(knowledgeHubProvider);
   return hub.getUnifiedContext();
+});
+
+// ─── Memory Consolidation ───────────────────────────────────────
+
+final memoryConsolidationProvider = Provider<MemoryConsolidationService?>((ref) {
+  return ref.watch(appStateProvider.notifier).memoryConsolidation;
 });

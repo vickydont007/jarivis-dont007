@@ -81,7 +81,7 @@ class MemorySystem {
     try {
       return await openDatabase(
         path,
-        version: 2,
+        version: 3,
         onCreate: (db, version) async {
           // Create memories table
           await db.execute('''
@@ -141,6 +141,9 @@ class MemorySystem {
               updated_at TEXT NOT NULL
             )
           ''');
+
+          // Memory Consolidation tables
+          await _createConsolidationTables(db);
         },
         onUpgrade: (db, oldVersion, newVersion) async {
           if (oldVersion < 2) {
@@ -156,6 +159,9 @@ class MemorySystem {
               )
             ''');
           }
+          if (oldVersion < 3) {
+            await _createConsolidationTables(db);
+          }
         },
       );
     } catch (e) {
@@ -168,7 +174,7 @@ class MemorySystem {
       _database = null;
       return await openDatabase(
         path,
-        version: 2,
+        version: 3,
         onCreate: (db, version) async {
           await db.execute('''
             CREATE TABLE memories(
@@ -224,9 +230,91 @@ class MemorySystem {
               updated_at TEXT NOT NULL
             )
           ''');
+
+          await _createConsolidationTables(db);
         },
       );
     }
+  }
+
+  static Future<void> _createConsolidationTables(Database db) async {
+    // Consolidated memories - long-term knowledge extracted from conversations
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS consolidated_memories(
+        id TEXT PRIMARY KEY,
+        content TEXT NOT NULL,
+        category TEXT NOT NULL,
+        importance_score INTEGER DEFAULT 50,
+        confidence_score REAL DEFAULT 0.5,
+        reinforcement_count INTEGER DEFAULT 1,
+        last_reinforced_at TEXT,
+        source TEXT DEFAULT 'conversation',
+        canonical_id TEXT,
+        metadata TEXT DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE VIRTUAL TABLE IF NOT EXISTS consolidated_memories_fts USING fts5(
+        content,
+        category,
+        source,
+        content='consolidated_memories',
+        content_rowid='rowid'
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TRIGGER IF NOT EXISTS consolidated_memories_ai AFTER INSERT ON consolidated_memories BEGIN
+        INSERT INTO consolidated_memories_fts(rowid, content, category, source)
+        VALUES (new.rowid, new.content, new.category, new.source);
+      END
+    ''');
+
+    await db.execute('''
+      CREATE TRIGGER IF NOT EXISTS consolidated_memories_ad AFTER DELETE ON consolidated_memories BEGIN
+        INSERT INTO consolidated_memories_fts(consolidated_memories_fts, rowid, content, category, source)
+        VALUES('delete', old.rowid, old.content, old.category, old.source);
+      END
+    ''');
+
+    await db.execute('''
+      CREATE TRIGGER IF NOT EXISTS consolidated_memories_au AFTER UPDATE ON consolidated_memories BEGIN
+        INSERT INTO consolidated_memories_fts(consolidated_memories_fts, rowid, content, category, source)
+        VALUES('delete', old.rowid, old.content, old.category, old.source);
+        INSERT INTO consolidated_memories_fts(rowid, content, category, source)
+        VALUES (new.rowid, new.content, new.category, new.source);
+      END
+    ''');
+
+    // User profile - auto-maintained structured profile
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS user_profile(
+        id TEXT PRIMARY KEY,
+        field_name TEXT NOT NULL,
+        field_value TEXT NOT NULL,
+        confidence REAL DEFAULT 0.5,
+        source TEXT DEFAULT 'conversation',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(field_name, field_value)
+      )
+    ''');
+
+    // Memory links - connections between related memories
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS memory_links(
+        id TEXT PRIMARY KEY,
+        from_memory_id TEXT NOT NULL,
+        to_memory_id TEXT NOT NULL,
+        relationship TEXT NOT NULL,
+        strength REAL DEFAULT 0.5,
+        created_at TEXT NOT NULL,
+        UNIQUE(from_memory_id, to_memory_id, relationship)
+      )
+    ''');
   }
 
   Future<void> addMemory(MemoryEntry memory) async {
