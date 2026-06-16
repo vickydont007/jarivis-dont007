@@ -367,14 +367,14 @@ class ProactiveEngine {
     if (!_emailService.isConfigured) return;
 
     try {
-      final emails = await _emailService.fetchUnread();
+      final emails = await _emailService.fetchEmails(unreadOnly: true, limit: 10);
       for (final email in emails) {
         // Store in external knowledge
         await _externalKnowledge.ingest(
           type: 'email',
           title: 'Email: ${email.subject}',
-          content: 'From: ${email.sender}\n${email.preview}',
-          source: 'Email:${email.sender}',
+          content: 'From: ${email.from}\n${email.preview}',
+          source: 'Email:${email.from}',
           tags: ['email', email.isMeeting ? 'meeting' : '', email.hasDeadline ? 'deadline' : '', email.isImportant ? 'important' : ''],
         );
 
@@ -396,11 +396,11 @@ class ProactiveEngine {
               : email.hasDeadline
                   ? '⏰ Deadline: ${email.subject}'
                   : '📧 ${email.subject}',
-          body: 'From: ${email.sender}\n${email.preview.length > 100 ? "${email.preview.substring(0, 100)}..." : email.preview}',
+          body: 'From: ${email.from}\n${email.preview.length > 100 ? "${email.preview.substring(0, 100)}..." : email.preview}',
           source: 'Email',
           createdAt: email.date,
           metadata: {
-            'sender': email.sender,
+            'sender': email.from,
             'isMeeting': email.isMeeting,
             'hasDeadline': email.hasDeadline,
           },

@@ -30,6 +30,7 @@ import '../core/services/agent_collaboration.dart';
 import '../core/services/memory_search.dart';
 import '../core/services/calendar_service.dart';
 import '../core/services/reminder_service.dart';
+import '../core/services/email_service.dart';
 import '../core/capabilities/permission_manager.dart';
 import '../services/scheduler_service.dart';
 import '../services/voice_service.dart';
@@ -67,6 +68,7 @@ class AppState {
   final MemoryService? memoryService;
   final CalendarService? calendarService;
   final ReminderService? reminderService;
+  final EmailService? emailService;
 
   AppState({
     this.aiEngine,
@@ -99,6 +101,7 @@ class AppState {
     this.memoryService,
     this.calendarService,
     this.reminderService,
+    this.emailService,
   });
 
   AppState copyWith({
@@ -132,6 +135,7 @@ class AppState {
     MemoryService? memoryService,
     CalendarService? calendarService,
     ReminderService? reminderService,
+    EmailService? emailService,
   }) {
     return AppState(
       aiEngine: aiEngine ?? this.aiEngine,
@@ -164,6 +168,7 @@ class AppState {
       memoryService: memoryService ?? this.memoryService,
       calendarService: calendarService ?? this.calendarService,
       reminderService: reminderService ?? this.reminderService,
+      emailService: emailService ?? this.emailService,
     );
   }
 }
@@ -201,6 +206,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
   MemoryService? _memoryService;
   CalendarService? _calendarService;
   ReminderService? _reminderService;
+  EmailService? _emailService;
 
   AppStateNotifier() : super(AppState()) {
     _memory = MemorySystem();
@@ -246,6 +252,9 @@ class AppStateNotifier extends StateNotifier<AppState> {
 
     _calendarService = CalendarService();
 
+    _emailService = EmailService();
+    _emailService!.loadConfig();
+
     _toolManager = ToolManager(
       memory: _memory!,
       network: _agentNetwork!,
@@ -259,6 +268,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
       notificationIntelligence: _notificationIntelligence!,
       fileConverter: _fileConverter!,
       calendarService: _calendarService!,
+      emailService: _emailService!,
     );
     _toolManager!.initialize();
     _toolManager!.setSocialManager(_socialManager!);
@@ -306,6 +316,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
       memoryService: _memoryService,
       calendarService: _calendarService,
       reminderService: _reminderService,
+      emailService: _emailService,
     );
 
     _loadSavedState();

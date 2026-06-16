@@ -49,9 +49,11 @@ import 'export_tool.dart';
 import 'facebook_tool.dart';
 import 'file_manager_tool.dart';
 import 'calendar_ai_tools.dart';
+import 'email_ai_tools.dart';
 import '../social/social_manager.dart';
 import '../core/agent_personality.dart';
 import '../core/services/calendar_service.dart';
+import '../core/services/email_service.dart';
 
 const String toolsPrompt = '''IMPORTANT - FILE PATH RULES:
 - You can only access files in the user's home directory: /Users/abc/
@@ -80,7 +82,17 @@ AVAILABLE TOOLS:
 - create_notification_rule, get_notification_rules, record_notification_event, toggle_notification_rule, delete_notification_rule, get_recent_notifications, get_notification_stats: Notification intelligence
 - convert_file, get_supported_formats, check_format_supported: File conversion
 - git_status, git_add, git_commit, git_push, git_pull, git_diff, git_log, git_branch, git_checkout, git_merge: Git operations
-- email_send, email_list, email_read: Email via macOS Mail app
+- email_send, email_list, email_read: Email via macOS Mail app (legacy)
+- email_read: Read emails from inbox with filters
+- email_search: Search emails by keyword
+- email_send: Send an email to a recipient
+- email_draft: Save an email draft without sending
+- email_reply: Reply to an existing email
+- email_forward: Forward an email to another recipient
+- email_archive: Archive an email
+- email_mark_read: Mark an email as read or unread
+- email_get_unread: Get all unread emails
+- email_summarize_inbox: Get inbox summary with stats
 - calendar_create_event: Create a new calendar event with date, time, location, category
 - calendar_update_event: Update an existing calendar event by ID or title
 - calendar_delete_event: Delete a calendar event by ID or title
@@ -104,7 +116,17 @@ CALENDAR DATE FORMAT:
 - Time MUST be HH:MM in 24-hour format (e.g., "10:00" for 10 AM, "14:30" for 2:30 PM)
 - Example: calendar_create_event(title: "Team Meeting", date: "2026-06-20", time: "10:00")
 
-CALENDAR CAPABILITIES:
+CALENDAR & EMAIL CAPABILITIES:
+- You CAN read emails using: email_read (with count/unreadOnly/folder params)
+- You CAN search emails using: email_search
+- You CAN send emails using: email_send
+- You CAN draft emails using: email_draft
+- You CAN reply to emails using: email_reply
+- You CAN forward emails using: email_forward
+- You CAN archive emails using: email_archive
+- You CAN mark emails read/unread using: email_mark_read
+- You CAN get unread emails using: email_get_unread
+- You CAN summarize inbox using: email_summarize_inbox
 - You CAN list calendar events using: calendar_list_events
 - You CAN create calendar events using: calendar_create_event
 - You CAN update calendar events using: calendar_update_event
@@ -113,8 +135,6 @@ CALENDAR CAPABILITIES:
 - You CAN get today's agenda using: calendar_get_today
 - You CAN get this week's events using: calendar_get_week
 - You CAN search events using: calendar_search_events
-- When creating a calendar event, call calendar_create_event with date in YYYY-MM-DD format
-- When asked about schedule, use calendar_get_today or calendar_list_events
 
 RULES:
 1. Always use tools when the user asks you to perform actions
@@ -160,6 +180,7 @@ class ToolManager {
   RAGManager? _ragManager;
   SocialManager? _socialManager;
   CalendarService? _calendarService;
+  EmailService? _emailService;
 
   ToolManager({
     required MemorySystem memory,
@@ -174,6 +195,7 @@ class ToolManager {
     required NotificationIntelligence notificationIntelligence,
     required FileConverter fileConverter,
     CalendarService? calendarService,
+    EmailService? emailService,
   })  : _memory = memory,
         _network = network,
         _scheduler = scheduler,
@@ -186,6 +208,7 @@ class ToolManager {
         _notificationIntelligence = notificationIntelligence,
         _fileConverter = fileConverter,
         _calendarService = calendarService,
+        _emailService = emailService,
         _codeSandbox = CodeExecutionSandbox(),
         _agentLearning = AgentLearning(),
         _monitor = RealTimeMonitor(),
@@ -243,6 +266,10 @@ class ToolManager {
     // New calendar AI tools
     if (_calendarService != null) {
       _registry.registerAll(getAllCalendarAITools(_calendarService!));
+    }
+    // New email AI tools
+    if (_emailService != null) {
+      _registry.registerAll(getAllEmailAITools(_emailService!));
     }
   }
 

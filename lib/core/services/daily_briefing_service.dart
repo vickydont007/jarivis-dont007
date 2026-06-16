@@ -9,6 +9,7 @@ import 'timeline_service.dart';
 import 'agent_manager.dart';
 import 'memory_service.dart';
 import 'calendar_service.dart';
+import 'email_service.dart';
 import '../calendar_event.dart';
 
 enum BriefingType { morning, evening }
@@ -83,16 +84,19 @@ class DailyBriefingService {
   final AgentManager _agents;
   final MemoryService _memory;
   final CalendarService? _calendarService;
+  final EmailService? _emailService;
 
   DailyBriefingService({
     required TimelineService timeline,
     required AgentManager agents,
     required MemoryService memory,
     CalendarService? calendarService,
+    EmailService? emailService,
   })  : _timeline = timeline,
         _agents = agents,
         _memory = memory,
-        _calendarService = calendarService;
+        _calendarService = calendarService,
+        _emailService = emailService;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -244,6 +248,53 @@ class DailyBriefingService {
             title: '${event.title} in $mins minutes',
             description: 'Upcoming at ${event.startTimeStr}${event.location.isNotEmpty ? " at ${event.location}" : ""}',
             category: 'calendar',
+          ));
+        }
+      } catch (_) {}
+    }
+
+    // Email briefing
+    if (_emailService != null) {
+      try {
+        final emailStats = await _emailService!.getEmailStats();
+        final unread = emailStats['unread'] as int? ?? 0;
+        final meetings = emailStats['meetings'] as int? ?? 0;
+        final deadlines = emailStats['deadlines'] as int? ?? 0;
+        final important = emailStats['important'] as int? ?? 0;
+
+        if (unread > 0) {
+          items.add(DailyBriefingItem(
+            icon: '📧',
+            title: '$unread unread email${unread > 1 ? "s" : ""}',
+            description: '$unread new email${unread > 1 ? "s" : ""} in your inbox',
+            category: 'email',
+          ));
+        }
+
+        if (important > 0) {
+          items.add(DailyBriefingItem(
+            icon: '⭐',
+            title: '$important important email${important > 1 ? "s" : ""}',
+            description: 'Important emails require your attention',
+            category: 'email',
+          ));
+        }
+
+        if (meetings > 0) {
+          items.add(DailyBriefingItem(
+            icon: '📅',
+            title: '$meetings meeting-related email${meetings > 1 ? "s" : ""}',
+            description: 'Emails containing meeting invites or references',
+            category: 'email',
+          ));
+        }
+
+        if (deadlines > 0) {
+          items.add(DailyBriefingItem(
+            icon: '⏰',
+            title: '$deadlines email${deadlines > 1 ? "s" : ""} with deadlines',
+            description: 'Emails with deadline references need attention',
+            category: 'email',
           ));
         }
       } catch (_) {}

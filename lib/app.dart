@@ -12,6 +12,7 @@ import 'screens/inbox_screen.dart';
 import 'screens/research_screen.dart';
 import 'screens/projects_screen.dart';
 import 'screens/calendar_screen.dart';
+import 'screens/email_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/file_explorer_screen.dart';
 import 'screens/developer_screen.dart';
@@ -55,6 +56,7 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
     const ResearchScreen(),
     const ProjectsScreen(),
     const CalendarScreen(),
+    const EmailScreen(),
     const FileExplorerScreen(),
     const SettingsScreen(),
   ];
@@ -118,13 +120,13 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
             _navigateTo(5);
             return true;
           case LogicalKeyboardKey.digit7:
-            _navigateTo(6);
-            return true;
-          case LogicalKeyboardKey.digit8:
             _navigateTo(7);
             return true;
-          case LogicalKeyboardKey.digit9:
+          case LogicalKeyboardKey.digit8:
             _navigateTo(8);
+            return true;
+          case LogicalKeyboardKey.digit9:
+            _navigateTo(9);
             return true;
         }
       }
@@ -142,7 +144,7 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
 
   @override
   Widget build(BuildContext context) {
-    final isDevScreen = _selectedIndex >= 8 && _selectedIndex <= 9;
+    final isDevScreen = _selectedIndex >= 9 && _selectedIndex <= 10;
 
     Widget currentScreen;
     if (isDevScreen) {
@@ -206,11 +208,14 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
       case 'Calendar':
         _navigateTo(5);
         break;
-      case 'Files':
+      case 'Email':
         _navigateTo(6);
         break;
-      case 'Settings':
+      case 'Files':
         _navigateTo(7);
+        break;
+      case 'Settings':
+        _navigateTo(8);
         break;
     }
   }

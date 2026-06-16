@@ -57,7 +57,7 @@ class CalendarIntel {
     if (_emailService != null && _emailService.isConfigured) {
       final emailResults = await _emailService.searchEmails(meetingTitle);
       relatedEmails = emailResults.map((e) =>
-        'From: ${e.sender} — Subject: ${e.subject}'
+        'From: ${e.from} — Subject: ${e.subject}'
       ).toList();
     }
 

@@ -6,6 +6,7 @@ export 'models/agent_task.dart';
 export 'models/memory_record.dart';
 export 'models/daily_briefing.dart';
 export 'calendar_event.dart';
+export 'email_message.dart';
 
 // Repositories
 export 'repositories/timeline_repository.dart';
@@ -25,6 +26,8 @@ export 'services/memory_search.dart';
 export 'services/calendar_service.dart';
 export 'services/local_calendar_provider.dart';
 export 'services/reminder_service.dart';
+export 'services/email_service.dart';
+export 'services/inbox_intelligence.dart';
 
 // Providers
 export 'providers.dart';

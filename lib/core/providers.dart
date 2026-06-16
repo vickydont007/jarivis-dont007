@@ -20,6 +20,7 @@ import '../core/services/calendar_intel.dart';
 import '../core/services/external_knowledge.dart';
 import '../core/services/memory_consolidation.dart';
 import '../core/services/calendar_service.dart';
+import '../core/services/inbox_intelligence.dart';
 import '../providers/app_provider.dart';
 
 // ─── Core Service Providers (read from AppState) ─────────────────
@@ -125,11 +126,13 @@ final dailyBriefingServiceProvider = Provider<DailyBriefingService>((ref) {
   final agents = ref.watch(agentManagerProvider);
   final memory = ref.watch(memoryServiceProvider);
   final calendarService = ref.watch(calendarServiceProvider);
+  final emailService = ref.watch(emailServiceProvider);
   return DailyBriefingService(
     timeline: timeline,
     agents: agents,
     memory: memory,
     calendarService: calendarService,
+    emailService: emailService,
   );
 });
 
@@ -191,7 +194,8 @@ final projectAnalyzerProvider = Provider<ProjectAnalyzer>((ref) {
 });
 
 final emailServiceProvider = Provider<EmailService>((ref) {
-  return EmailService();
+  final appState = ref.watch(appStateProvider);
+  return appState.emailService ?? EmailService();
 });
 
 final externalKnowledgeProvider = Provider<ExternalKnowledge>((ref) {
@@ -292,4 +296,27 @@ final todayEventsProvider = FutureProvider.autoDispose<List>((ref) async {
 final upcomingEventsProvider = FutureProvider.autoDispose<List>((ref) async {
   final calendarService = ref.watch(calendarServiceProvider);
   return calendarService.getUpcomingEvents(limit: 10);
+});
+
+// ─── Email Providers ───────────────────────────────────────────
+
+final inboxIntelligenceProvider = Provider<InboxIntelligenceService>((ref) {
+  final emailService = ref.watch(emailServiceProvider);
+  return InboxIntelligenceService(emailService: emailService);
+});
+
+final emailUnreadProvider = FutureProvider.autoDispose<List>((ref) async {
+  final emailService = ref.watch(emailServiceProvider);
+  await emailService.fetchEmails(unreadOnly: true, limit: 20);
+  return emailService.getUnreadEmails(limit: 20);
+});
+
+final emailStatsProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final emailService = ref.watch(emailServiceProvider);
+  return emailService.getEmailStats();
+});
+
+final emailDraftsProvider = FutureProvider.autoDispose<List>((ref) async {
+  final emailService = ref.watch(emailServiceProvider);
+  return emailService.getDrafts();
 });
