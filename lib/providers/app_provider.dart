@@ -34,6 +34,10 @@ import '../core/services/email_service.dart';
 import '../core/services/browser_service.dart';
 import '../core/services/research_service.dart';
 import '../core/services/source_verification.dart';
+import '../core/services/multi_agent_orchestrator.dart';
+import '../core/services/agent_message_bus.dart';
+import '../core/workflows/workflow_database.dart';
+import '../core/agents/agent_registry.dart';
 import '../core/capabilities/permission_manager.dart';
 import '../services/scheduler_service.dart';
 import '../services/voice_service.dart';
@@ -75,6 +79,7 @@ class AppState {
   final BrowserService? browserService;
   final ResearchService? researchService;
   final SourceVerificationService? sourceVerificationService;
+  final MultiAgentOrchestrator? orchestrator;
 
   AppState({
     this.aiEngine,
@@ -111,6 +116,7 @@ class AppState {
     this.browserService,
     this.researchService,
     this.sourceVerificationService,
+    this.orchestrator,
   });
 
   AppState copyWith({
@@ -148,6 +154,7 @@ class AppState {
     BrowserService? browserService,
     ResearchService? researchService,
     SourceVerificationService? sourceVerificationService,
+    MultiAgentOrchestrator? orchestrator,
   }) {
     return AppState(
       aiEngine: aiEngine ?? this.aiEngine,
@@ -184,6 +191,7 @@ class AppState {
       browserService: browserService ?? this.browserService,
       researchService: researchService ?? this.researchService,
       sourceVerificationService: sourceVerificationService ?? this.sourceVerificationService,
+      orchestrator: orchestrator ?? this.orchestrator,
     );
   }
 }
@@ -225,6 +233,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
   BrowserService? _browserService;
   ResearchService? _researchService;
   SourceVerificationService? _sourceVerificationService;
+  MultiAgentOrchestrator? _orchestrator;
 
   AppStateNotifier() : super(AppState()) {
     _memory = MemorySystem();
@@ -298,6 +307,13 @@ class AppStateNotifier extends StateNotifier<AppState> {
     _toolManager!.initialize();
     _toolManager!.setSocialManager(_socialManager!);
 
+    // Initialize Multi-Agent Orchestrator
+    _orchestrator = MultiAgentOrchestrator(
+      toolManager: _toolManager!,
+      getEngine: () => _engine,
+    );
+    _orchestrator!.initialize();
+
     // Wire orchestrator to AI engine and tools
     if (_engine != null && _toolManager != null) {
       _agentOrchestrator!.setEngine(_engine!, _toolManager!);
@@ -345,6 +361,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
       browserService: _browserService,
       researchService: _researchService,
       sourceVerificationService: _sourceVerificationService,
+      orchestrator: _orchestrator,
     );
 
     _loadSavedState();

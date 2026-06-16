@@ -51,6 +51,7 @@ import 'file_manager_tool.dart';
 import 'calendar_ai_tools.dart';
 import 'email_ai_tools.dart';
 import 'research_ai_tools.dart';
+import 'orchestrator_tools.dart';
 import '../social/social_manager.dart';
 import '../core/agent_personality.dart';
 import '../core/services/calendar_service.dart';
@@ -58,6 +59,7 @@ import '../core/services/email_service.dart';
 import '../core/services/browser_service.dart';
 import '../core/services/research_service.dart';
 import '../core/services/source_verification.dart';
+import '../core/services/multi_agent_orchestrator.dart';
 
 const String toolsPrompt = '''IMPORTANT - FILE PATH RULES:
 - You can only access files in the user's home directory: /Users/abc/
@@ -120,6 +122,13 @@ AVAILABLE TOOLS:
 - research_trends: Research latest trends and developments in a topic area
 - research_generate_report: Generate a formatted research report from gathered sources
 - research_save_report: Save a research report as markdown content
+- orchestrator_create_workflow: Create and execute a multi-agent workflow for a complex goal
+- orchestrator_status: Get the status of a specific workflow or all active workflows
+- orchestrator_cancel: Cancel a running workflow
+- orchestrator_resume: Resume a paused workflow by re-executing pending tasks
+- orchestrator_list_workflows: List recent workflows with their status
+- orchestrator_show_agents: Show all registered agents and their capabilities
+- orchestrator_show_tasks: Show detailed task breakdown for a specific workflow
 
 CRITICAL TOOL RULES:
 - Tool names must be EXACTLY as listed above. Never add extra characters like <, >, |, or text after the tool name
@@ -163,6 +172,17 @@ BROWSER & RESEARCH CAPABILITIES:
 - You CAN research trends using: research_trends
 - You CAN generate research reports using: research_generate_report
 - You CAN save research reports using: research_save_report
+
+MULTI-AGENT ORCHESTRATOR:
+- You CAN create multi-agent workflows using: orchestrator_create_workflow
+- You CAN check workflow status using: orchestrator_status
+- You CAN cancel workflows using: orchestrator_cancel
+- You CAN resume workflows using: orchestrator_resume
+- You CAN list workflows using: orchestrator_list_workflows
+- You CAN view registered agents using: orchestrator_show_agents
+- You CAN view workflow tasks using: orchestrator_show_tasks
+- When the user gives a complex multi-step goal, ALWAYS use orchestrator_create_workflow
+- The orchestrator automatically coordinates Research, File, Email, Calendar, Memory, and other agents
 
 RULES:
 1. Always use tools when the user asks you to perform actions
@@ -212,6 +232,7 @@ class ToolManager {
   BrowserService? _browserService;
   ResearchService? _researchService;
   SourceVerificationService? _sourceVerificationService;
+  MultiAgentOrchestrator? _orchestrator;
 
   ToolManager({
     required MemorySystem memory,
@@ -230,6 +251,7 @@ class ToolManager {
     BrowserService? browserService,
     ResearchService? researchService,
     SourceVerificationService? sourceVerificationService,
+    MultiAgentOrchestrator? orchestrator,
   })  : _memory = memory,
         _network = network,
         _scheduler = scheduler,
@@ -246,6 +268,7 @@ class ToolManager {
         _browserService = browserService,
         _researchService = researchService,
         _sourceVerificationService = sourceVerificationService,
+        _orchestrator = orchestrator,
         _codeSandbox = CodeExecutionSandbox(),
         _agentLearning = AgentLearning(),
         _monitor = RealTimeMonitor(),
@@ -315,6 +338,10 @@ class ToolManager {
     if (_researchService != null && _sourceVerificationService != null) {
       _registry.registerAll(getAllResearchTools(_researchService!, _sourceVerificationService!));
     }
+    // Orchestrator tools
+    if (_orchestrator != null) {
+      _registry.registerAll(getAllOrchestratorTools(_orchestrator!));
+    }
   }
 
   ToolRegistry get registry => _registry;
@@ -331,6 +358,7 @@ class ToolManager {
   BrowserService? get browserService => _browserService;
   ResearchService? get researchService => _researchService;
   SourceVerificationService? get sourceVerificationService => _sourceVerificationService;
+  MultiAgentOrchestrator? get orchestrator => _orchestrator;
   String get systemPromptText => toolsPrompt;
 
   void setApiKey(String apiKey) {

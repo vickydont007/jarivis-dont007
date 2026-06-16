@@ -24,6 +24,7 @@ import '../core/services/inbox_intelligence.dart';
 import '../core/services/browser_service.dart';
 import '../core/services/research_service.dart';
 import '../core/services/source_verification.dart';
+import '../core/services/multi_agent_orchestrator.dart';
 import '../providers/app_provider.dart';
 
 // ─── Core Service Providers (read from AppState) ─────────────────
@@ -131,6 +132,7 @@ final dailyBriefingServiceProvider = Provider<DailyBriefingService>((ref) {
   final calendarService = ref.watch(calendarServiceProvider);
   final emailService = ref.watch(emailServiceProvider);
   final researchService = ref.watch(researchServiceProvider);
+  final orchestrator = ref.watch(orchestratorProvider);
   return DailyBriefingService(
     timeline: timeline,
     agents: agents,
@@ -138,6 +140,7 @@ final dailyBriefingServiceProvider = Provider<DailyBriefingService>((ref) {
     calendarService: calendarService,
     emailService: emailService,
     researchService: researchService,
+    orchestrator: orchestrator,
   );
 });
 
@@ -343,4 +346,11 @@ final sourceVerificationServiceProvider = Provider<SourceVerificationService>((r
   final appState = ref.watch(appStateProvider);
   final browser = ref.watch(browserServiceProvider);
   return appState.sourceVerificationService ?? SourceVerificationService(browser: browser);
+});
+
+// ─── Orchestrator Provider ─────────────────────────────────────
+
+final orchestratorProvider = Provider<MultiAgentOrchestrator?>((ref) {
+  final appState = ref.watch(appStateProvider);
+  return appState.orchestrator;
 });

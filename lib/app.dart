@@ -15,6 +15,7 @@ import 'screens/calendar_screen.dart';
 import 'screens/email_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/file_explorer_screen.dart';
+import 'screens/agent_control_center_screen.dart';
 import 'screens/developer_screen.dart';
 import 'screens/runtime_validation_screen.dart';
 
@@ -59,6 +60,7 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
     const EmailScreen(),
     const FileExplorerScreen(),
     const SettingsScreen(),
+    const AgentControlCenterScreen(),
   ];
 
   final List<Widget> _developerScreens = [
@@ -82,7 +84,7 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
     }
 
     final saved = prefs.getInt(_navKey);
-    if (saved != null && saved >= 0 && saved <= 9) {
+    if (saved != null && saved >= 0 && saved <= 11) {
       setState(() {
         _selectedIndex = saved;
       });
@@ -116,20 +118,23 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
           case LogicalKeyboardKey.digit5:
             _navigateTo(4);
             return true;
-          case LogicalKeyboardKey.digit6:
-            _navigateTo(5);
-            return true;
-          case LogicalKeyboardKey.digit7:
-            _navigateTo(7);
-            return true;
-          case LogicalKeyboardKey.digit8:
-            _navigateTo(8);
-            return true;
-          case LogicalKeyboardKey.digit9:
-            _navigateTo(9);
-            return true;
-        }
-      }
+           case LogicalKeyboardKey.digit6:
+             _navigateTo(5);
+             return true;
+           case LogicalKeyboardKey.digit7:
+             _navigateTo(6);
+             return true;
+           case LogicalKeyboardKey.digit8:
+             _navigateTo(7);
+             return true;
+           case LogicalKeyboardKey.digit9:
+             _navigateTo(8);
+             return true;
+           case LogicalKeyboardKey.digit0:
+             _navigateTo(9);
+             return true;
+         }
+       }
       return false;
     });
   }
@@ -144,11 +149,11 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
 
   @override
   Widget build(BuildContext context) {
-    final isDevScreen = _selectedIndex >= 9 && _selectedIndex <= 10;
+    final isDevScreen = _selectedIndex >= 10 && _selectedIndex <= 11;
 
     Widget currentScreen;
     if (isDevScreen) {
-      final devIndex = _selectedIndex - 7;
+      final devIndex = _selectedIndex - 10;
       currentScreen = _developerScreens[devIndex];
     } else {
       currentScreen = _screens[_selectedIndex];
@@ -216,6 +221,9 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
         break;
       case 'Settings':
         _navigateTo(8);
+        break;
+      case 'Agent Control Center':
+        _navigateTo(9);
         break;
     }
   }

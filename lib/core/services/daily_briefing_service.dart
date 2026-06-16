@@ -12,6 +12,8 @@ import 'calendar_service.dart';
 import 'email_service.dart';
 import 'browser_service.dart';
 import 'research_service.dart';
+import 'multi_agent_orchestrator.dart';
+import '../models/workflow.dart';
 import '../calendar_event.dart';
 
 enum BriefingType { morning, evening }
@@ -88,6 +90,7 @@ class DailyBriefingService {
   final CalendarService? _calendarService;
   final EmailService? _emailService;
   final ResearchService? _researchService;
+  final MultiAgentOrchestrator? _orchestrator;
 
   DailyBriefingService({
     required TimelineService timeline,
@@ -96,12 +99,14 @@ class DailyBriefingService {
     CalendarService? calendarService,
     EmailService? emailService,
     ResearchService? researchService,
+    MultiAgentOrchestrator? orchestrator,
   })  : _timeline = timeline,
         _agents = agents,
         _memory = memory,
         _calendarService = calendarService,
         _emailService = emailService,
-        _researchService = researchService;
+        _researchService = researchService,
+        _orchestrator = orchestrator;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -315,6 +320,32 @@ class DailyBriefingService {
             title: '${recentReports.length} research report${recentReports.length > 1 ? "s" : ""} generated',
             description: recentReports.map((r) => r.topic).join('; '),
             category: 'research',
+          ));
+        }
+      } catch (_) {}
+    }
+
+    // Workflow status in briefing
+    if (_orchestrator != null) {
+      try {
+        final active = await _orchestrator!.getActiveWorkflows();
+        final failed = await _orchestrator!.getWorkflowsByStatus(WorkflowStatus.failed);
+
+        if (active.isNotEmpty) {
+          items.add(DailyBriefingItem(
+            icon: '🔄',
+            title: '${active.length} active workflow${active.length > 1 ? 's' : ''}',
+            description: active.map((w) => w.goal).take(3).join('; '),
+            category: 'orchestrator',
+          ));
+        }
+
+        if (failed.isNotEmpty) {
+          items.add(DailyBriefingItem(
+            icon: '⚠️',
+            title: '${failed.length} failed workflow${failed.length > 1 ? 's' : ''}',
+            description: 'Some complex goals encountered errors',
+            category: 'orchestrator',
           ));
         }
       } catch (_) {}
