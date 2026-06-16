@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_colors.dart';
@@ -8,6 +9,7 @@ import '../core/capability_providers.dart';
 import '../core/providers.dart';
 import '../providers/app_provider.dart';
 import '../providers/chat_provider.dart';
+import '../services/voice_service.dart';
 import '../widgets/orb/animated_orb.dart';
 import '../widgets/glass/glass_card.dart';
 import '../widgets/glass/glass_button.dart';
@@ -23,8 +25,80 @@ class AssistantScreen extends ConsumerStatefulWidget {
 class _AssistantScreenState extends ConsumerState<AssistantScreen> {
   bool _isListening = false;
   bool _isSending = false;
+  bool _isSpeaking = false;
+  VoiceMode _voiceMode = VoiceMode.idle;
+  String _transcriptionText = '';
+  String _voiceStatus = '';
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+
+  // Voice stream subscriptions
+  StreamSubscription? _listeningSub;
+  StreamSubscription? _transcriptionSub;
+  StreamSubscription? _finalTranscriptionSub;
+  StreamSubscription? _statusSub;
+  StreamSubscription? _ttsCompletionSub;
+  StreamSubscription? _voiceModeSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupVoiceStreams();
+  }
+
+  @override
+  void dispose() {
+    _cancelVoiceSubscriptions();
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _setupVoiceStreams() {
+    final appState = ref.read(appStateProvider);
+    final voiceService = appState.voiceService;
+    if (voiceService == null) return;
+
+    _listeningSub = voiceService.listeningStream.listen((listening) {
+      if (mounted) setState(() => _isListening = listening);
+    });
+
+    _transcriptionSub = voiceService.transcriptionStream.listen((text) {
+      if (mounted) {
+        setState(() => _transcriptionText = text);
+        _messageController.text = text;
+      }
+    });
+
+    _finalTranscriptionSub = voiceService.finalTranscriptionStream.listen((text) {
+      if (mounted && text.isNotEmpty) {
+        _messageController.text = text;
+        setState(() => _transcriptionText = '');
+        _sendMessage();
+      }
+    });
+
+    _statusSub = voiceService.statusStream.listen((status) {
+      if (mounted) setState(() => _voiceStatus = status);
+    });
+
+    _ttsCompletionSub = voiceService.ttsCompletionStream.listen((_) {
+      if (mounted) setState(() => _isSpeaking = false);
+    });
+
+    _voiceModeSub = voiceService.voiceModeStream.listen((mode) {
+      if (mounted) setState(() => _voiceMode = mode);
+    });
+  }
+
+  void _cancelVoiceSubscriptions() {
+    _listeningSub?.cancel();
+    _transcriptionSub?.cancel();
+    _finalTranscriptionSub?.cancel();
+    _statusSub?.cancel();
+    _ttsCompletionSub?.cancel();
+    _voiceModeSub?.cancel();
+  }
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
@@ -43,7 +117,28 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
   }
 
   void _handleOrbTap() {
-    setState(() => _isListening = !_isListening);
+    final voiceService = ref.read(appStateProvider).voiceService;
+    if (voiceService == null || !voiceService.isSTTAvailable) return;
+
+    if (_isListening) {
+      voiceService.stopListening();
+    } else {
+      voiceService.resetSession();
+      _messageController.clear();
+      voiceService.startListening();
+    }
+  }
+
+  void _toggleConversationMode() {
+    final voiceService = ref.read(appStateProvider).voiceService;
+    if (voiceService == null) return;
+
+    if (_voiceMode == VoiceMode.listening || _voiceMode == VoiceMode.speaking) {
+      voiceService.stopConversationMode();
+    } else {
+      _messageController.clear();
+      voiceService.startConversationMode();
+    }
   }
 
   void _sendMessage() async {
@@ -52,6 +147,9 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
     if (message.isEmpty) return;
 
     _isSending = true;
+    if (_isListening) {
+      ref.read(appStateProvider).voiceService?.stopListening();
+    }
     ref.read(chatProvider.notifier).addUserMessage(message);
     _messageController.clear();
     _scrollToBottom();
@@ -87,6 +185,14 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
 
         ref.read(chatProvider.notifier).addAssistantMessage(response);
         _scrollToBottom();
+
+        // Auto-speak response if voice is enabled
+        final voiceService = appState.voiceService;
+        if (voiceService != null && voiceService.autoSpeak && response.isNotEmpty) {
+          final cleanResponse = voiceService.stripMarkdown(response);
+          voiceService.speak(cleanResponse);
+          setState(() => _isSpeaking = true);
+        }
       } catch (e) {
         ref.read(chatProvider.notifier).addAssistantMessage('Error: $e');
       }
@@ -129,8 +235,6 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
                   ? _buildWelcomeView(orbState, briefing, memories, agents, tasks)
                   : _buildChatView(chatState),
             ),
-
-            // Input bar
             _buildInputBar(chatState.isLoading),
           ],
         ),
@@ -154,23 +258,38 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
         children: [
           const SizedBox(height: AppSpacing.section),
 
-          // The Orb — real state from OrbStateManager
+          // The Orb
           Center(
             child: AnimatedOrb(
               state: orbState.value ?? OrbState.idle,
               size: AppSpacing.orbIdle,
               onTap: _handleOrbTap,
-              label: _isListening
-                  ? 'I\'m listening...'
-                  : (orbState.value == OrbState.thinking)
-                      ? 'Let me think...'
-                      : (orbState.value == OrbState.speaking)
-                          ? 'Speaking...'
-                          : null,
+              label: _getOrbLabel(),
             ),
           ),
 
           const SizedBox(height: AppSpacing.xxxl),
+
+          // Transcription display
+          if (_transcriptionText.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: AppColors.accent.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+                border: Border.all(color: AppColors.accent.withOpacity(0.3)),
+              ),
+              child: Text(
+                _transcriptionText,
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: AppColors.accent,
+                  fontStyle: FontStyle.italic,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
 
           // Greeting
           Text(
@@ -196,7 +315,7 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
 
           const SizedBox(height: AppSpacing.xxxl),
 
-          // Briefing from BriefingService
+          // Briefing
           briefing.when(
             data: (b) => b != null
                 ? _buildBriefingCard(b)
@@ -207,7 +326,7 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
 
           const SizedBox(height: AppSpacing.xxxl),
 
-          // Status bar — real data
+          // Status bar
           _buildStatusBar(
             memoryCount: memories.value?.length ?? 0,
             agentCount: agents.value?.length ?? 0,
@@ -216,6 +335,15 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
         ],
       ),
     );
+  }
+
+  String? _getOrbLabel() {
+    if (_isListening) return 'I\'m listening...';
+    if (_isSpeaking) return 'Speaking...';
+    if (_voiceMode == VoiceMode.processing) return 'Processing...';
+    if (_voiceMode == VoiceMode.listening) return 'Listening...';
+    if (_voiceMode == VoiceMode.speaking) return 'Speaking...';
+    return null;
   }
 
   Widget _buildChatView(ChatState chatState) {
@@ -228,7 +356,6 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
       itemCount: chatState.messages.length + (chatState.isLoading ? 1 : 0),
       itemBuilder: (context, index) {
         if (index == chatState.messages.length) {
-          // Loading indicator
           return const Padding(
             padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
             child: Row(
@@ -521,6 +648,9 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
   }
 
   Widget _buildInputBar([bool isLoading = false]) {
+    final voiceService = ref.read(appStateProvider).voiceService;
+    final hasVoice = voiceService != null && voiceService.isSTTAvailable;
+
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: const BoxDecoration(
@@ -537,25 +667,51 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
         child: Row(
           children: [
             // Voice button
-            GestureDetector(
-              onTap: _handleOrbTap,
-              child: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: _isListening
-                      ? AppColors.accent.withOpacity(0.15)
-                      : AppColors.glassFill,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  _isListening ? Icons.stop : Icons.mic,
-                  size: 18,
-                  color: _isListening ? AppColors.accent : AppColors.textSecondary,
+            if (hasVoice)
+              GestureDetector(
+                onTap: _handleOrbTap,
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: _isListening
+                        ? AppColors.accent.withOpacity(0.15)
+                        : AppColors.glassFill,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _isListening ? Icons.stop : Icons.mic,
+                    size: 18,
+                    color: _isListening ? AppColors.accent : AppColors.textSecondary,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: AppSpacing.md),
+            if (hasVoice) const SizedBox(width: AppSpacing.sm),
+            // Conversation mode button
+            if (hasVoice)
+              GestureDetector(
+                onTap: _toggleConversationMode,
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: _voiceMode == VoiceMode.listening ||
+                            _voiceMode == VoiceMode.speaking
+                        ? Colors.green.withOpacity(0.15)
+                        : AppColors.glassFill,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.record_voice_over,
+                    size: 18,
+                    color: _voiceMode == VoiceMode.listening ||
+                            _voiceMode == VoiceMode.speaking
+                        ? Colors.green
+                        : AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            if (hasVoice) const SizedBox(width: AppSpacing.md),
             // Text input
             Expanded(
               child: TextField(
@@ -564,8 +720,12 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
                   fontSize: 14,
                   color: AppColors.textPrimary,
                 ),
-                decoration: const InputDecoration(
-                  hintText: 'Type a message or tap the orb...',
+                decoration: InputDecoration(
+                  hintText: _isListening
+                      ? 'Listening...'
+                      : _voiceStatus.isNotEmpty
+                          ? _voiceStatus
+                          : 'Type a message or tap the mic...',
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
                   focusedBorder: InputBorder.none,

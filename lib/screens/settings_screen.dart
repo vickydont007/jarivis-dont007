@@ -1007,6 +1007,8 @@ class _VoiceSection extends ConsumerStatefulWidget {
 
 class _VoiceSectionState extends ConsumerState<_VoiceSection> {
   bool _voiceEnabled = true;
+  bool _autoSpeak = true;
+  bool _wakeWordEnabled = false;
   String _ttsVoiceName = 'Samantha';
   String _selectedLanguage = 'both';
   double _speechRate = 0.5;
@@ -1022,9 +1024,11 @@ class _VoiceSectionState extends ConsumerState<_VoiceSection> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _voiceEnabled = prefs.getBool('voice_enabled') ?? true;
+      _autoSpeak = prefs.getBool('voice_auto_speak') ?? true;
+      _wakeWordEnabled = prefs.getBool('voice_wake_word') ?? false;
       _ttsVoiceName = prefs.getString('tts_voice_name') ?? 'Samantha';
       _selectedLanguage = prefs.getString('voice_language') ?? 'both';
-      _speechRate = prefs.getDouble('speech_rate') ?? 0.5;
+      _speechRate = prefs.getDouble('voice_speech_rate') ?? 0.5;
     });
     try { _voices = VoiceService.allVoices; } catch (e) { _voices = []; }
   }
@@ -1032,9 +1036,21 @@ class _VoiceSectionState extends ConsumerState<_VoiceSection> {
   Future<void> _save() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('voice_enabled', _voiceEnabled);
+    await prefs.setBool('voice_auto_speak', _autoSpeak);
+    await prefs.setBool('voice_wake_word', _wakeWordEnabled);
     await prefs.setString('tts_voice_name', _ttsVoiceName);
     await prefs.setString('voice_language', _selectedLanguage);
-    await prefs.setDouble('speech_rate', _speechRate);
+    await prefs.setDouble('voice_speech_rate', _speechRate);
+
+    // Apply to live VoiceService
+    final voiceService = ref.read(appStateProvider).voiceService;
+    if (voiceService != null) {
+      await voiceService.setAutoSpeak(_autoSpeak);
+      await voiceService.setWakeWordEnabled(_wakeWordEnabled);
+      await voiceService.setSpeechRate(_speechRate);
+      await voiceService.setVoiceByName(_ttsVoiceName, '');
+    }
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Voice settings saved'),
@@ -1061,6 +1077,24 @@ class _VoiceSectionState extends ConsumerState<_VoiceSection> {
             )),
             const SizedBox(width: 12),
             Expanded(child: _StatusCard(
+              label: 'Auto Speak',
+              value: _autoSpeak ? 'ON' : 'OFF',
+              icon: Icons.volume_up,
+              valueColor: _autoSpeak ? AppColors.success : AppColors.textSecondary,
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: _StatusCard(
+              label: 'Wake Word',
+              value: _wakeWordEnabled ? 'ON' : 'OFF',
+              icon: Icons.record_voice_over,
+              valueColor: _wakeWordEnabled ? AppColors.success : AppColors.textSecondary,
+            )),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: _StatusCard(
               label: 'Language',
               value: _selectedLanguage.toUpperCase(),
               icon: Icons.language,
@@ -1070,6 +1104,12 @@ class _VoiceSectionState extends ConsumerState<_VoiceSection> {
               label: 'Speed',
               value: '${(_speechRate * 100).toInt()}%',
               icon: Icons.speed,
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: _StatusCard(
+              label: 'Voice',
+              value: _ttsVoiceName,
+              icon: Icons.record_voice_over,
             )),
           ],
         ),
@@ -1093,6 +1133,20 @@ class _VoiceSectionState extends ConsumerState<_VoiceSection> {
                 subtitle: 'Turn on speech recognition and TTS',
                 value: _voiceEnabled,
                 onChanged: (v) => setState(() => _voiceEnabled = v),
+              ),
+              const Divider(color: AppColors.glassBorder, height: 24),
+              _ToggleRow(
+                label: 'Auto Speak',
+                subtitle: 'Automatically speak AI responses aloud',
+                value: _autoSpeak,
+                onChanged: (v) => setState(() => _autoSpeak = v),
+              ),
+              const Divider(color: AppColors.glassBorder, height: 24),
+              _ToggleRow(
+                label: 'Wake Word',
+                subtitle: 'Say "Hey Jarvis" to start listening',
+                value: _wakeWordEnabled,
+                onChanged: (v) => setState(() => _wakeWordEnabled = v),
               ),
               const Divider(color: AppColors.glassBorder, height: 24),
               GlassDropdown<String>(

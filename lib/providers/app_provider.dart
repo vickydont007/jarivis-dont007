@@ -194,7 +194,6 @@ class AppStateNotifier extends StateNotifier<AppState> {
     _memory = MemorySystem();
     _agentNetwork = AgentNetwork();
     _scheduler = SchedulerService();
-    _voiceService = VoiceService();
     _socialManager = SocialManager();
     _contextMemory = ContextMemory();
     _persistence = AppStatePersistence();
@@ -220,6 +219,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
 
     // Core services wired to AppState (single source of truth)
     final orb = OrbStateManager();
+    _voiceService = VoiceService(orb: orb);
     _timelineService = TimelineService();
     _agentManager = AgentManager(
       agentRepository: AgentRepositoryAdapter(_agentNetwork!),
