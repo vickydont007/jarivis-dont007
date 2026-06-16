@@ -31,6 +31,9 @@ import '../core/services/memory_search.dart';
 import '../core/services/calendar_service.dart';
 import '../core/services/reminder_service.dart';
 import '../core/services/email_service.dart';
+import '../core/services/browser_service.dart';
+import '../core/services/research_service.dart';
+import '../core/services/source_verification.dart';
 import '../core/capabilities/permission_manager.dart';
 import '../services/scheduler_service.dart';
 import '../services/voice_service.dart';
@@ -69,6 +72,9 @@ class AppState {
   final CalendarService? calendarService;
   final ReminderService? reminderService;
   final EmailService? emailService;
+  final BrowserService? browserService;
+  final ResearchService? researchService;
+  final SourceVerificationService? sourceVerificationService;
 
   AppState({
     this.aiEngine,
@@ -102,6 +108,9 @@ class AppState {
     this.calendarService,
     this.reminderService,
     this.emailService,
+    this.browserService,
+    this.researchService,
+    this.sourceVerificationService,
   });
 
   AppState copyWith({
@@ -136,6 +145,9 @@ class AppState {
     CalendarService? calendarService,
     ReminderService? reminderService,
     EmailService? emailService,
+    BrowserService? browserService,
+    ResearchService? researchService,
+    SourceVerificationService? sourceVerificationService,
   }) {
     return AppState(
       aiEngine: aiEngine ?? this.aiEngine,
@@ -169,6 +181,9 @@ class AppState {
       calendarService: calendarService ?? this.calendarService,
       reminderService: reminderService ?? this.reminderService,
       emailService: emailService ?? this.emailService,
+      browserService: browserService ?? this.browserService,
+      researchService: researchService ?? this.researchService,
+      sourceVerificationService: sourceVerificationService ?? this.sourceVerificationService,
     );
   }
 }
@@ -207,6 +222,9 @@ class AppStateNotifier extends StateNotifier<AppState> {
   CalendarService? _calendarService;
   ReminderService? _reminderService;
   EmailService? _emailService;
+  BrowserService? _browserService;
+  ResearchService? _researchService;
+  SourceVerificationService? _sourceVerificationService;
 
   AppStateNotifier() : super(AppState()) {
     _memory = MemorySystem();
@@ -255,6 +273,10 @@ class AppStateNotifier extends StateNotifier<AppState> {
     _emailService = EmailService();
     _emailService!.loadConfig();
 
+    _browserService = BrowserService();
+    _researchService = ResearchService(browser: _browserService);
+    _sourceVerificationService = SourceVerificationService(browser: _browserService);
+
     _toolManager = ToolManager(
       memory: _memory!,
       network: _agentNetwork!,
@@ -269,6 +291,9 @@ class AppStateNotifier extends StateNotifier<AppState> {
       fileConverter: _fileConverter!,
       calendarService: _calendarService!,
       emailService: _emailService!,
+      browserService: _browserService!,
+      researchService: _researchService!,
+      sourceVerificationService: _sourceVerificationService!,
     );
     _toolManager!.initialize();
     _toolManager!.setSocialManager(_socialManager!);
@@ -317,6 +342,9 @@ class AppStateNotifier extends StateNotifier<AppState> {
       calendarService: _calendarService,
       reminderService: _reminderService,
       emailService: _emailService,
+      browserService: _browserService,
+      researchService: _researchService,
+      sourceVerificationService: _sourceVerificationService,
     );
 
     _loadSavedState();

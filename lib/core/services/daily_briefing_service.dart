@@ -10,6 +10,8 @@ import 'agent_manager.dart';
 import 'memory_service.dart';
 import 'calendar_service.dart';
 import 'email_service.dart';
+import 'browser_service.dart';
+import 'research_service.dart';
 import '../calendar_event.dart';
 
 enum BriefingType { morning, evening }
@@ -85,6 +87,7 @@ class DailyBriefingService {
   final MemoryService _memory;
   final CalendarService? _calendarService;
   final EmailService? _emailService;
+  final ResearchService? _researchService;
 
   DailyBriefingService({
     required TimelineService timeline,
@@ -92,11 +95,13 @@ class DailyBriefingService {
     required MemoryService memory,
     CalendarService? calendarService,
     EmailService? emailService,
+    ResearchService? researchService,
   })  : _timeline = timeline,
         _agents = agents,
         _memory = memory,
         _calendarService = calendarService,
-        _emailService = emailService;
+        _emailService = emailService,
+        _researchService = researchService;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -295,6 +300,21 @@ class DailyBriefingService {
             title: '$deadlines email${deadlines > 1 ? "s" : ""} with deadlines',
             description: 'Emails with deadline references need attention',
             category: 'email',
+          ));
+        }
+      } catch (_) {}
+    }
+
+    // Research activity in briefing
+    if (_researchService != null) {
+      try {
+        final recentReports = await _researchService!.getRecentReports(limit: 5);
+        if (recentReports.isNotEmpty) {
+          items.add(DailyBriefingItem(
+            icon: '🔬',
+            title: '${recentReports.length} research report${recentReports.length > 1 ? "s" : ""} generated',
+            description: recentReports.map((r) => r.topic).join('; '),
+            category: 'research',
           ));
         }
       } catch (_) {}

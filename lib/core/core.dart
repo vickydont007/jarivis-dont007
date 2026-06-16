@@ -28,6 +28,9 @@ export 'services/local_calendar_provider.dart';
 export 'services/reminder_service.dart';
 export 'services/email_service.dart';
 export 'services/inbox_intelligence.dart';
+export 'services/browser_service.dart';
+export 'services/research_service.dart';
+export 'services/source_verification.dart';
 
 // Providers
 export 'providers.dart';

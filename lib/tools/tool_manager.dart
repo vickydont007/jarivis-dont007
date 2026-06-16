@@ -50,10 +50,14 @@ import 'facebook_tool.dart';
 import 'file_manager_tool.dart';
 import 'calendar_ai_tools.dart';
 import 'email_ai_tools.dart';
+import 'research_ai_tools.dart';
 import '../social/social_manager.dart';
 import '../core/agent_personality.dart';
 import '../core/services/calendar_service.dart';
 import '../core/services/email_service.dart';
+import '../core/services/browser_service.dart';
+import '../core/services/research_service.dart';
+import '../core/services/source_verification.dart';
 
 const String toolsPrompt = '''IMPORTANT - FILE PATH RULES:
 - You can only access files in the user's home directory: /Users/abc/
@@ -105,6 +109,17 @@ AVAILABLE TOOLS:
 - clipboard_get, clipboard_set, clipboard_history, clipboard_clear: Clipboard operations
 - export_chat_md, export_chat_json: Export chat history
 - facebook_post, facebook_read_posts, facebook_page_info: Facebook Page posting and management
+- browser_search: Search the web for information on any topic
+- browser_open_url: Fetch and read content from a web URL
+- browser_extract_content: Extract structured content from a webpage (title, links, images, metadata)
+- browser_summarize_page: Fetch a webpage and generate a concise summary
+- research_topic: Research a topic by gathering information from multiple web sources and generating a structured report
+- research_company: Research a specific company: overview, products, funding, competitors
+- research_competitors: Research competitors in a specific industry or market
+- research_market: Research market size, trends, and analysis for a specific market
+- research_trends: Research latest trends and developments in a topic area
+- research_generate_report: Generate a formatted research report from gathered sources
+- research_save_report: Save a research report as markdown content
 
 CRITICAL TOOL RULES:
 - Tool names must be EXACTLY as listed above. Never add extra characters like <, >, |, or text after the tool name
@@ -135,6 +150,19 @@ CALENDAR & EMAIL CAPABILITIES:
 - You CAN get today's agenda using: calendar_get_today
 - You CAN get this week's events using: calendar_get_week
 - You CAN search events using: calendar_search_events
+
+BROWSER & RESEARCH CAPABILITIES:
+- You CAN search the web using: browser_search
+- You CAN fetch and read web pages using: browser_open_url
+- You CAN extract structured content from pages using: browser_extract_content
+- You CAN summarize web pages using: browser_summarize_page
+- You CAN research topics using: research_topic
+- You CAN research companies using: research_company
+- You CAN research competitors using: research_competitors
+- You CAN research markets using: research_market
+- You CAN research trends using: research_trends
+- You CAN generate research reports using: research_generate_report
+- You CAN save research reports using: research_save_report
 
 RULES:
 1. Always use tools when the user asks you to perform actions
@@ -181,6 +209,9 @@ class ToolManager {
   SocialManager? _socialManager;
   CalendarService? _calendarService;
   EmailService? _emailService;
+  BrowserService? _browserService;
+  ResearchService? _researchService;
+  SourceVerificationService? _sourceVerificationService;
 
   ToolManager({
     required MemorySystem memory,
@@ -196,6 +227,9 @@ class ToolManager {
     required FileConverter fileConverter,
     CalendarService? calendarService,
     EmailService? emailService,
+    BrowserService? browserService,
+    ResearchService? researchService,
+    SourceVerificationService? sourceVerificationService,
   })  : _memory = memory,
         _network = network,
         _scheduler = scheduler,
@@ -209,6 +243,9 @@ class ToolManager {
         _fileConverter = fileConverter,
         _calendarService = calendarService,
         _emailService = emailService,
+        _browserService = browserService,
+        _researchService = researchService,
+        _sourceVerificationService = sourceVerificationService,
         _codeSandbox = CodeExecutionSandbox(),
         _agentLearning = AgentLearning(),
         _monitor = RealTimeMonitor(),
@@ -271,6 +308,13 @@ class ToolManager {
     if (_emailService != null) {
       _registry.registerAll(getAllEmailAITools(_emailService!));
     }
+    // Browser & research tools
+    if (_browserService != null) {
+      _registry.registerAll(getAllBrowserTools(_browserService!));
+    }
+    if (_researchService != null && _sourceVerificationService != null) {
+      _registry.registerAll(getAllResearchTools(_researchService!, _sourceVerificationService!));
+    }
   }
 
   ToolRegistry get registry => _registry;
@@ -284,6 +328,9 @@ class ToolManager {
   WebAutomation get webAutomation => _webAutomation;
   AgentCommunication get agentCommunication => _agentCommunication;
   ContextMemory get contextMemory => _contextMemory;
+  BrowserService? get browserService => _browserService;
+  ResearchService? get researchService => _researchService;
+  SourceVerificationService? get sourceVerificationService => _sourceVerificationService;
   String get systemPromptText => toolsPrompt;
 
   void setApiKey(String apiKey) {

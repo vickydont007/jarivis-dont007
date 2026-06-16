@@ -21,6 +21,9 @@ import '../core/services/external_knowledge.dart';
 import '../core/services/memory_consolidation.dart';
 import '../core/services/calendar_service.dart';
 import '../core/services/inbox_intelligence.dart';
+import '../core/services/browser_service.dart';
+import '../core/services/research_service.dart';
+import '../core/services/source_verification.dart';
 import '../providers/app_provider.dart';
 
 // ─── Core Service Providers (read from AppState) ─────────────────
@@ -127,12 +130,14 @@ final dailyBriefingServiceProvider = Provider<DailyBriefingService>((ref) {
   final memory = ref.watch(memoryServiceProvider);
   final calendarService = ref.watch(calendarServiceProvider);
   final emailService = ref.watch(emailServiceProvider);
+  final researchService = ref.watch(researchServiceProvider);
   return DailyBriefingService(
     timeline: timeline,
     agents: agents,
     memory: memory,
     calendarService: calendarService,
     emailService: emailService,
+    researchService: researchService,
   );
 });
 
@@ -319,4 +324,23 @@ final emailStatsProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref
 final emailDraftsProvider = FutureProvider.autoDispose<List>((ref) async {
   final emailService = ref.watch(emailServiceProvider);
   return emailService.getDrafts();
+});
+
+// ─── Browser & Research Providers ───────────────────────────────
+
+final browserServiceProvider = Provider<BrowserService>((ref) {
+  final appState = ref.watch(appStateProvider);
+  return appState.browserService ?? BrowserService();
+});
+
+final researchServiceProvider = Provider<ResearchService>((ref) {
+  final appState = ref.watch(appStateProvider);
+  final browser = ref.watch(browserServiceProvider);
+  return appState.researchService ?? ResearchService(browser: browser);
+});
+
+final sourceVerificationServiceProvider = Provider<SourceVerificationService>((ref) {
+  final appState = ref.watch(appStateProvider);
+  final browser = ref.watch(browserServiceProvider);
+  return appState.sourceVerificationService ?? SourceVerificationService(browser: browser);
 });

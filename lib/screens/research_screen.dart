@@ -24,8 +24,13 @@ class _ResearchScreenState extends ConsumerState<ResearchScreen> {
   int _selectedTab = 0;
   final List<_WatchlistItem> _watchlists = [];
   final TextEditingController _topicController = TextEditingController();
+  final TextEditingController _researchTopicController = TextEditingController();
   bool _isLoading = false;
   String? _error;
+
+  ResearchReport? _lastReport;
+  bool _isResearching = false;
+  String? _researchError;
 
   @override
   void initState() {
@@ -75,7 +80,6 @@ class _ResearchScreenState extends ConsumerState<ResearchScreen> {
 
     setState(() => _isLoading = true);
 
-    // Search for the topic using memory search
     final search = ref.read(memorySearchProvider);
     final results = await search.search(topic, limit: 5);
 
@@ -91,6 +95,30 @@ class _ResearchScreenState extends ConsumerState<ResearchScreen> {
 
     _topicController.clear();
     await _saveWatchlists();
+  }
+
+  Future<void> _researchTopic(String topic) async {
+    if (topic.trim().isEmpty) return;
+
+    setState(() {
+      _isResearching = true;
+      _researchError = null;
+      _lastReport = null;
+    });
+
+    try {
+      final research = ref.read(researchServiceProvider);
+      final report = await research.researchTopic(topic.trim());
+      setState(() {
+        _lastReport = report;
+        _isResearching = false;
+      });
+    } catch (e) {
+      setState(() {
+        _researchError = 'Research failed: $e';
+        _isResearching = false;
+      });
+    }
   }
 
   @override
@@ -113,7 +141,7 @@ class _ResearchScreenState extends ConsumerState<ResearchScreen> {
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
-                    'Track topics and discover insights',
+                    'Track topics, discover insights, generate reports',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: AppColors.textSecondary,
                     ),
@@ -124,34 +152,10 @@ class _ResearchScreenState extends ConsumerState<ResearchScreen> {
 
             const SizedBox(height: AppSpacing.xl),
 
-            // Add topic input
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GlassTextField(
-                      controller: _topicController,
-                      hintText: 'Add a topic to watch...',
-                      onSubmitted: (_) => _addWatchlist(),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.md),
-                  GlassButton(
-                    onPressed: _addWatchlist,
-                    label: 'Watch',
-                    icon: Icons.add,
-                    isCompact: true,
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: AppSpacing.xl),
-
             GlassTabBar(
               tabs: const [
                 GlassTab(label: '📋 Watchlists'),
+                GlassTab(label: '🔍 Live Research'),
                 GlassTab(label: '📖 Knowledge Base'),
               ],
               selectedIndex: _selectedTab,
@@ -171,7 +175,9 @@ class _ResearchScreenState extends ConsumerState<ResearchScreen> {
                         )
                       : _selectedTab == 0
                           ? _buildWatchlists()
-                          : _buildKnowledgeBase(),
+                          : _selectedTab == 1
+                              ? _buildLiveResearch()
+                              : _buildKnowledgeBase(),
             ),
           ],
         ),
@@ -180,68 +186,320 @@ class _ResearchScreenState extends ConsumerState<ResearchScreen> {
   }
 
   Widget _buildWatchlists() {
-    if (_watchlists.isEmpty) {
-      return const EmptyState(
-        icon: Icons.search,
-        title: 'Start tracking topics',
-        subtitle: 'Add topics above and JARVIS will monitor\nyour memory for relevant findings',
-      );
-    }
-
     return Column(
       children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl),
+          child: Row(
+            children: [
+              Expanded(
+                child: GlassTextField(
+                  controller: _topicController,
+                  hintText: 'Add a topic to watch...',
+                  onSubmitted: (_) => _addWatchlist(),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              GlassButton(
+                onPressed: _addWatchlist,
+                label: 'Watch',
+                icon: Icons.add,
+                isCompact: true,
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: AppSpacing.xl),
+
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl),
-            itemCount: _watchlists.length,
-            itemBuilder: (context, index) {
-              final item = _watchlists[index];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                child: GlassCard(
-                  child: ExpansionTile(
-                    tilePadding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.lg, vertical: AppSpacing.sm,
-                    ),
-                    leading: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: AppColors.accentGhost,
-                        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+          child: _watchlists.isEmpty
+              ? const EmptyState(
+                  icon: Icons.search,
+                  title: 'Start tracking topics',
+                  subtitle: 'Add topics above and JARVIS will monitor\nyour memory for relevant findings',
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl),
+                  itemCount: _watchlists.length,
+                  itemBuilder: (context, index) {
+                    final item = _watchlists[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                      child: GlassCard(
+                        child: ExpansionTile(
+                          tilePadding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.lg, vertical: AppSpacing.sm,
+                          ),
+                          leading: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: AppColors.accentGhost,
+                              borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                            ),
+                            child: const Center(
+                              child: Text('📌', style: TextStyle(fontSize: 20)),
+                            ),
+                          ),
+                          title: Text(
+                            item.topic,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          subtitle: Text(
+                            '${item.findingCount} findings • Added ${_formatDate(item.addedAt)}',
+                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.science_outlined, size: 18, color: AppColors.accent),
+                                tooltip: 'Research now',
+                                onPressed: () => _researchTopic(item.topic),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.textTertiary),
+                                onPressed: () {
+                                  setState(() => _watchlists.removeAt(index));
+                                  _saveWatchlists();
+                                },
+                              ),
+                            ],
+                          ),
+                          children: [
+                            _buildFindingsList(item),
+                          ],
+                        ),
                       ),
-                      child: const Center(
-                        child: Text('📌', style: TextStyle(fontSize: 20)),
-                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLiveResearch() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: GlassTextField(
+                  controller: _researchTopicController,
+                  hintText: 'Enter a topic to research...',
+                  onSubmitted: (_) => _researchTopic(_researchTopicController.text),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              GlassButton(
+                onPressed: _isResearching ? null : () => _researchTopic(_researchTopicController.text),
+                label: _isResearching ? 'Researching...' : 'Research',
+                icon: Icons.science,
+                isCompact: true,
+              ),
+            ],
+          ),
+
+          const SizedBox(height: AppSpacing.xl),
+
+          Expanded(
+            child: _isResearching
+                ? const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(color: AppColors.accent),
+                        SizedBox(height: AppSpacing.md),
+                        Text(
+                          'Researching topic...\nGathering sources and generating report',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: AppColors.textSecondary),
+                        ),
+                      ],
                     ),
-                    title: Text(
-                      item.topic,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w500,
+                  )
+                : _researchError != null
+                    ? ErrorState(
+                        message: _researchError!,
+                        onRetry: () => _researchTopic(_researchTopicController.text),
+                        retryLabel: 'Retry',
+                      )
+                    : _lastReport != null
+                        ? _buildReportView(_lastReport!)
+                        : const EmptyState(
+                            icon: Icons.science_outlined,
+                            title: 'Start a research session',
+                            subtitle: 'Enter a topic above and JARVIS will\ngather sources and generate a report',
+                          ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReportView(ResearchReport report) {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GlassCard(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.article_outlined, color: AppColors.accent, size: 20),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          report.topic,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    report.executiveSummary,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          if (report.keyFindings.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.lg),
+            GlassCard(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Key Findings',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    subtitle: Text(
-                      '${item.findingCount} findings • Added ${_formatDate(item.addedAt)}',
-                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.textTertiary),
-                      onPressed: () {
-                        setState(() => _watchlists.removeAt(index));
-                        _saveWatchlists();
-                      },
-                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    ...report.keyFindings.map((f) => Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('• ', style: TextStyle(color: AppColors.accent)),
+                          Expanded(
+                            child: Text(
+                              f,
+                              style: const TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 13,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )),
+                  ],
+                ),
+              ),
+            ),
+          ],
+
+          if (report.sections.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.lg),
+            ...report.sections.map((section) => Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+              child: GlassCard(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildFindingsList(item),
+                      Text(
+                        section.title,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        section.content.length > 500
+                            ? '${section.content.substring(0, 500)}...'
+                            : section.content,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 13,
+                          height: 1.5,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-              );
-            },
-          ),
-        ),
-      ],
+              ),
+            )),
+          ],
+
+          if (report.sources.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.lg),
+            GlassCard(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Sources (${report.sources.length})',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    ...report.sources.take(10).map((s) => Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                      child: Text(
+                        '• ${s.title}',
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    )),
+                  ],
+                ),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: AppSpacing.xxl),
+        ],
+      ),
     );
   }
 
@@ -337,7 +595,7 @@ class _ResearchScreenState extends ConsumerState<ResearchScreen> {
           return const Padding(
             padding: EdgeInsets.all(16),
             child: Text(
-              'No findings yet. JARVIS will scan automatically.',
+              'No findings yet. Tap the beaker icon to research this topic online.',
               style: TextStyle(color: AppColors.textTertiary, fontSize: 12),
             ),
           );
