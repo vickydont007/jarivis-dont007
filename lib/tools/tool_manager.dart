@@ -47,6 +47,7 @@ import 'database_tool.dart';
 import 'clipboard_tool.dart';
 import 'export_tool.dart';
 import 'facebook_tool.dart';
+import 'file_manager_tool.dart';
 import '../social/social_manager.dart';
 import '../core/agent_personality.dart';
 
@@ -57,7 +58,8 @@ const String toolsPrompt = '''IMPORTANT - FILE PATH RULES:
 - If a file operation fails, try using the home directory path instead
 
 AVAILABLE TOOLS:
-- file_list, file_read, file_write, file_delete, file_search, file_copy, file_move: File operations
+- file_list, file_read, file_write, file_delete, file_search, file_copy, file_move: Basic file operations
+- file_rename, file_append, file_create_folder, file_get_info, file_search_content, file_search_recursive: Advanced file management
 - shell_exec: Execute terminal commands
 - system_info, system_shutdown, system_restart, system_sleep, system_lock, system_open_app, system_open_url: System control
 - weather_current, weather_forecast: Weather information
@@ -201,6 +203,7 @@ class ToolManager {
 
   void _registerTools() {
     _registry.registerAll(getAllFileTools());
+    _registry.registerAll(getAllFileManagerTools());
     _registry.registerAll(getAllSystemTools());
     _registry.registerAll(getAllShellTools());
     _registry.registerAll(getAllWeatherTools());

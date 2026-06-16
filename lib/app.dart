@@ -13,6 +13,7 @@ import 'screens/research_screen.dart';
 import 'screens/projects_screen.dart';
 import 'screens/calendar_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/file_explorer_screen.dart';
 import 'screens/developer_screen.dart';
 import 'screens/runtime_validation_screen.dart';
 
@@ -54,6 +55,7 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
     const ResearchScreen(),
     const ProjectsScreen(),
     const CalendarScreen(),
+    const FileExplorerScreen(),
     const SettingsScreen(),
   ];
 
@@ -78,7 +80,7 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
     }
 
     final saved = prefs.getInt(_navKey);
-    if (saved != null && saved >= 0 && saved <= 8) {
+    if (saved != null && saved >= 0 && saved <= 9) {
       setState(() {
         _selectedIndex = saved;
       });
@@ -140,7 +142,7 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
 
   @override
   Widget build(BuildContext context) {
-    final isDevScreen = _selectedIndex >= 7 && _selectedIndex <= 8;
+    final isDevScreen = _selectedIndex >= 8 && _selectedIndex <= 9;
 
     Widget currentScreen;
     if (isDevScreen) {
@@ -204,8 +206,11 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
       case 'Calendar':
         _navigateTo(5);
         break;
-      case 'Settings':
+      case 'Files':
         _navigateTo(6);
+        break;
+      case 'Settings':
+        _navigateTo(7);
         break;
     }
   }

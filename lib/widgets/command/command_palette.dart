@@ -92,9 +92,15 @@ class _CommandPaletteState extends State<CommandPalette>
       category: 'Navigate',
     ),
     CommandItem(
+      icon: Icons.folder_open_outlined,
+      label: 'Files',
+      shortcut: '⌘7',
+      category: 'Navigate',
+    ),
+    CommandItem(
       icon: Icons.settings_outlined,
       label: 'Settings',
-      shortcut: '⌘7',
+      shortcut: '⌘8',
       category: 'Navigate',
     ),
   ];
