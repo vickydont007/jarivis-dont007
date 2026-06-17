@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'core/auth/auth_provider.dart';
 import 'theme/app_theme.dart';
 import 'theme/app_colors.dart';
 import 'widgets/sidebar/floating_sidebar.dart';
@@ -18,6 +19,7 @@ import 'screens/file_explorer_screen.dart';
 import 'screens/agent_control_center_screen.dart';
 import 'screens/developer_screen.dart';
 import 'screens/runtime_validation_screen.dart';
+import 'screens/login_screen.dart';
 
 final themeProvider = StateProvider<bool>((ref) => true);
 
@@ -30,8 +32,38 @@ class JarvisApp extends ConsumerWidget {
       title: 'JARVIS OS',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
-      home: const JarvisShell(),
+      home: const AuthGate(),
     );
+  }
+}
+
+class AuthGate extends ConsumerWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authStateProvider);
+
+    switch (authState.status) {
+      case AuthStatus.loading:
+        return const Scaffold(
+          backgroundColor: AppColors.background,
+          body: Center(
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.accent),
+              ),
+            ),
+          ),
+        );
+      case AuthStatus.unauthenticated:
+        return const LoginScreen();
+      case AuthStatus.authenticated:
+        return const JarvisShell();
+    }
   }
 }
 
@@ -78,7 +110,6 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
   Future<void> _loadNavigationState() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // Clear legacy key — old index mapping doesn't match current nav
     if (prefs.containsKey(_navKeyLegacy)) {
       await prefs.remove(_navKeyLegacy);
     }
@@ -95,8 +126,10 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
     HardwareKeyboard.instance.addHandler((event) {
       if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
 
-      final isCmd = HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaLeft) ||
-          HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.metaRight);
+      final isCmd = HardwareKeyboard.instance.logicalKeysPressed
+              .contains(LogicalKeyboardKey.metaLeft) ||
+          HardwareKeyboard.instance.logicalKeysPressed
+              .contains(LogicalKeyboardKey.metaRight);
 
       if (isCmd) {
         switch (event.logicalKey) {
@@ -118,23 +151,23 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
           case LogicalKeyboardKey.digit5:
             _navigateTo(4);
             return true;
-           case LogicalKeyboardKey.digit6:
-             _navigateTo(5);
-             return true;
-           case LogicalKeyboardKey.digit7:
-             _navigateTo(6);
-             return true;
-           case LogicalKeyboardKey.digit8:
-             _navigateTo(7);
-             return true;
-           case LogicalKeyboardKey.digit9:
-             _navigateTo(8);
-             return true;
-           case LogicalKeyboardKey.digit0:
-             _navigateTo(9);
-             return true;
-         }
-       }
+          case LogicalKeyboardKey.digit6:
+            _navigateTo(5);
+            return true;
+          case LogicalKeyboardKey.digit7:
+            _navigateTo(6);
+            return true;
+          case LogicalKeyboardKey.digit8:
+            _navigateTo(7);
+            return true;
+          case LogicalKeyboardKey.digit9:
+            _navigateTo(8);
+            return true;
+          case LogicalKeyboardKey.digit0:
+            _navigateTo(9);
+            return true;
+        }
+      }
       return false;
     });
   }
@@ -163,10 +196,8 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          // Main content
           Row(
             children: [
-              // Floating sidebar
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: FloatingSidebar(
@@ -175,14 +206,11 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
                   isExpanded: _isSidebarExpanded,
                 ),
               ),
-              // Screen content
               Expanded(
                 child: currentScreen,
               ),
             ],
           ),
-
-          // Command palette overlay
           CommandPalette(
             isOpen: _isCommandPaletteOpen,
             onClose: () => setState(() => _isCommandPaletteOpen = false),
@@ -229,6 +257,5 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
   }
 }
 
-// Keep old name for backward compatibility
 typedef NextronApp = JarvisApp;
 typedef MainScreen = JarvisShell;

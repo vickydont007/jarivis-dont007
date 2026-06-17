@@ -27,6 +27,9 @@ dependencies:
   # Voice - using native Swift Speech framework
   flutter_tts: ^3.8.3
 
+  # Auth
+  crypto: ^3.0.3
+
   # System
   system_info2: ^3.0.0
   system_tray: ^2.0.3

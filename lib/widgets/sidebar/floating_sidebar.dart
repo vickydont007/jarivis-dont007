@@ -1,9 +1,11 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/auth/auth_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 
-class FloatingSidebar extends StatefulWidget {
+class FloatingSidebar extends ConsumerStatefulWidget {
   final int selectedIndex;
   final ValueChanged<int> onIndexChanged;
   final bool isVisible;
@@ -18,10 +20,10 @@ class FloatingSidebar extends StatefulWidget {
   });
 
   @override
-  State<FloatingSidebar> createState() => _FloatingSidebarState();
+  ConsumerState<FloatingSidebar> createState() => _FloatingSidebarState();
 }
 
-class _FloatingSidebarState extends State<FloatingSidebar>
+class _FloatingSidebarState extends ConsumerState<FloatingSidebar>
     with SingleTickerProviderStateMixin {
   late AnimationController _expandController;
   late Animation<double> _widthAnimation;
@@ -232,41 +234,65 @@ class _FloatingSidebarState extends State<FloatingSidebar>
   }
 
   Widget _buildUserAvatar() {
+    final authState = ref.watch(authStateProvider);
+    final user = authState.user;
+    final initial = (user?.displayName ?? 'U').substring(0, 1).toUpperCase();
+    final name = user?.displayName ?? 'User';
+    final email = user?.email ?? '';
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 32,
-            height: 32,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
-              color: AppColors.backgroundElevated,
+              gradient: const LinearGradient(
+                colors: [AppColors.accent, AppColors.accentMuted],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
               shape: BoxShape.circle,
-              border: Border.all(color: AppColors.glassBorder),
             ),
-            child: const Center(
+            child: Center(
               child: Text(
-                'V',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textSecondary,
+                initial,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
                 ),
               ),
             ),
           ),
           if (_isHovered) ...[
             const SizedBox(width: 12),
-            const Expanded(
-              child: Text(
-                'Vicky',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w400,
-                  color: AppColors.textSecondary,
-                ),
-                overflow: TextOverflow.ellipsis,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textPrimary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    email,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                      color: AppColors.textTertiary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
             ),
           ],
