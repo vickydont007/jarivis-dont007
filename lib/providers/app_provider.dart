@@ -38,6 +38,13 @@ import '../core/services/multi_agent_orchestrator.dart';
 import '../core/services/agent_message_bus.dart';
 import '../core/workflows/workflow_database.dart';
 import '../core/agents/agent_registry.dart';
+import '../core/agents/coding_agent.dart';
+import '../core/agents/terminal_agent.dart';
+import '../core/agents/git_agent.dart';
+import '../core/services/codebase_memory.dart';
+import '../core/services/debug_engine.dart';
+import '../core/services/project_builder.dart';
+import '../core/services/project_analyzer.dart';
 import '../core/capabilities/permission_manager.dart';
 import '../services/scheduler_service.dart';
 import '../services/voice_service.dart';
@@ -80,6 +87,13 @@ class AppState {
   final ResearchService? researchService;
   final SourceVerificationService? sourceVerificationService;
   final MultiAgentOrchestrator? orchestrator;
+  final CodingAgent? codingAgent;
+  final TerminalAgent? terminalAgent;
+  final GitAgent? gitAgent;
+  final DebugEngine? debugEngine;
+  final ProjectBuilder? projectBuilder;
+  final CodebaseMemory? codebaseMemory;
+  final ProjectAnalyzer? projectAnalyzer;
 
   AppState({
     this.aiEngine,
@@ -117,6 +131,13 @@ class AppState {
     this.researchService,
     this.sourceVerificationService,
     this.orchestrator,
+    this.codingAgent,
+    this.terminalAgent,
+    this.gitAgent,
+    this.debugEngine,
+    this.projectBuilder,
+    this.codebaseMemory,
+    this.projectAnalyzer,
   });
 
   AppState copyWith({
@@ -155,6 +176,13 @@ class AppState {
     ResearchService? researchService,
     SourceVerificationService? sourceVerificationService,
     MultiAgentOrchestrator? orchestrator,
+    CodingAgent? codingAgent,
+    TerminalAgent? terminalAgent,
+    GitAgent? gitAgent,
+    DebugEngine? debugEngine,
+    ProjectBuilder? projectBuilder,
+    CodebaseMemory? codebaseMemory,
+    ProjectAnalyzer? projectAnalyzer,
   }) {
     return AppState(
       aiEngine: aiEngine ?? this.aiEngine,
@@ -192,6 +220,13 @@ class AppState {
       researchService: researchService ?? this.researchService,
       sourceVerificationService: sourceVerificationService ?? this.sourceVerificationService,
       orchestrator: orchestrator ?? this.orchestrator,
+      codingAgent: codingAgent ?? this.codingAgent,
+      terminalAgent: terminalAgent ?? this.terminalAgent,
+      gitAgent: gitAgent ?? this.gitAgent,
+      debugEngine: debugEngine ?? this.debugEngine,
+      projectBuilder: projectBuilder ?? this.projectBuilder,
+      codebaseMemory: codebaseMemory ?? this.codebaseMemory,
+      projectAnalyzer: projectAnalyzer ?? this.projectAnalyzer,
     );
   }
 }
@@ -234,6 +269,15 @@ class AppStateNotifier extends StateNotifier<AppState> {
   ResearchService? _researchService;
   SourceVerificationService? _sourceVerificationService;
   MultiAgentOrchestrator? _orchestrator;
+
+  // Coding Suite
+  CodingAgent? _codingAgent;
+  TerminalAgent? _terminalAgent;
+  GitAgent? _gitAgent;
+  DebugEngine? _debugEngine;
+  ProjectBuilder? _projectBuilder;
+  CodebaseMemory? _codebaseMemory;
+  ProjectAnalyzer? _projectAnalyzer;
 
   AppStateNotifier() : super(AppState()) {
     _memory = MemorySystem();
@@ -314,6 +358,37 @@ class AppStateNotifier extends StateNotifier<AppState> {
     );
     _orchestrator!.initialize();
 
+    // Initialize Coding Suite
+    _projectAnalyzer = ProjectAnalyzer();
+    _codebaseMemory = CodebaseMemory();
+    _codingAgent = CodingAgent(
+      toolManager: _toolManager!,
+      codebaseMemory: _codebaseMemory!,
+    );
+    _terminalAgent = TerminalAgent(toolManager: _toolManager!);
+    _gitAgent = GitAgent(toolManager: _toolManager!);
+    _debugEngine = DebugEngine(
+      toolManager: _toolManager!,
+      codingAgent: _codingAgent!,
+    );
+    _projectBuilder = ProjectBuilder(
+      orchestrator: _orchestrator!,
+      analyzer: _projectAnalyzer!,
+      memory: _codebaseMemory!,
+      toolManager: _toolManager!,
+    );
+
+    // Register coding suite with ToolManager
+    _toolManager!.setCodingSuite(
+      codingAgent: _codingAgent!,
+      terminalAgent: _terminalAgent!,
+      gitAgent: _gitAgent!,
+      debugEngine: _debugEngine!,
+      projectBuilder: _projectBuilder!,
+      codebaseMemory: _codebaseMemory!,
+      projectAnalyzer: _projectAnalyzer!,
+    );
+
     // Wire orchestrator to AI engine and tools
     if (_engine != null && _toolManager != null) {
       _agentOrchestrator!.setEngine(_engine!, _toolManager!);
@@ -362,6 +437,13 @@ class AppStateNotifier extends StateNotifier<AppState> {
       researchService: _researchService,
       sourceVerificationService: _sourceVerificationService,
       orchestrator: _orchestrator,
+      codingAgent: _codingAgent,
+      terminalAgent: _terminalAgent,
+      gitAgent: _gitAgent,
+      debugEngine: _debugEngine,
+      projectBuilder: _projectBuilder,
+      codebaseMemory: _codebaseMemory,
+      projectAnalyzer: _projectAnalyzer,
     );
 
     _loadSavedState();

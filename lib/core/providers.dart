@@ -25,6 +25,13 @@ import '../core/services/browser_service.dart';
 import '../core/services/research_service.dart';
 import '../core/services/source_verification.dart';
 import '../core/services/multi_agent_orchestrator.dart';
+import '../core/agents/coding_agent.dart';
+import '../core/agents/terminal_agent.dart';
+import '../core/agents/git_agent.dart';
+import '../core/services/debug_engine.dart';
+import '../core/services/project_builder.dart';
+import '../core/services/codebase_memory.dart';
+import '../core/services/project_analyzer.dart';
 import '../providers/app_provider.dart';
 
 // ─── Core Service Providers (read from AppState) ─────────────────
@@ -197,10 +204,6 @@ final watchlistMonitorProvider = Provider<WatchlistMonitor>((ref) {
   return WatchlistMonitor();
 });
 
-final projectAnalyzerProvider = Provider<ProjectAnalyzer>((ref) {
-  return ProjectAnalyzer();
-});
-
 final emailServiceProvider = Provider<EmailService>((ref) {
   final appState = ref.watch(appStateProvider);
   return appState.emailService ?? EmailService();
@@ -239,7 +242,7 @@ final proactiveEngineProvider = Provider<ProactiveEngine>((ref) {
     memorySearch: memorySearch,
     orb: orb,
     watchlistMonitor: watchlist,
-    projectAnalyzer: analyzer,
+    projectAnalyzer: analyzer!,
     emailService: email,
     calendarIntel: calendarIntel,
     externalKnowledge: externalKnowledge,
@@ -353,4 +356,41 @@ final sourceVerificationServiceProvider = Provider<SourceVerificationService>((r
 final orchestratorProvider = Provider<MultiAgentOrchestrator?>((ref) {
   final appState = ref.watch(appStateProvider);
   return appState.orchestrator;
+});
+
+// ─── Coding Suite Providers ────────────────────────────────────
+
+final codingAgentProvider = Provider<CodingAgent?>((ref) {
+  final appState = ref.watch(appStateProvider);
+  return appState.codingAgent;
+});
+
+final terminalAgentProvider = Provider<TerminalAgent?>((ref) {
+  final appState = ref.watch(appStateProvider);
+  return appState.terminalAgent;
+});
+
+final gitAgentProvider = Provider<GitAgent?>((ref) {
+  final appState = ref.watch(appStateProvider);
+  return appState.gitAgent;
+});
+
+final debugEngineProvider = Provider<DebugEngine?>((ref) {
+  final appState = ref.watch(appStateProvider);
+  return appState.debugEngine;
+});
+
+final projectBuilderProvider = Provider<ProjectBuilder?>((ref) {
+  final appState = ref.watch(appStateProvider);
+  return appState.projectBuilder;
+});
+
+final codebaseMemoryProvider = Provider<CodebaseMemory?>((ref) {
+  final appState = ref.watch(appStateProvider);
+  return appState.codebaseMemory;
+});
+
+final projectAnalyzerProvider = Provider<ProjectAnalyzer?>((ref) {
+  final appState = ref.watch(appStateProvider);
+  return appState.projectAnalyzer;
 });

@@ -52,6 +52,7 @@ import 'calendar_ai_tools.dart';
 import 'email_ai_tools.dart';
 import 'research_ai_tools.dart';
 import 'orchestrator_tools.dart';
+import 'code_ai_tools.dart' show getAllCodeAITools;
 import '../social/social_manager.dart';
 import '../core/agent_personality.dart';
 import '../core/services/calendar_service.dart';
@@ -60,6 +61,13 @@ import '../core/services/browser_service.dart';
 import '../core/services/research_service.dart';
 import '../core/services/source_verification.dart';
 import '../core/services/multi_agent_orchestrator.dart';
+import '../core/agents/coding_agent.dart';
+import '../core/agents/terminal_agent.dart';
+import '../core/agents/git_agent.dart';
+import '../core/services/debug_engine.dart';
+import '../core/services/project_builder.dart';
+import '../core/services/codebase_memory.dart';
+import '../core/services/project_analyzer.dart';
 
 const String toolsPrompt = '''IMPORTANT - FILE PATH RULES:
 - You can only access files in the user's home directory: /Users/abc/
@@ -184,6 +192,15 @@ MULTI-AGENT ORCHESTRATOR:
 - When the user gives a complex multi-step goal, ALWAYS use orchestrator_create_workflow
 - The orchestrator automatically coordinates Research, File, Email, Calendar, Memory, and other agents
 
+CODING AGENT SUITE:
+- You CAN analyze projects using: code_analyze_project
+- You CAN read source files using: code_read_file
+- You CAN edit source files using: code_edit_file
+- You CAN run tests using: code_run_tests
+- You CAN fix errors autonomously using: code_fix_error
+- You CAN create new projects using: code_create_project
+- Coding Agent builds, refactors, and debugs software; Terminal Agent runs commands/tests; Git Agent manages version control
+
 RULES:
 1. Always use tools when the user asks you to perform actions
 2. Be careful with destructive operations (delete, shutdown) - confirm first
@@ -233,6 +250,13 @@ class ToolManager {
   ResearchService? _researchService;
   SourceVerificationService? _sourceVerificationService;
   MultiAgentOrchestrator? _orchestrator;
+  CodingAgent? _codingAgent;
+  TerminalAgent? _terminalAgent;
+  GitAgent? _gitAgent;
+  DebugEngine? _debugEngine;
+  ProjectBuilder? _projectBuilder;
+  CodebaseMemory? _codebaseMemory;
+  ProjectAnalyzer? _projectAnalyzer;
 
   ToolManager({
     required MemorySystem memory,
@@ -252,6 +276,13 @@ class ToolManager {
     ResearchService? researchService,
     SourceVerificationService? sourceVerificationService,
     MultiAgentOrchestrator? orchestrator,
+    CodingAgent? codingAgent,
+    TerminalAgent? terminalAgent,
+    GitAgent? gitAgent,
+    DebugEngine? debugEngine,
+    ProjectBuilder? projectBuilder,
+    CodebaseMemory? codebaseMemory,
+    ProjectAnalyzer? projectAnalyzer,
   })  : _memory = memory,
         _network = network,
         _scheduler = scheduler,
@@ -269,6 +300,13 @@ class ToolManager {
         _researchService = researchService,
         _sourceVerificationService = sourceVerificationService,
         _orchestrator = orchestrator,
+        _codingAgent = codingAgent,
+        _terminalAgent = terminalAgent,
+        _gitAgent = gitAgent,
+        _debugEngine = debugEngine,
+        _projectBuilder = projectBuilder,
+        _codebaseMemory = codebaseMemory,
+        _projectAnalyzer = projectAnalyzer,
         _codeSandbox = CodeExecutionSandbox(),
         _agentLearning = AgentLearning(),
         _monitor = RealTimeMonitor(),
@@ -342,6 +380,16 @@ class ToolManager {
     if (_orchestrator != null) {
       _registry.registerAll(getAllOrchestratorTools(_orchestrator!));
     }
+    // Coding suite tools
+    if (_codingAgent != null && _terminalAgent != null && _debugEngine != null && _projectBuilder != null && _projectAnalyzer != null) {
+      _registry.registerAll(getAllCodeAITools(
+        _projectAnalyzer!,
+        _codingAgent!,
+        _terminalAgent!,
+        _debugEngine!,
+        _projectBuilder!,
+      ));
+    }
   }
 
   ToolRegistry get registry => _registry;
@@ -359,6 +407,13 @@ class ToolManager {
   ResearchService? get researchService => _researchService;
   SourceVerificationService? get sourceVerificationService => _sourceVerificationService;
   MultiAgentOrchestrator? get orchestrator => _orchestrator;
+  CodingAgent? get codingAgent => _codingAgent;
+  TerminalAgent? get terminalAgent => _terminalAgent;
+  GitAgent? get gitAgent => _gitAgent;
+  DebugEngine? get debugEngine => _debugEngine;
+  ProjectBuilder? get projectBuilder => _projectBuilder;
+  CodebaseMemory? get codebaseMemory => _codebaseMemory;
+  ProjectAnalyzer? get projectAnalyzer => _projectAnalyzer;
   String get systemPromptText => toolsPrompt;
 
   void setApiKey(String apiKey) {
@@ -377,6 +432,33 @@ class ToolManager {
     if (_socialManager != null) {
       _registry.registerAll(getAllFacebookTools(_socialManager!));
     }
+  }
+
+  void setCodingSuite({
+    required CodingAgent codingAgent,
+    required TerminalAgent terminalAgent,
+    required GitAgent gitAgent,
+    required DebugEngine debugEngine,
+    required ProjectBuilder projectBuilder,
+    required CodebaseMemory codebaseMemory,
+    required ProjectAnalyzer projectAnalyzer,
+  }) {
+    _codingAgent = codingAgent;
+    _terminalAgent = terminalAgent;
+    _gitAgent = gitAgent;
+    _debugEngine = debugEngine;
+    _projectBuilder = projectBuilder;
+    _codebaseMemory = codebaseMemory;
+    _projectAnalyzer = projectAnalyzer;
+    
+    // Register coding tools now that we have the agents
+    _registry.registerAll(getAllCodeAITools(
+      _projectAnalyzer!,
+      _codingAgent!,
+      _terminalAgent!,
+      _debugEngine!,
+      _projectBuilder!,
+    ));
   }
 
   List<Map<String, dynamic>> getToolDefinitions() {

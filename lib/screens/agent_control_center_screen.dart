@@ -5,6 +5,10 @@ import '../theme/app_spacing.dart';
 import '../core/core.dart';
 import '../core/services/multi_agent_orchestrator.dart';
 import '../core/models/workflow.dart';
+import '../core/agents/coding_agent.dart';
+import '../core/agents/terminal_agent.dart';
+import '../core/agents/git_agent.dart';
+import '../core/services/debug_engine.dart';
 import '../widgets/glass/glass_card.dart';
 import '../widgets/glass/glass_button.dart';
 import '../widgets/glass/glass_tab_bar.dart';
@@ -49,6 +53,10 @@ class _AgentControlCenterScreenState extends ConsumerState<AgentControlCenterScr
   @override
   Widget build(BuildContext context) {
     final orchestrator = ref.watch(orchestratorProvider);
+    final codingAgent = ref.watch(codingAgentProvider);
+    final terminalAgent = ref.watch(terminalAgentProvider);
+    final gitAgent = ref.watch(gitAgentProvider);
+    final debugEngine = ref.watch(debugEngineProvider);
 
     if (orchestrator == null) {
       return const Center(child: Text('Orchestrator not initialized'));
@@ -78,7 +86,7 @@ class _AgentControlCenterScreenState extends ConsumerState<AgentControlCenterScr
                           ),
                           const SizedBox(height: AppSpacing.xs),
                           Text(
-                            'Monitor and manage multi-agent workflows',
+                            'Monitor and manage multi-agent workflows & coding jobs',
                             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                               color: AppColors.textSecondary,
                             ),
@@ -101,10 +109,8 @@ class _AgentControlCenterScreenState extends ConsumerState<AgentControlCenterScr
 
             GlassTabBar(
               tabs: const [
-                GlassTab(label: '🔄 Active'),
-                GlassTab(label: '✅ Completed'),
-                GlassTab(label: '❌ Failed'),
-                GlassTab(label: '📋 All'),
+                GlassTab(label: '🔄 Workflows'),
+                GlassTab(label: '💻 Coding Jobs'),
               ],
               selectedIndex: _selectedTab,
               onTabChanged: (i) => setState(() => _selectedTab = i),
@@ -114,8 +120,10 @@ class _AgentControlCenterScreenState extends ConsumerState<AgentControlCenterScr
 
             Expanded(
               child: _isRefreshing
-                  ? const LoadingState(message: 'Updating workflows...')
-                  : _buildWorkflowList(orchestrator),
+                  ? const LoadingState(message: 'Updating...')
+                  : _selectedTab == 0
+                      ? _buildWorkflowList(orchestrator)
+                      : _buildCodingJobs(codingAgent, terminalAgent, gitAgent, debugEngine),
             ),
           ],
         ),
@@ -227,13 +235,85 @@ class _AgentControlCenterScreenState extends ConsumerState<AgentControlCenterScr
     switch (_selectedTab) {
       case 0:
         return orchestrator.getActiveWorkflows();
-      case 1:
-        return orchestrator.getWorkflowsByStatus(WorkflowStatus.completed);
-      case 2:
-        return orchestrator.getWorkflowsByStatus(WorkflowStatus.failed);
       default:
         return orchestrator.getRecentWorkflows();
     }
+  }
+
+  Widget _buildCodingJobs(
+    CodingAgent? codingAgent,
+    TerminalAgent? terminalAgent,
+    GitAgent? gitAgent,
+    DebugEngine? debugEngine,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildAgentStatusCard('💻 Coding Agent', codingAgent != null, 'Code generation, editing, refactoring', Icons.code),
+          const SizedBox(height: AppSpacing.md),
+          _buildAgentStatusCard('🐚 Terminal Agent', terminalAgent != null, 'Command execution, test running', Icons.terminal),
+          const SizedBox(height: AppSpacing.md),
+          _buildAgentStatusCard('🌿 Git Agent', gitAgent != null, 'Commit, push, branch management', Icons.source),
+          const SizedBox(height: AppSpacing.md),
+          _buildAgentStatusCard('🐛 Debug Engine', debugEngine != null, 'Stack trace parsing, autonomous patching', Icons.bug_report),
+          const SizedBox(height: AppSpacing.xl),
+          const Text(
+            'Recent Coding Jobs',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          const EmptyState(
+            icon: Icons.history,
+            title: 'No coding jobs yet',
+            subtitle: 'When you ask JARVIS to build, fix, or test code,\nthe jobs will appear here with live progress',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAgentStatusCard(String name, bool active, String description, IconData icon) {
+    return GlassCard(
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: active ? AppColors.accentGhost : AppColors.glassBorder,
+              borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+            ),
+            child: Icon(icon, color: active ? AppColors.accent : AppColors.textTertiary, size: 20),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(name, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary, fontSize: 14)),
+                    const SizedBox(width: AppSpacing.sm),
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: active ? Colors.green : AppColors.textTertiary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
+                ),
+                Text(description, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+              ],
+            ),
+          ),
+          Text(active ? 'Ready' : 'Unavailable', style: TextStyle(color: active ? Colors.green : AppColors.textTertiary, fontSize: 12, fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
   }
 
   Widget _getWorkflowIcon(WorkflowStatus status) {

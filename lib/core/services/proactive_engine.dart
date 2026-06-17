@@ -272,16 +272,16 @@ class ProactiveEngine {
       final path = project['path'] as String? ?? '';
       if (path.isEmpty) continue;
 
-      final result = await _projectAnalyzer.analyze(name, path);
+      final result = await _projectAnalyzer.analyzeProject(name, path);
 
       // Store in external knowledge
       await _externalKnowledge.ingest(
         type: 'project',
         title: 'Project Analysis: $name',
-        content: 'Health: ${result.health} (${result.score}/100)\n'
-            'Commits (7d): ${result.commitCount7d}\n'
-            'Commits (30d): ${result.commitCount30d}\n'
-            'TODOs: ${result.todoCount}\n'
+        content: 'Framework: ${result.framework}\n'
+            'Health: ${result.health} (${result.score}/100)\n'
+            'Languages: ${result.languages.join(", ")}\n'
+            'Dependencies: ${result.dependencies.join(", ")}\n'
             'Findings: ${result.findings.join(", ")}',
         source: 'Project Analyzer',
         tags: [name, 'project', result.health],
@@ -304,8 +304,7 @@ class ProactiveEngine {
           type: InsightType.project,
           priority: priority,
           title: '${result.health}: $name',
-          body: 'Score: ${result.score}/100 — ${result.findings.isNotEmpty ? result.findings.first : "All good"}'
-              '${result.lastCommitMessage != null ? "\nLast commit: ${result.lastCommitMessage}" : ""}',
+          body: 'Score: ${result.score}/100 — ${result.findings.isNotEmpty ? result.findings.first : "All good"}',
           source: 'Project Analyzer',
           createdAt: DateTime.now(),
           metadata: {'project': name, 'score': result.score, 'health': result.health},

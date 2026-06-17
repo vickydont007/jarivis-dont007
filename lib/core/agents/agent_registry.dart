@@ -216,6 +216,60 @@ class AgentRegistry {
           ),
         ],
       ),
+      const RegisteredAgent(
+        type: 'coding',
+        name: 'Coding Agent',
+        description: 'Build, modify, and debug software projects',
+        icon: '💻',
+        capabilities: [
+          AgentCapability(
+            name: 'code_generation',
+            description: 'Generate features and project scaffolding',
+            toolNames: ['code_create_project', 'code_generate_feature'],
+            keywords: ['build', 'create app', 'generate code', 'implement feature', 'scaffold'],
+          ),
+          AgentCapability(
+            name: 'code_editing',
+            description: 'Refactor and edit existing source code',
+            toolNames: ['code_edit_file', 'code_refactor', 'code_read_file'],
+            keywords: ['edit', 'fix', 'refactor', 'change', 'update code', 'modify'],
+          ),
+          AgentCapability(
+            name: 'code_analysis',
+            description: 'Analyze project structure and dependencies',
+            toolNames: ['code_analyze_project', 'code_explain_architecture'],
+            keywords: ['analyze', 'architecture', 'structure', 'dependencies', 'project map'],
+          ),
+        ],
+      ),
+      const RegisteredAgent(
+        type: 'terminal',
+        name: 'Terminal Agent',
+        description: 'Execute system commands and run tests',
+        icon: '🐚',
+        capabilities: [
+          AgentCapability(
+            name: 'command_execution',
+            description: 'Run shell commands and capture output',
+            toolNames: ['code_run_tests', 'shell_exec'],
+            keywords: ['run', 'execute', 'command', 'terminal', 'test', 'shell'],
+          ),
+        ],
+      ),
+      const RegisteredAgent(
+        type: 'git',
+        name: 'Git Agent',
+        description: 'Manage version control and project history',
+        icon: '🌿',
+        capabilities: [
+          AgentCapability(
+            name: 'vcs_operations',
+            description: 'Commit, push, and branch management',
+            toolNames: ['git_status', 'git_add', 'git_commit', 'git_push', 'git_pull', 'git_branch'],
+            keywords: ['git', 'commit', 'push', 'pull', 'branch', 'version control'],
+          ),
+        ],
+      ),
     ]);
   }
 
