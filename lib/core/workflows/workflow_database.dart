@@ -9,6 +9,11 @@ import '../../tools/tool_manager.dart';
 class WorkflowDatabase {
   static Database? _database;
   static const _dbName = 'nextron_workflows.db';
+  String _currentUserId = '';
+
+  void setUserId(String id) {
+    _currentUserId = id;
+  }
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -20,7 +25,7 @@ class WorkflowDatabase {
     final path = join(await getDatabasesPath(), _dbName);
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE workflow_executions(
@@ -34,7 +39,8 @@ class WorkflowDatabase {
             memory_tags TEXT,
             created_at TEXT NOT NULL,
             started_at TEXT,
-            completed_at TEXT
+            completed_at TEXT,
+            user_id TEXT NOT NULL DEFAULT ''
           )
         ''');
         await db.execute('''
@@ -56,6 +62,7 @@ class WorkflowDatabase {
             output_keys TEXT,
             started_at TEXT,
             completed_at TEXT,
+            user_id TEXT NOT NULL DEFAULT '',
             FOREIGN KEY (workflow_id) REFERENCES workflow_executions(id)
           )
         ''');
@@ -68,9 +75,17 @@ class WorkflowDatabase {
             agent_type TEXT,
             data TEXT,
             timestamp TEXT NOT NULL,
+            user_id TEXT NOT NULL DEFAULT '',
             FOREIGN KEY (workflow_id) REFERENCES workflow_executions(id)
           )
         ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          try { await db.execute("ALTER TABLE workflow_executions ADD COLUMN user_id TEXT NOT NULL DEFAULT ''"); } catch (_) {}
+          try { await db.execute("ALTER TABLE workflow_tasks ADD COLUMN user_id TEXT NOT NULL DEFAULT ''"); } catch (_) {}
+          try { await db.execute("ALTER TABLE agent_messages ADD COLUMN user_id TEXT NOT NULL DEFAULT ''"); } catch (_) {}
+        }
       },
     );
   }
@@ -89,6 +104,7 @@ class WorkflowDatabase {
       'created_at': workflow.createdAt.toIso8601String(),
       'started_at': workflow.startedAt?.toIso8601String(),
       'completed_at': workflow.completedAt?.toIso8601String(),
+      'user_id': _currentUserId,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
 
     for (final task in workflow.tasks) {
@@ -203,11 +219,11 @@ class WorkflowDatabase {
 
   Future<List<Workflow>> getWorkflows({int limit = 20, WorkflowStatus? status}) async {
     final db = await database;
-    String? where;
-    List<dynamic>? whereArgs;
+    String? where = 'user_id = ?';
+    List<dynamic> whereArgs = [_currentUserId];
     if (status != null) {
-      where = 'status = ?';
-      whereArgs = [status.name];
+      where = 'user_id = ? AND status = ?';
+      whereArgs = [_currentUserId, status.name];
     }
     final rows = await db.query('workflow_executions', where: where, whereArgs: whereArgs, orderBy: 'created_at DESC', limit: limit);
 

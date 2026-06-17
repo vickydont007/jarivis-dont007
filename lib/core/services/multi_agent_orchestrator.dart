@@ -69,6 +69,10 @@ class MultiAgentOrchestrator {
   WorkflowDatabase get database => _db;
   Stream<OrchestratorEvent> get eventStream => _eventController.stream;
 
+  void setUserId(String userId) {
+    _engine.setUserId(userId);
+  }
+
   void initialize() {
     _messageBus.messageStream.listen((msg) {
       _eventController.add(OrchestratorEvent(

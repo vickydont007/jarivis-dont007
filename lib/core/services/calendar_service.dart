@@ -10,6 +10,10 @@ class CalendarService {
   CalendarService({LocalCalendarProvider? localProvider})
       : _localProvider = localProvider ?? LocalCalendarProvider();
 
+  void setUserId(String userId) {
+    _localProvider.setUserId(userId);
+  }
+
   Stream<List<CalendarEvent>> get eventsStream => _localProvider.eventsStream;
 
   Future<CalendarEvent> createEvent({

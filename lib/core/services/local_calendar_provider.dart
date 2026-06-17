@@ -12,6 +12,12 @@ class LocalCalendarProvider {
 
   Stream<List<CalendarEvent>> get eventsStream => _eventsController.stream;
 
+  String _currentUserId = '';
+
+  void setUserId(String id) {
+    _currentUserId = id;
+  }
+
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDatabase();
@@ -22,7 +28,7 @@ class LocalCalendarProvider {
     final path = join(await getDatabasesPath(), _dbName);
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE calendar_events(
@@ -39,7 +45,8 @@ class LocalCalendarProvider {
             is_completed INTEGER DEFAULT 0,
             external_id TEXT,
             source TEXT DEFAULT 'local',
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            user_id TEXT NOT NULL DEFAULT ''
           )
         ''');
         await db.execute('''
@@ -57,12 +64,20 @@ class LocalCalendarProvider {
         await db.execute('CREATE INDEX idx_reminders_event ON calendar_reminders(event_id)');
         await db.execute('CREATE INDEX idx_reminders_time ON calendar_reminders(remind_at)');
       },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          try { await db.execute("ALTER TABLE calendar_events ADD COLUMN user_id TEXT NOT NULL DEFAULT ''"); } catch (_) {}
+          try { await db.execute("ALTER TABLE calendar_reminders ADD COLUMN user_id TEXT NOT NULL DEFAULT ''"); } catch (_) {}
+        }
+      },
     );
   }
 
   Future<void> insertEvent(CalendarEvent event) async {
     final db = await database;
-    await db.insert('calendar_events', event.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    final map = event.toMap();
+    map['user_id'] = _currentUserId;
+    await db.insert('calendar_events', map, conflictAlgorithm: ConflictAlgorithm.replace);
     await _syncReminders(event);
     await _notifyListeners();
   }
@@ -71,7 +86,9 @@ class LocalCalendarProvider {
     final db = await database;
     final batch = db.batch();
     for (final event in events) {
-      batch.insert('calendar_events', event.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+      final map = event.toMap();
+      map['user_id'] = _currentUserId;
+      batch.insert('calendar_events', map, conflictAlgorithm: ConflictAlgorithm.replace);
       await _syncReminders(event);
     }
     await batch.commit(noResult: true);
@@ -101,7 +118,10 @@ class LocalCalendarProvider {
 
   Future<List<CalendarEvent>> getAllEvents() async {
     final db = await database;
-    final results = await db.query('calendar_events', orderBy: 'start_time ASC');
+    final results = await db.query('calendar_events',
+      where: 'user_id = ?',
+      whereArgs: [_currentUserId],
+      orderBy: 'start_time ASC');
     return results.map((r) => CalendarEvent.fromMap(r)).toList();
   }
 
@@ -111,8 +131,8 @@ class LocalCalendarProvider {
     final endOfDay = startOfDay.add(const Duration(days: 1));
     final results = await db.query(
       'calendar_events',
-      where: 'start_time >= ? AND start_time < ?',
-      whereArgs: [startOfDay.toIso8601String(), endOfDay.toIso8601String()],
+      where: 'start_time >= ? AND start_time < ? AND user_id = ?',
+      whereArgs: [startOfDay.toIso8601String(), endOfDay.toIso8601String(), _currentUserId],
       orderBy: 'start_time ASC',
     );
     return results.map((r) => CalendarEvent.fromMap(r)).toList();
@@ -122,8 +142,8 @@ class LocalCalendarProvider {
     final db = await database;
     final results = await db.query(
       'calendar_events',
-      where: 'start_time >= ? AND start_time <= ?',
-      whereArgs: [start.toIso8601String(), end.toIso8601String()],
+      where: 'start_time >= ? AND start_time <= ? AND user_id = ?',
+      whereArgs: [start.toIso8601String(), end.toIso8601String(), _currentUserId],
       orderBy: 'start_time ASC',
     );
     return results.map((r) => CalendarEvent.fromMap(r)).toList();
@@ -134,8 +154,8 @@ class LocalCalendarProvider {
     final now = DateTime.now().toIso8601String();
     final results = await db.query(
       'calendar_events',
-      where: 'start_time >= ? AND is_completed = 0',
-      whereArgs: [now],
+      where: 'start_time >= ? AND is_completed = 0 AND user_id = ?',
+      whereArgs: [now, _currentUserId],
       orderBy: 'start_time ASC',
       limit: limit,
     );
@@ -146,8 +166,8 @@ class LocalCalendarProvider {
     final db = await database;
     final results = await db.query(
       'calendar_events',
-      where: 'title LIKE ? OR description LIKE ? OR location LIKE ?',
-      whereArgs: ['%$query%', '%$query%', '%$query%'],
+      where: 'title LIKE ? OR description LIKE ? OR location LIKE ? AND user_id = ?',
+      whereArgs: ['%$query%', '%$query%', '%$query%', _currentUserId],
       orderBy: 'start_time ASC',
     );
     return results.map((r) => CalendarEvent.fromMap(r)).toList();
@@ -157,8 +177,8 @@ class LocalCalendarProvider {
     final db = await database;
     final results = await db.query(
       'calendar_events',
-      where: 'category = ?',
-      whereArgs: [category.name],
+      where: 'category = ? AND user_id = ?',
+      whereArgs: [category.name, _currentUserId],
       orderBy: 'start_time ASC',
     );
     return results.map((r) => CalendarEvent.fromMap(r)).toList();
@@ -202,6 +222,7 @@ class LocalCalendarProvider {
           'message': '${event.title} starts in ${event.reminderMinutes} minutes',
           'is_fired': 0,
           'created_at': DateTime.now().toIso8601String(),
+          'user_id': _currentUserId,
         });
       }
     }

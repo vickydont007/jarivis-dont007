@@ -22,6 +22,10 @@ class WorkflowEngine {
         _messageBus = messageBus,
         _db = db ?? WorkflowDatabase();
 
+  void setUserId(String userId) {
+    _db.setUserId(userId);
+  }
+
   ToolManager get toolManager => _toolManager;
   AgentMessageBus get messageBus => _messageBus;
   WorkflowDatabase get database => _db;

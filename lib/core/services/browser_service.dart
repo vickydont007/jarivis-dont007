@@ -64,6 +64,12 @@ class BrowserService {
   static Database? _database;
   static const _dbName = 'nextron_research.db';
   final _uuid = const Uuid();
+  String _currentUserId = '';
+
+  void setUserId(String id) {
+    _currentUserId = id;
+  }
+
   final Dio _dio;
 
   BrowserService({Dio? dio}) : _dio = dio ?? Dio(BaseOptions(
@@ -86,7 +92,7 @@ class BrowserService {
     final path = join(await getDatabasesPath(), _dbName);
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE research_sources(
@@ -97,7 +103,8 @@ class BrowserService {
             credibility_score REAL DEFAULT 0.5,
             visit_count INTEGER DEFAULT 1,
             last_visited TEXT NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            user_id TEXT NOT NULL DEFAULT ''
           )
         ''');
         await db.execute('''
@@ -106,11 +113,18 @@ class BrowserService {
             topic TEXT NOT NULL,
             report_json TEXT NOT NULL,
             sources_json TEXT NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            user_id TEXT NOT NULL DEFAULT ''
           )
         ''');
         await db.execute('CREATE INDEX idx_sources_domain ON research_sources(domain)');
         await db.execute('CREATE INDEX idx_reports_topic ON research_reports(topic)');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          try { await db.execute("ALTER TABLE research_sources ADD COLUMN user_id TEXT NOT NULL DEFAULT ''"); } catch (_) {}
+          try { await db.execute("ALTER TABLE research_reports ADD COLUMN user_id TEXT NOT NULL DEFAULT ''"); } catch (_) {}
+        }
       },
     );
   }
@@ -333,6 +347,7 @@ class BrowserService {
         'credibility_score': credibility,
         'last_visited': DateTime.now().toIso8601String(),
         'created_at': DateTime.now().toIso8601String(),
+        'user_id': _currentUserId,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
 
       // Update visit count
@@ -367,6 +382,8 @@ class BrowserService {
     final db = await database;
     return await db.query(
       'research_sources',
+      where: 'user_id = ?',
+      whereArgs: [_currentUserId],
       orderBy: 'credibility_score DESC, visit_count DESC',
       limit: limit,
     );

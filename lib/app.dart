@@ -20,6 +20,8 @@ import 'screens/agent_control_center_screen.dart';
 import 'screens/developer_screen.dart';
 import 'screens/runtime_validation_screen.dart';
 import 'screens/login_screen.dart';
+import 'core/services/workspace_loader.dart';
+import 'core/providers.dart' as p;
 
 final themeProvider = StateProvider<bool>((ref) => true);
 
@@ -37,11 +39,31 @@ class JarvisApp extends ConsumerWidget {
   }
 }
 
-class AuthGate extends ConsumerWidget {
+class AuthGate extends ConsumerStatefulWidget {
   const AuthGate({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends ConsumerState<AuthGate> {
+  bool _initialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized) {
+      _initialized = true;
+      final loader = p.setupWorkspaceLoader(ref);
+      final authState = ref.read(authStateProvider);
+      if (authState.status == AuthStatus.authenticated && authState.user != null) {
+        loader.loadUserData(authState.user!.id);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
 
     switch (authState.status) {

@@ -32,6 +32,12 @@ class EmailService {
       StreamController<List<EmailMessage>>.broadcast();
   Stream<List<EmailMessage>> get inboxStream => _inboxController.stream;
 
+  String _currentUserId = '';
+
+  void setUserId(String id) {
+    _currentUserId = id;
+  }
+
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDatabase();
@@ -42,7 +48,7 @@ class EmailService {
     final path = join(await getDatabasesPath(), _dbName);
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE emails(
@@ -65,7 +71,8 @@ class EmailService {
             thread_id TEXT,
             has_attachments INTEGER DEFAULT 0,
             size INTEGER,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            user_id TEXT NOT NULL DEFAULT ''
           )
         ''');
         await db.execute('CREATE INDEX idx_emails_folder ON emails(folder)');
@@ -86,6 +93,9 @@ class EmailService {
           try { await db.execute('ALTER TABLE emails ADD COLUMN has_attachments INTEGER DEFAULT 0'); } catch (_) {}
           try { await db.execute('ALTER TABLE emails ADD COLUMN size INTEGER'); } catch (_) {}
           try { await db.execute('ALTER TABLE emails ADD COLUMN created_at TEXT NOT NULL DEFAULT ""'); } catch (_) {}
+        }
+        if (oldVersion < 3) {
+          try { await db.execute("ALTER TABLE emails ADD COLUMN user_id TEXT NOT NULL DEFAULT ''"); } catch (_) {}
         }
       },
     );
@@ -207,25 +217,25 @@ class EmailService {
 
   Future<bool> markAsRead(String emailId) async {
     final db = await database;
-    await db.update('emails', {'is_unread': 0}, where: 'id = ?', whereArgs: [emailId]);
+    await db.update('emails', {'is_unread': 0}, where: 'id = ? AND user_id = ?', whereArgs: [emailId, _currentUserId]);
     return true;
   }
 
   Future<bool> markAsUnread(String emailId) async {
     final db = await database;
-    await db.update('emails', {'is_unread': 1}, where: 'id = ?', whereArgs: [emailId]);
+    await db.update('emails', {'is_unread': 1}, where: 'id = ? AND user_id = ?', whereArgs: [emailId, _currentUserId]);
     return true;
   }
 
   Future<bool> archiveEmail(String emailId) async {
     final db = await database;
-    await db.update('emails', {'folder': 'archive'}, where: 'id = ?', whereArgs: [emailId]);
+    await db.update('emails', {'folder': 'archive'}, where: 'id = ? AND user_id = ?', whereArgs: [emailId, _currentUserId]);
     return true;
   }
 
   Future<bool> moveToTrash(String emailId) async {
     final db = await database;
-    await db.update('emails', {'folder': 'trash'}, where: 'id = ?', whereArgs: [emailId]);
+    await db.update('emails', {'folder': 'trash'}, where: 'id = ? AND user_id = ?', whereArgs: [emailId, _currentUserId]);
     return true;
   }
 
@@ -422,11 +432,11 @@ class EmailService {
     List<dynamic>? whereArgs;
 
     if (searchQuery != null && searchQuery.isNotEmpty) {
-      where = 'folder = ? AND (subject LIKE ? OR `from` LIKE ? OR body LIKE ?)';
-      whereArgs = [folder.name, '%$searchQuery%', '%$searchQuery%', '%$searchQuery%'];
+      where = 'folder = ? AND user_id = ? AND (subject LIKE ? OR `from` LIKE ? OR body LIKE ?)';
+      whereArgs = [folder.name, _currentUserId, '%$searchQuery%', '%$searchQuery%', '%$searchQuery%'];
     } else {
-      where = 'folder = ?';
-      whereArgs = [folder.name];
+      where = 'folder = ? AND user_id = ?';
+      whereArgs = [folder.name, _currentUserId];
     }
 
     final results = await db.query(
@@ -443,8 +453,8 @@ class EmailService {
     final db = await database;
     final results = await db.query(
       'emails',
-      where: 'is_unread = 1 AND folder = ?',
-      whereArgs: [EmailFolder.inbox.name],
+      where: 'is_unread = 1 AND folder = ? AND user_id = ?',
+      whereArgs: [EmailFolder.inbox.name, _currentUserId],
       orderBy: 'date DESC',
       limit: limit,
     );
@@ -455,8 +465,8 @@ class EmailService {
     final db = await database;
     final results = await db.query(
       'emails',
-      where: 'subject LIKE ? OR `from` LIKE ? OR body LIKE ?',
-      whereArgs: ['%$query%', '%$query%', '%$query%'],
+      where: '(subject LIKE ? OR `from` LIKE ? OR body LIKE ?) AND user_id = ?',
+      whereArgs: ['%$query%', '%$query%', '%$query%', _currentUserId],
       orderBy: 'date DESC',
       limit: limit,
     );
@@ -466,8 +476,8 @@ class EmailService {
   Future<int> getUnreadCount() async {
     final db = await database;
     final result = await db.rawQuery(
-      'SELECT COUNT(*) as count FROM emails WHERE is_unread = 1 AND folder = ?',
-      [EmailFolder.inbox.name],
+      'SELECT COUNT(*) as count FROM emails WHERE is_unread = 1 AND folder = ? AND user_id = ?',
+      [EmailFolder.inbox.name, _currentUserId],
     );
     return (result.first['count'] as int?) ?? 0;
   }
@@ -475,8 +485,8 @@ class EmailService {
   Future<int> getTotalCount({EmailFolder folder = EmailFolder.inbox}) async {
     final db = await database;
     final result = await db.rawQuery(
-      'SELECT COUNT(*) as count FROM emails WHERE folder = ?',
-      [folder.name],
+      'SELECT COUNT(*) as count FROM emails WHERE folder = ? AND user_id = ?',
+      [folder.name, _currentUserId],
     );
     return (result.first['count'] as int?) ?? 0;
   }
@@ -485,7 +495,8 @@ class EmailService {
     final db = await database;
     final results = await db.query(
       'emails',
-      where: 'is_important = 1',
+      where: 'is_important = 1 AND user_id = ?',
+      whereArgs: [_currentUserId],
       orderBy: 'date DESC',
       limit: limit,
     );
@@ -496,7 +507,8 @@ class EmailService {
     final db = await database;
     final results = await db.query(
       'emails',
-      where: 'is_meeting = 1',
+      where: 'is_meeting = 1 AND user_id = ?',
+      whereArgs: [_currentUserId],
       orderBy: 'date DESC',
       limit: limit,
     );
@@ -507,7 +519,8 @@ class EmailService {
     final db = await database;
     final results = await db.query(
       'emails',
-      where: 'has_deadline = 1 OR is_important = 1',
+      where: '(has_deadline = 1 OR is_important = 1) AND user_id = ?',
+      whereArgs: [_currentUserId],
       orderBy: 'date DESC',
       limit: limit,
     );
@@ -516,38 +529,38 @@ class EmailService {
 
   Future<EmailMessage?> getEmail(String emailId) async {
     final db = await database;
-    final results = await db.query('emails', where: 'id = ?', whereArgs: [emailId], limit: 1);
+    final results = await db.query('emails', where: 'id = ? AND user_id = ?', whereArgs: [emailId, _currentUserId], limit: 1);
     if (results.isEmpty) return null;
     return _emailFromRow(results.first);
   }
 
   Future<bool> deleteEmail(String emailId) async {
     final db = await database;
-    await db.delete('emails', where: 'id = ?', whereArgs: [emailId]);
+    await db.delete('emails', where: 'id = ? AND user_id = ?', whereArgs: [emailId, _currentUserId]);
     return true;
   }
 
   Future<Map<String, dynamic>> getEmailStats() async {
     final db = await database;
     final unread = await db.rawQuery(
-      'SELECT COUNT(*) as count FROM emails WHERE is_unread = 1 AND folder = ?',
-      [EmailFolder.inbox.name],
+      'SELECT COUNT(*) as count FROM emails WHERE is_unread = 1 AND folder = ? AND user_id = ?',
+      [EmailFolder.inbox.name, _currentUserId],
     );
     final total = await db.rawQuery(
-      'SELECT COUNT(*) as count FROM emails WHERE folder = ?',
-      [EmailFolder.inbox.name],
+      'SELECT COUNT(*) as count FROM emails WHERE folder = ? AND user_id = ?',
+      [EmailFolder.inbox.name, _currentUserId],
     );
     final meetings = await db.rawQuery(
-      'SELECT COUNT(*) as count FROM emails WHERE is_meeting = 1 AND folder = ?',
-      [EmailFolder.inbox.name],
+      'SELECT COUNT(*) as count FROM emails WHERE is_meeting = 1 AND folder = ? AND user_id = ?',
+      [EmailFolder.inbox.name, _currentUserId],
     );
     final deadlines = await db.rawQuery(
-      'SELECT COUNT(*) as count FROM emails WHERE has_deadline = 1 AND folder = ?',
-      [EmailFolder.inbox.name],
+      'SELECT COUNT(*) as count FROM emails WHERE has_deadline = 1 AND folder = ? AND user_id = ?',
+      [EmailFolder.inbox.name, _currentUserId],
     );
     final important = await db.rawQuery(
-      'SELECT COUNT(*) as count FROM emails WHERE is_important = 1 AND folder = ?',
-      [EmailFolder.inbox.name],
+      'SELECT COUNT(*) as count FROM emails WHERE is_important = 1 AND folder = ? AND user_id = ?',
+      [EmailFolder.inbox.name, _currentUserId],
     );
 
     return {
@@ -627,6 +640,7 @@ class EmailService {
     final db = await database;
     final map = email.toMap();
     map['created_at'] = DateTime.now().toIso8601String();
+    map['user_id'] = _currentUserId;
     map['body'] = email.body.length > 5000 ? email.body.substring(0, 5000) : email.body;
     await db.insert('emails', map, conflictAlgorithm: ConflictAlgorithm.replace);
   }

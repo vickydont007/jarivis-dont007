@@ -3,6 +3,21 @@ import 'auth_service.dart';
 import 'auth_user.dart';
 import 'local_auth_provider.dart';
 
+// Forward declaration - set by workspace_loader.dart
+typedef AuthCleanupCallback = Future<void> Function();
+typedef AuthLoginCallback = Future<void> Function(String userId);
+
+AuthCleanupCallback? _logoutCleanup;
+AuthLoginCallback? _loginLoadCallback;
+
+void setLogoutCleanup(AuthCleanupCallback callback) {
+  _logoutCleanup = callback;
+}
+
+void setLoginLoadCallback(AuthLoginCallback callback) {
+  _loginLoadCallback = callback;
+}
+
 final localAuthProvider = Provider<LocalAuthProvider>((ref) {
   return LocalAuthProvider();
 });
@@ -62,6 +77,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return 'Email already registered';
     }
     state = AuthState(status: AuthStatus.authenticated, user: user);
+    if (_loginLoadCallback != null && user.id.isNotEmpty) {
+      await _loginLoadCallback!(user.id);
+    }
     return null;
   }
 
@@ -75,10 +93,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return 'Invalid email or password';
     }
     state = AuthState(status: AuthStatus.authenticated, user: user);
+    if (_loginLoadCallback != null && user.id.isNotEmpty) {
+      await _loginLoadCallback!(user.id);
+    }
     return null;
   }
 
   Future<void> logout() async {
+    if (_logoutCleanup != null) {
+      await _logoutCleanup!();
+    }
     await _authService.logout();
     state = const AuthState(status: AuthStatus.unauthenticated);
   }

@@ -68,6 +68,12 @@ class MemorySystem {
 
   Stream<MemoryEntry> get memoryStream => _memoryController.stream;
 
+  String _currentUserId = '';
+
+  void setUserId(String id) {
+    _currentUserId = id;
+  }
+
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDatabase();
@@ -81,7 +87,7 @@ class MemorySystem {
     try {
       return await openDatabase(
         path,
-        version: 3,
+        version: 4,
         onCreate: (db, version) async {
           // Create memories table
           await db.execute('''
@@ -91,7 +97,8 @@ class MemorySystem {
               category TEXT DEFAULT 'general',
               metadata TEXT DEFAULT '{}',
               created_at TEXT NOT NULL,
-              updated_at TEXT NOT NULL
+              updated_at TEXT NOT NULL,
+              user_id TEXT NOT NULL DEFAULT ''
             )
           ''');
 
@@ -138,7 +145,8 @@ class MemorySystem {
               current_summary TEXT,
               message_count INTEGER DEFAULT 0,
               created_at TEXT NOT NULL,
-              updated_at TEXT NOT NULL
+              updated_at TEXT NOT NULL,
+              user_id TEXT NOT NULL DEFAULT ''
             )
           ''');
 
@@ -162,6 +170,13 @@ class MemorySystem {
           if (oldVersion < 3) {
             await _createConsolidationTables(db);
           }
+          if (oldVersion < 4) {
+            try { await db.execute("ALTER TABLE memories ADD COLUMN user_id TEXT NOT NULL DEFAULT ''"); } catch (_) {}
+            try { await db.execute("ALTER TABLE conversation_sessions ADD COLUMN user_id TEXT NOT NULL DEFAULT ''"); } catch (_) {}
+            try { await db.execute("ALTER TABLE consolidated_memories ADD COLUMN user_id TEXT NOT NULL DEFAULT ''"); } catch (_) {}
+            try { await db.execute("ALTER TABLE user_profile ADD COLUMN user_id TEXT NOT NULL DEFAULT ''"); } catch (_) {}
+            try { await db.execute("ALTER TABLE memory_links ADD COLUMN user_id TEXT NOT NULL DEFAULT ''"); } catch (_) {}
+          }
         },
       );
     } catch (e) {
@@ -174,7 +189,7 @@ class MemorySystem {
       _database = null;
       return await openDatabase(
         path,
-        version: 3,
+        version: 4,
         onCreate: (db, version) async {
           await db.execute('''
             CREATE TABLE memories(
@@ -183,7 +198,8 @@ class MemorySystem {
               category TEXT DEFAULT 'general',
               metadata TEXT DEFAULT '{}',
               created_at TEXT NOT NULL,
-              updated_at TEXT NOT NULL
+              updated_at TEXT NOT NULL,
+              user_id TEXT NOT NULL DEFAULT ''
             )
           ''');
 
@@ -227,7 +243,8 @@ class MemorySystem {
               current_summary TEXT,
               message_count INTEGER DEFAULT 0,
               created_at TEXT NOT NULL,
-              updated_at TEXT NOT NULL
+              updated_at TEXT NOT NULL,
+              user_id TEXT NOT NULL DEFAULT ''
             )
           ''');
 
@@ -252,7 +269,8 @@ class MemorySystem {
         canonical_id TEXT,
         metadata TEXT DEFAULT '{}',
         created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        user_id TEXT NOT NULL DEFAULT ''
       )
     ''');
 
@@ -299,6 +317,7 @@ class MemorySystem {
         source TEXT DEFAULT 'conversation',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        user_id TEXT NOT NULL DEFAULT '',
         UNIQUE(field_name, field_value)
       )
     ''');
@@ -312,6 +331,7 @@ class MemorySystem {
         relationship TEXT NOT NULL,
         strength REAL DEFAULT 0.5,
         created_at TEXT NOT NULL,
+        user_id TEXT NOT NULL DEFAULT '',
         UNIQUE(from_memory_id, to_memory_id, relationship)
       )
     ''');
@@ -320,13 +340,17 @@ class MemorySystem {
   Future<void> addMemory(MemoryEntry memory) async {
     try {
       final db = await database;
-      await db.insert('memories', memory.toMap());
+      final map = memory.toMap();
+      map['user_id'] = _currentUserId;
+      await db.insert('memories', map);
       _memoryController.add(memory);
     } catch (_) {
       _database = null;
       try {
         final db = await database;
-        await db.insert('memories', memory.toMap());
+        final map = memory.toMap();
+        map['user_id'] = _currentUserId;
+        await db.insert('memories', map);
         _memoryController.add(memory);
       } catch (_) {}
     }
@@ -338,10 +362,10 @@ class MemorySystem {
       final results = await db.rawQuery('''
         SELECT m.* FROM memories m
         JOIN memories_fts fts ON m.rowid = fts.rowid
-        WHERE memories_fts MATCH ?
+        WHERE memories_fts MATCH ? AND m.user_id = ?
         ORDER BY rank
         LIMIT 10
-      ''', [query]);
+      ''', [query, _currentUserId]);
       return results.map((map) => MemoryEntry.fromMap(map)).toList();
     } catch (_) {
       _database = null;
@@ -354,8 +378,8 @@ class MemorySystem {
       final db = await database;
       final results = await db.query(
         'memories',
-        where: 'category = ?',
-        whereArgs: [category],
+        where: 'category = ? AND user_id = ?',
+        whereArgs: [category, _currentUserId],
         orderBy: 'updated_at DESC',
       );
       return results.map((map) => MemoryEntry.fromMap(map)).toList();
@@ -370,6 +394,8 @@ class MemorySystem {
       final db = await database;
       final results = await db.query(
         'memories',
+        where: 'user_id = ?',
+        whereArgs: [_currentUserId],
         orderBy: 'updated_at DESC',
       );
       return results.map((map) => MemoryEntry.fromMap(map)).toList();
@@ -408,7 +434,7 @@ class MemorySystem {
   Future<void> clearAllMemories() async {
     try {
       final db = await database;
-      await db.delete('memories');
+      await db.delete('memories', where: 'user_id = ?', whereArgs: [_currentUserId]);
     } catch (_) {}
   }
 
@@ -438,6 +464,7 @@ class MemorySystem {
           'summaries_json': jsonEncode(summaries),
           'current_summary': currentSummary,
           'message_count': messageCount,
+          'user_id': _currentUserId,
           'created_at': now,
           'updated_at': now,
         },
@@ -454,6 +481,8 @@ class MemorySystem {
       final db = await database;
       final results = await db.query(
         'conversation_sessions',
+        where: 'user_id = ?',
+        whereArgs: [_currentUserId],
         orderBy: 'updated_at DESC',
         limit: 1,
       );
@@ -481,6 +510,8 @@ class MemorySystem {
       final db = await database;
       final results = await db.query(
         'conversation_sessions',
+        where: 'user_id = ?',
+        whereArgs: [_currentUserId],
         orderBy: 'updated_at DESC',
         limit: limit,
       );
@@ -514,7 +545,7 @@ class MemorySystem {
   Future<void> clearAllConversationSessions() async {
     try {
       final db = await database;
-      await db.delete('conversation_sessions');
+      await db.delete('conversation_sessions', where: 'user_id = ?', whereArgs: [_currentUserId]);
     } catch (e) {
       // Silently fail
     }

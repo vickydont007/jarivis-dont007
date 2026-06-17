@@ -13,6 +13,7 @@ import '../core/services/memory_search.dart';
 import '../core/services/memory_search.dart' show MemorySearchResult;
 import '../core/services/proactive_engine.dart';
 import '../core/services/knowledge_hub.dart';
+import '../core/services/workspace_loader.dart';
 import '../core/services/watchlist_monitor.dart';
 import '../core/services/project_analyzer.dart';
 import '../core/services/email_service.dart';
@@ -394,3 +395,22 @@ final projectAnalyzerProvider = Provider<ProjectAnalyzer?>((ref) {
   final appState = ref.watch(appStateProvider);
   return appState.projectAnalyzer;
 });
+
+// ─── Workspace Loader Provider ─────────────────────────────────
+
+final workspaceLoaderProvider = Provider<WorkspaceLoader>((ref) {
+  return WorkspaceLoader();
+});
+
+WorkspaceLoader setupWorkspaceLoader(WidgetRef ref) {
+  final loader = ref.read(workspaceLoaderProvider);
+  final appState = ref.read(appStateProvider);
+  loader.init(
+    memorySystem: appState.memory,
+    calendarService: ref.read(calendarServiceProvider),
+    emailService: ref.read(emailServiceProvider),
+    researchService: ref.read(researchServiceProvider),
+    orchestrator: ref.read(orchestratorProvider),
+  );
+  return loader;
+}

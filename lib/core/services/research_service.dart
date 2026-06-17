@@ -134,6 +134,10 @@ class ResearchService {
 
   BrowserService get browser => _browser;
 
+  void setUserId(String id) {
+    _browser.setUserId(id);
+  }
+
   // ─── Topic Research ───────────────────────────────────────────
 
   Future<ResearchReport> researchTopic(String topic, {int maxSources = 15}) async {
