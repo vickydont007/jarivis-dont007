@@ -16,6 +16,7 @@ import 'screens/calendar_screen.dart';
 import 'screens/email_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/file_explorer_screen.dart';
+import 'screens/profile_screen.dart';
 import 'screens/agent_control_center_screen.dart';
 import 'screens/developer_screen.dart';
 import 'screens/runtime_validation_screen.dart';
@@ -101,7 +102,6 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
   bool _isCommandPaletteOpen = false;
   bool _isSidebarExpanded = false;
 
-  static const _navKey = 'jarvis_selected_nav_v2';
   static const _navKeyLegacy = 'jarvis_selected_nav';
 
   final List<Widget> _screens = [
@@ -113,6 +113,7 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
     const CalendarScreen(),
     const EmailScreen(),
     const FileExplorerScreen(),
+    const ProfileScreen(),
     const SettingsScreen(),
     const AgentControlCenterScreen(),
   ];
@@ -129,6 +130,8 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
     _setupKeyboardShortcuts();
   }
 
+  static const _navKey = 'jarvis_selected_nav_v3';
+
   Future<void> _loadNavigationState() async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -137,7 +140,7 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
     }
 
     final saved = prefs.getInt(_navKey);
-    if (saved != null && saved >= 0 && saved <= 11) {
+    if (saved != null && saved >= 0 && saved <= 12) {
       setState(() {
         _selectedIndex = saved;
       });
@@ -204,11 +207,11 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
 
   @override
   Widget build(BuildContext context) {
-    final isDevScreen = _selectedIndex >= 10 && _selectedIndex <= 11;
+    final isDevScreen = _selectedIndex >= 11 && _selectedIndex <= 12;
 
     Widget currentScreen;
     if (isDevScreen) {
-      final devIndex = _selectedIndex - 10;
+      final devIndex = _selectedIndex - 11;
       currentScreen = _developerScreens[devIndex];
     } else {
       currentScreen = _screens[_selectedIndex];
@@ -269,11 +272,14 @@ class _JarvisShellState extends ConsumerState<JarvisShell> {
       case 'Files':
         _navigateTo(7);
         break;
-      case 'Settings':
+      case 'Profile':
         _navigateTo(8);
         break;
-      case 'Agent Control Center':
+      case 'Settings':
         _navigateTo(9);
+        break;
+      case 'Agent Control Center':
+        _navigateTo(10);
         break;
     }
   }

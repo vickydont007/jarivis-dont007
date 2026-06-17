@@ -15,6 +15,7 @@ import 'research_service.dart';
 import 'multi_agent_orchestrator.dart';
 import '../models/workflow.dart';
 import '../calendar_event.dart';
+import '../profile/user_profile_service.dart';
 
 enum BriefingType { morning, evening }
 
@@ -91,6 +92,7 @@ class DailyBriefingService {
   final EmailService? _emailService;
   final ResearchService? _researchService;
   final MultiAgentOrchestrator? _orchestrator;
+  final UserProfileService? _userProfileService;
 
   DailyBriefingService({
     required TimelineService timeline,
@@ -100,13 +102,15 @@ class DailyBriefingService {
     EmailService? emailService,
     ResearchService? researchService,
     MultiAgentOrchestrator? orchestrator,
+    UserProfileService? userProfileService,
   })  : _timeline = timeline,
         _agents = agents,
         _memory = memory,
         _calendarService = calendarService,
         _emailService = emailService,
         _researchService = researchService,
-        _orchestrator = orchestrator;
+        _orchestrator = orchestrator,
+        _userProfileService = userProfileService;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -320,6 +324,29 @@ class DailyBriefingService {
             title: '${recentReports.length} research report${recentReports.length > 1 ? "s" : ""} generated',
             description: recentReports.map((r) => r.topic).join('; '),
             category: 'research',
+          ));
+        }
+      } catch (_) {}
+    }
+
+    // Profile goals and projects in briefing
+    if (_userProfileService != null) {
+      try {
+        final profile = await _userProfileService!.load();
+        if (profile.goals.isNotEmpty) {
+          items.add(DailyBriefingItem(
+            icon: '🎯',
+            title: '${profile.goals.length} active goal${profile.goals.length > 1 ? "s" : ""}',
+            description: profile.goals.take(3).join('; '),
+            category: 'goals',
+          ));
+        }
+        if (profile.projects.isNotEmpty) {
+          items.add(DailyBriefingItem(
+            icon: '📁',
+            title: '${profile.projects.length} project${profile.projects.length > 1 ? "s" : ""}',
+            description: profile.projects.take(3).join('; '),
+            category: 'projects',
           ));
         }
       } catch (_) {}

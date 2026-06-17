@@ -4,6 +4,7 @@ import 'email_service.dart';
 import 'research_service.dart';
 import 'multi_agent_orchestrator.dart';
 import '../auth/auth_provider.dart';
+import '../profile/user_profile_service.dart';
 
 class WorkspaceLoader {
   MemorySystem? _memorySystem;
@@ -11,6 +12,7 @@ class WorkspaceLoader {
   EmailService? _emailService;
   ResearchService? _researchService;
   MultiAgentOrchestrator? _orchestrator;
+  UserProfileService? _userProfileService;
 
   WorkspaceLoader() {
     _registerCallbacks();
@@ -22,12 +24,14 @@ class WorkspaceLoader {
     EmailService? emailService,
     ResearchService? researchService,
     MultiAgentOrchestrator? orchestrator,
+    UserProfileService? userProfileService,
   }) {
     _memorySystem = memorySystem;
     _calendarService = calendarService;
     _emailService = emailService;
     _researchService = researchService;
     _orchestrator = orchestrator;
+    _userProfileService = userProfileService;
   }
 
   void loadUserData(String userId) {
@@ -36,6 +40,8 @@ class WorkspaceLoader {
     _emailService?.setUserId(userId);
     _researchService?.setUserId(userId);
     _orchestrator?.setUserId(userId);
+    _userProfileService?.setUserId(userId);
+    _userProfileService?.load();
   }
 
   Future<void> clearUserData() async {
@@ -44,6 +50,7 @@ class WorkspaceLoader {
     _emailService?.setUserId('');
     _researchService?.setUserId('');
     _orchestrator?.setUserId('');
+    _userProfileService?.setUserId('');
   }
 
   void _registerCallbacks() {
@@ -61,5 +68,6 @@ class WorkspaceLoader {
     _emailService = null;
     _researchService = null;
     _orchestrator = null;
+    _userProfileService = null;
   }
 }

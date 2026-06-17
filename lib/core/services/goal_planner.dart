@@ -22,11 +22,15 @@ class GoalPlanner {
   final AIEngine? Function() _getEngine;
   final AgentRegistry _registry;
 
+  final String? _profileContext;
+
   GoalPlanner({
     required AIEngine? Function() getEngine,
     required AgentRegistry registry,
+    String? profileContext,
   })  : _getEngine = getEngine,
-        _registry = registry;
+        _registry = registry,
+        _profileContext = profileContext;
 
   Future<GoalPlan> planGoal(String goal) async {
     final engine = _getEngine();
@@ -43,8 +47,11 @@ class GoalPlanner {
   Future<GoalPlan> _planWithAI(String goal, AIEngine engine) async {
     final toolMap = _registry.toolToAgentMap;
     final toolsList = toolMap.entries.map((e) => '${e.key} (${e.value})').join('\n');
+    final profileBlock = _profileContext != null && _profileContext.isNotEmpty
+        ? '\nUSER PROFILE CONTEXT:\n$_profileContext\n- Personalize the plan to the user\'s known projects, goals, and skills\n'
+        : '';
 
-    final prompt = '''You are a goal planner for an AI assistant. Decompose the user's goal into a sequence of tool calls.
+    final prompt = '''You are a goal planner for an AI assistant. Decompose the user's goal into a sequence of tool calls.$profileBlock
 
 AVAILABLE AGENTS AND TOOLS:
 $toolsList

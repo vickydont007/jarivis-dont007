@@ -14,6 +14,8 @@ import '../core/services/memory_search.dart' show MemorySearchResult;
 import '../core/services/proactive_engine.dart';
 import '../core/services/knowledge_hub.dart';
 import '../core/services/workspace_loader.dart';
+import '../core/profile/user_profile_service.dart';
+import '../core/profile/user_profile.dart';
 import '../core/services/watchlist_monitor.dart';
 import '../core/services/project_analyzer.dart';
 import '../core/services/email_service.dart';
@@ -141,6 +143,7 @@ final dailyBriefingServiceProvider = Provider<DailyBriefingService>((ref) {
   final emailService = ref.watch(emailServiceProvider);
   final researchService = ref.watch(researchServiceProvider);
   final orchestrator = ref.watch(orchestratorProvider);
+  final userProfileService = ref.watch(userProfileServiceProvider);
   return DailyBriefingService(
     timeline: timeline,
     agents: agents,
@@ -149,6 +152,7 @@ final dailyBriefingServiceProvider = Provider<DailyBriefingService>((ref) {
     emailService: emailService,
     researchService: researchService,
     orchestrator: orchestrator,
+    userProfileService: userProfileService,
   );
 });
 
@@ -396,6 +400,17 @@ final projectAnalyzerProvider = Provider<ProjectAnalyzer?>((ref) {
   return appState.projectAnalyzer;
 });
 
+// ─── User Profile Provider ─────────────────────────────────────
+
+final userProfileServiceProvider = Provider<UserProfileService>((ref) {
+  return UserProfileService();
+});
+
+final userProfileProvider = FutureProvider.autoDispose<UserProfile>((ref) async {
+  final service = ref.watch(userProfileServiceProvider);
+  return service.load();
+});
+
 // ─── Workspace Loader Provider ─────────────────────────────────
 
 final workspaceLoaderProvider = Provider<WorkspaceLoader>((ref) {
@@ -411,6 +426,7 @@ WorkspaceLoader setupWorkspaceLoader(WidgetRef ref) {
     emailService: ref.read(emailServiceProvider),
     researchService: ref.read(researchServiceProvider),
     orchestrator: ref.read(orchestratorProvider),
+    userProfileService: ref.read(userProfileServiceProvider),
   );
   return loader;
 }

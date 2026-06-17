@@ -5,10 +5,12 @@ import 'package:path/path.dart';
 import 'package:nextron_ai/core/memory_evolution.dart';
 import 'package:nextron_ai/core/girlfriend_memory.dart';
 import 'package:nextron_ai/core/models/consolidated_memory.dart';
+import 'package:nextron_ai/core/profile/user_profile_service.dart';
 
 class MemoryConsolidationService {
   static Database? _database;
   final MemoryEvolution _memoryEvolution;
+  UserProfileService? _userProfileService;
 
   final StreamController<ConsolidatedMemory> _memoryStream =
       StreamController<ConsolidatedMemory>.broadcast();
@@ -19,7 +21,14 @@ class MemoryConsolidationService {
 
   MemoryConsolidationService({
     required MemoryEvolution memoryEvolution,
-  }) : _memoryEvolution = memoryEvolution;
+    UserProfileService? userProfileService,
+  }) : _memoryEvolution = memoryEvolution {
+    _userProfileService = userProfileService;
+  }
+
+  void setUserProfileService(UserProfileService service) {
+    _userProfileService = service;
+  }
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -343,6 +352,13 @@ class MemoryConsolidationService {
 
     await db.insert('consolidated_memories', memory.toMap());
     _memoryStream.add(memory);
+
+    // Sync with User Profile Engine
+    _userProfileService?.mergeFacts(
+      content: fact.content,
+      category: fact.category.name,
+      confidence: fact.confidence,
+    );
   }
 
   /// Find similar memory using FTS

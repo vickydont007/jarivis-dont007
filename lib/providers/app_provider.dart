@@ -19,6 +19,7 @@ import '../core/memory_evolution.dart';
 import '../core/emotion_detector.dart';
 import '../core/girlfriend_memory.dart';
 import '../core/services/memory_consolidation.dart';
+import '../core/profile/user_profile_service.dart';
 import '../core/conversation_manager.dart';
 import '../core/services/orb_state_manager.dart';
 import '../core/services/timeline_service.dart';
@@ -94,6 +95,7 @@ class AppState {
   final ProjectBuilder? projectBuilder;
   final CodebaseMemory? codebaseMemory;
   final ProjectAnalyzer? projectAnalyzer;
+  final UserProfileService? userProfileService;
 
   AppState({
     this.aiEngine,
@@ -138,6 +140,7 @@ class AppState {
     this.projectBuilder,
     this.codebaseMemory,
     this.projectAnalyzer,
+    this.userProfileService,
   });
 
   AppState copyWith({
@@ -183,6 +186,7 @@ class AppState {
     ProjectBuilder? projectBuilder,
     CodebaseMemory? codebaseMemory,
     ProjectAnalyzer? projectAnalyzer,
+    UserProfileService? userProfileService,
   }) {
     return AppState(
       aiEngine: aiEngine ?? this.aiEngine,
@@ -227,6 +231,7 @@ class AppState {
       projectBuilder: projectBuilder ?? this.projectBuilder,
       codebaseMemory: codebaseMemory ?? this.codebaseMemory,
       projectAnalyzer: projectAnalyzer ?? this.projectAnalyzer,
+      userProfileService: userProfileService ?? this.userProfileService,
     );
   }
 }
@@ -278,6 +283,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
   ProjectBuilder? _projectBuilder;
   CodebaseMemory? _codebaseMemory;
   ProjectAnalyzer? _projectAnalyzer;
+  UserProfileService? _userProfileService;
 
   AppStateNotifier() : super(AppState()) {
     _memory = MemorySystem();
@@ -296,8 +302,10 @@ class AppStateNotifier extends StateNotifier<AppState> {
     _agentOrchestrator = AgentOrchestrator();
     _memoryEvolution = MemoryEvolution();
     _conversationManager = ConversationManager(_engine, _memory);
+    _userProfileService = UserProfileService();
     _memoryConsolidation = MemoryConsolidationService(
       memoryEvolution: _memoryEvolution!,
+      userProfileService: _userProfileService,
     );
     _memoryConsolidation!.startAutoConsolidation();
     
@@ -444,6 +452,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
       projectBuilder: _projectBuilder,
       codebaseMemory: _codebaseMemory,
       projectAnalyzer: _projectAnalyzer,
+      userProfileService: _userProfileService,
     );
 
     _loadSavedState();
@@ -596,6 +605,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
     final emotionContext = await _memoryEvolution!.getCurrentMoodContext();
     final relationshipContext = GirlfriendMemory.getRelationshipContext();
     final memoryContext = await _memoryConsolidation?.getMemoryContext() ?? '';
+    final profileContext = await _userProfileService?.getProfileContext() ?? '';
 
     // Recreate engine with updated emotion context
     final personality = await AgentPersonality.load();
@@ -608,6 +618,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
       emotionContext: emotionContext,
       relationshipContext: relationshipContext,
       memoryContext: memoryContext,
+      profileContext: profileContext,
     );
 
     // Check if orchestrator should handle this as a delegated task
